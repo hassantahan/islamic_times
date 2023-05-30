@@ -1,9 +1,4 @@
-import numpy as np
-import datetime
-from datetime import timedelta
-from sun_equations import *
 from moon_equations import *
-from time_equations import *
 
 ##### Definitions #####
 FAJR_ANGLE = 16
@@ -19,12 +14,11 @@ latitude = 43.74533  #45.508888 #39.0
 longitude = -79.30945  #-73.561668 #-76.8 
 
 ##### Functions #####
-def find_tomorrow_fajr(utc_change, long, eq_of_time_minutes):
-    tomorrow = today + timedelta(days=1)
-    jd_tomorrow = gregorian_to_jd(tomorrow.year, tomorrow.month, tomorrow.day)
+def find_tomorrow_fajr(jd, utc_change, long, eq_of_time_minutes):
+    jd_tomorrow = jd + 1
 
     tomorrow_sun_declination = sunpos(jd_tomorrow, latitude, longitude)[11]
-    tomorrow_fajr_solar_angle = solar_hour_angle(tomorrow_sun_declination, FAJR_ANGLE)
+    tomorrow_fajr_solar_angle = solar_hour_angle(latitude, tomorrow_sun_declination, FAJR_ANGLE)
     tomorrow_solar_fajr = sunrise_sunset(-1, tomorrow_fajr_solar_angle)
     tomorrow_standard_fajr = solar2standard(tomorrow_solar_fajr, utc_change, long, eq_of_time_minutes)
 
@@ -103,9 +97,13 @@ standard_noon = solar2standard(12.0, utc_diff, longitude, eq_of_time)
 standard_sunrise = solar2standard(solar_sunrise, utc_diff, longitude, eq_of_time)
 standard_maghrib = solar2standard(solar_maghrib, utc_diff, longitude, eq_of_time)
 #standard_isha = solar2standard(solar_isha, utc_diff, longitude, eq_of_time)
-standard_midnight = time_midpoint(standard_maghrib, find_tomorrow_fajr(utc_diff, longitude, eq_of_time))
+k=find_tomorrow_fajr(jd, utc_diff, longitude, eq_of_time)
+standard_midnight = time_midpoint(standard_sunset, k)
 
 # TODO: Find Next New Moon (and the rest of the phases)
+moon_phases = next_phases_of_moon_utc(today)
+for i, phase in enumerate(moon_phases):
+    moon_phases[i] = phase - datetime.timedelta(hours=utc_diff)
 
 # TODO: Find Day of Clear Visibility of Next New Moon
 
@@ -145,5 +143,10 @@ print("\tRight Ascenscion\t{}h {}m {:.2f}s".format(alpha_hour, alpha_minute, alp
 print("\tSolar Hour Angle:\t{:.2f}°".format(solar_angle))
 print("\tEquation of time:\t{:.2f} mins".format(equation_of_time(jd, latitude, longitude)))
 
-# The Moon pg 347- 349
-print("The Moon\n\tDeclination:\t{:.3f}°".format(sun_declination))
+# The Moon
+print("The Moon\n\tNext New Moon:\t\t{}".format(moon_phases[0].strftime("%H:%M:%S %A, %d %B, %Y")))
+print("\tNext First Quarter:\t{}".format(moon_phases[1].strftime("%H:%M:%S %A, %d %B, %Y")))
+print("\tNext Full Moon:\t\t{}".format(moon_phases[2].strftime("%H:%M:%S %A, %d %B, %Y")))
+print("\tNext Last Quarter:\t{}".format(moon_phases[3].strftime("%H:%M:%S %A, %d %B, %Y")))
+
+#print(moon_factors)
