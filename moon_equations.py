@@ -487,7 +487,7 @@ def moonpos(julian_day, local_latitude, local_longitude):
 		azimuth				# 8:
 	]
 
-# TODO: Fix errors in First & Last Quarters answers.
+# TODO: Fix errors in First & Last Quarters answers. ==> done
 # TODO: Properly get the next phases instead of all the phases after the next new moon
 def next_phases_of_moon_utc(date):
 	# Find the day of the year
@@ -501,12 +501,12 @@ def next_phases_of_moon_utc(date):
 	k_temp = ((abs(date.year - 2000) + p_sign * day_of_year / TROPICAL_YEAR) * 12.3685)
 
 	k_array = [
-		p_sign * (np.ceil(k_temp)), 
-		p_sign * (np.ceil(k_temp - 0.25) + 0.25), 
-		p_sign * (np.ceil(k_temp - 0.25) + 0.5), 
-		p_sign * (np.ceil(k_temp - 0.75) + 0.75)
+		p_sign * (np.round(k_temp)), 
+		p_sign * (np.round(k_temp - 0.25) + 0.25), 
+		p_sign * (np.round(k_temp - 0.5) + 0.5), 
+		p_sign * (np.round(k_temp - 0.75) + 0.75)
 	]
-	# print(k_array)
+	print(k_array)
 
 	# Construct phase array
 	moon_phases = [0, 0, 0, 0]
@@ -567,6 +567,13 @@ def next_phases_of_moon_utc(date):
 			# print('Term', i // 3 + 1,':')
 			sin_coeff = 0
 			
+			# Shift for the moon_phase_corrections_coeff array
+			s = 0
+			if p == 1 or p == 3:
+				s = 2
+			elif p == 2:
+				s = 1
+
 			# Note: moon_phase_corrections_arg has its first [] set to p % 2 since 0 & 2
 			# are the new and full moons which use the first array set in moon_phase_corrections_arg
 			# Therefore, 1 & 3 are for the First and Last Quarters
@@ -580,14 +587,14 @@ def next_phases_of_moon_utc(date):
 					sin_argument += fundamental_arguments[l + 1] * moon_phase_corrections_arg[p % 2][j + l + 1]
 				# Take the sine of the sum of the arguments
 				sin_coeff = sin(sin_argument)
-				# print(moon_phase_corrections_coeff[i], f'{fundamental_arguments[0]:.7f}', moon_phase_corrections_arg[p % 2][j])
+				# print(moon_phase_corrections_coeff[i + s], f'{fundamental_arguments[0]:.7f}', moon_phase_corrections_arg[p % 2][j])
 				# Add to the correction term the product of the phase coefficient, the eccentricity factor, and the sine coefficient
-				temp += moon_phase_corrections_coeff[i] * pow(fundamental_arguments[0], moon_phase_corrections_arg[p % 2][j]) * sin_coeff
+				temp += moon_phase_corrections_coeff[i + s] * pow(fundamental_arguments[0], moon_phase_corrections_arg[p % 2][j]) * sin_coeff
 			else:
 				# Omega term
-				# print(moon_phase_corrections_coeff[i], f'{fundamental_arguments[0]:.7f}', moon_phase_corrections_arg[p % 2][j], f'{fundamental_arguments[4]:.4f}')
-				temp += moon_phase_corrections_coeff[i] * pow(fundamental_arguments[0], 0) * sin(fundamental_arguments[4])
-			# print(f'{temp:.5f}')
+				# print(moon_phase_corrections_coeff[i + s], f'{fundamental_arguments[0]:.7f}', moon_phase_corrections_arg[p % 2][j], f'{fundamental_arguments[4]:.4f}')
+				temp += moon_phase_corrections_coeff[i + s] * pow(fundamental_arguments[0], 0) * sin(fundamental_arguments[4])
+			# print(f'Temp: {temp:.5f}')
 			i += 3
 			j += 4
 
@@ -601,9 +608,9 @@ def next_phases_of_moon_utc(date):
 		moon_phases[p] += temp
 
 		# TODO: implement the w factor correction for first (+w) and last (-w) quarters
-		if i == 1:
+		if p == 1:
 			moon_phases[p] += w
-		elif i == 3:
+		elif p == 3:
 			moon_phases[p] -= w
 
 		# Convert from TD to UT in this approximation.
@@ -613,7 +620,3 @@ def next_phases_of_moon_utc(date):
 		moon_phases[p] = jd_to_gregorian(moon_phases[p])
 
 	return moon_phases
-
-# print(next_phases_of_moon_utc(datetime.datetime(1977, 2, 14)))
-#plo = next_phases_of_moon_utc(datetime.datetime.now())
-#print(jd_to_gregorian(plo[0]))
