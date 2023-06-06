@@ -372,6 +372,7 @@ a_coeffs = [
 	0.000035,	0.000023
 ]
 
+# Chapter 47
 def moon_nutation(julian_day):
 	t = (julian_day - J2000) / JULIAN_CENTURY
 	t2 = t ** 2
@@ -442,36 +443,40 @@ def moon_nutation(julian_day):
 
 	return [fundamental_arguments, sum_l, sum_b, sum_r]
 
-def moonpos(julian_day, local_latitude, local_longitude):
+def moonpos(julian_day, local_latitude, local_longitude, ecliptic):
 	t = (julian_day - J2000) / JULIAN_CENTURY
 	t2 = t ** 2
 	t3 = t ** 3
 	t4 = t ** 4
 
+	# Calculation nutations
 	nut = moon_nutation(julian_day)
+
+	# Rect Coordinates + Distance
 	longitude = nut[0][4] + nut[1] / 1000000
 	latitude = nut[2] / 1000000
 	distance = 385000.56 + nut[3] / 1000
 
-	sun_factors = sunpos(julian_day, local_latitude, local_longitude)
-	ecliptic = sun_factors[13]
-
+	# Place in the sky
 	ascension = bound_angle_deg(np.rad2deg(math.atan2((sin(longitude) * cos(ecliptic) - tan(latitude) * sin(ecliptic)), cos(longitude))))
 	declination = np.rad2deg(math.asin(sin(latitude) * cos(ecliptic) + cos(latitude) * sin(ecliptic) * sin(longitude)))
+	eh_parallax = np.rad2deg(np.arcsin(EARTH_RADIUS_KM / distance))
 
-	eh_parallax = np.rad2deg(np.arcsin(6378.14 / distance))
-
+	# Local Hour Angle Calculations (see sun_equations.py for more info)
 	greenwich_hour_angle = bound_angle_deg(siderial_time(julian_day))
-
 	delta_psi = sun_nutation(julian_day)[0]
 	st_correction = decimal_to_dms(delta_psi)[2] * cos(ecliptic) / 15
 	greenwich_hour_angle += (st_correction / 240)
-	
-	local_hour_angle = greenwich_hour_angle + local_longitude - ascension #- 15 * ((fraction_of_day(today) + 5/24) % 1)
+	local_hour_angle = greenwich_hour_angle + local_longitude - ascension
 
+	# Modify RA and Declination to their apparent equivalents
+	ascension, declination = correct_ra_dec(ascension, declination, local_hour_angle, eh_parallax, lat = local_latitude)
+
+	# Final calculations
 	altitude = np.rad2deg(math.asin(sin(local_latitude) * sin(declination) + cos(local_latitude) * cos(declination)* cos(local_hour_angle)))
-
 	azimuth = np.rad2deg(np.arccos((sin(declination) * cos(local_latitude) - cos(declination) * sin(local_latitude) * cos(local_hour_angle)) / cos(altitude)))
+
+	# Possibly useless
 	if local_hour_angle >= 0:
 		azimuth = 360 - azimuth
 
@@ -487,8 +492,30 @@ def moonpos(julian_day, local_latitude, local_longitude):
 		azimuth				# 8:
 	]
 
-# TODO: Fix errors in First & Last Quarters answers. ==> done
-# TODO: Properly get the next phases instead of all the phases after the next new moon
+# Fixing RA and Dec for apparency pg. 279
+def correct_ra_dec(ra, dec, lha, parallax, dist = EARTH_RADIUS_KM, lat = TO_LAT, elev = TO_ELEV / 1000):
+	a = dist
+	f = 1 / 298.257
+	b = a * (1 - f)
+
+	u = np.rad2deg(np.arctan2(b * tan(lat), a))
+	p_sin_psi_prime = b / a * sin(u) + elev / dist * sin(lat)
+	p_cos_psi_prime = cos(u) + elev / dist * cos(lat)
+
+
+	temp_num = -1 * p_cos_psi_prime * sin(parallax) * sin(lha)
+	temp_denom = cos(dec) - p_cos_psi_prime * sin(parallax) * sin(lha)
+	deltaA = np.rad2deg(np.arctan2(temp_num, temp_denom))
+
+	temp_num = (sin(dec) - p_sin_psi_prime * sin(parallax)) * cos(deltaA)
+
+	ascension_prime = ra + deltaA
+	declination_prime = np.rad2deg(np.arctan2(temp_num, temp_denom))
+
+	return ascension_prime, declination_prime
+
+# TODO: Properly get the next phases instead of all the phases after the next new moon ==> Using round (temp fix)
+# Chapter 49
 def next_phases_of_moon_utc(date):
 	# Find the day of the year
 	day_of_year = date.timetuple().tm_yday
@@ -506,7 +533,6 @@ def next_phases_of_moon_utc(date):
 		p_sign * (np.round(k_temp - 0.5) + 0.5), 
 		p_sign * (np.round(k_temp - 0.75) + 0.75)
 	]
-	print(k_array)
 
 	# Construct phase array
 	moon_phases = [0, 0, 0, 0]
@@ -620,3 +646,17 @@ def next_phases_of_moon_utc(date):
 		moon_phases[p] = jd_to_gregorian(moon_phases[p])
 
 	return moon_phases
+
+# Chapter 48
+def moon_illumination(sun_dec, sun_ra, sun_long, moon_dec, moon_ra, moon_lat, moon_long, sun_earth_distance, moon_earth_distance):
+	
+	# Eqs. 48.2
+	sin_psi = cos(moon_lat) * cos(moon_long - sun_long)
+	cos_psi = sin(sun_dec) * sin(moon_dec) + cos(sun_dec) * cos(moon_dec) * cos(sun_ra - moon_ra)
+	
+	# Eq. 48.3
+	phase_angle = np.rad2deg(np.arctan2((sun_earth_distance * sin_psi), (moon_earth_distance - sun_earth_distance * cos_psi)))
+	
+	# Eq. 48.1
+	fraction_illuminated = (1 + cos(phase_angle)) / 2
+	return fraction_illuminated

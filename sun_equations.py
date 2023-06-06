@@ -145,6 +145,7 @@ sun_nutation_coefficients = [
          -3,       0,       0,       0           #  2, -1,  0,  2,  2 
 ]
 
+# Chapter 22
 def oblique_eq(julian_day):
     u = ((julian_day - J2000) / JULIAN_CENTURY) / 100
 
@@ -183,6 +184,7 @@ def sun_nutation(julian_day):
 
     return deltaPsi, deltaEpsilon
 
+# Chapter 25
 def sunpos(julian_day, local_latitude, local_longitude):
     T = (julian_day - J2000) / JULIAN_MILLENNIUM
     T2 = T ** 2
@@ -216,22 +218,34 @@ def sunpos(julian_day, local_latitude, local_longitude):
     epsilon = epsilon0 + delta_epsilon
     
 
+    # Right ascension (RA) & declination calculations
     alpha = bound_angle_deg(np.rad2deg(math.atan2(cos(epsilon0) * sin(sunLong), cos(sunLong))))
     delta = np.rad2deg(math.asin(sin(epsilon0) * sin(sunLong)))
 
+    # Adjust RA and declination to find their apparents
     alphaApp = bound_angle_deg(np.rad2deg(math.atan2(cos(epsilon) * sin(Lambda), cos(Lambda))))
     deltaApp = np.rad2deg(math.asin(sin(epsilon) * sin(Lambda)))
 
+    # Local Hour Angle calculation
+    # Start by calculating Mean Greenwich Sidereal Time
     greenwich_hour_angle = bound_angle_deg(siderial_time(julian_day))
-    st_correction = decimal_to_dms(nut[0])[2] * cos(epsilon) / 15
+
+    # Attain the sun's nutation in the longitude in DMS
+    nut_long_dms = decimal_to_dms(nut[0])
+    
+    # Make correction for the apparent sidereal time according to pg. 88
+    st_correction = (nut_long_dms[2] + nut_long_dms[1] * 60 + nut_long_dms[0] * 3600) * cos(epsilon) / 15
     greenwich_hour_angle += (st_correction / 240)
-    local_hour_angle = bound_angle_deg(greenwich_hour_angle + local_longitude - alpha)
 
+    # Local Hour angle is then simply the GHA minus the apparent RA adjusted for the local longitude
+    local_hour_angle = bound_angle_deg(greenwich_hour_angle + local_longitude - alphaApp)
+
+    # Altitude & Azimuth calculations
     altitude = np.rad2deg(math.asin(sin(local_latitude) * sin(delta) + cos(local_latitude) * cos(delta) * cos(local_hour_angle))) 
-
     azimuth = np.rad2deg(np.arccos((sin(delta) * cos(local_latitude) - cos(delta) * sin(local_latitude) * cos(local_hour_angle)) / cos(altitude)))
     azimuth = bound_angle_deg(azimuth)
 
+    # Might be redundant
     if local_hour_angle >= 0:
         azimuth = 360 - azimuth
 
@@ -252,7 +266,8 @@ def sunpos(julian_day, local_latitude, local_longitude):
         epsilon,            # 13; true obliquity of the ecliptic
         omega,              # 14; Longitude of the ascending node of the Moon’s mean orbit on the ecliptic
         altitude,           # 15
-        azimuth             # 16
+        azimuth,            # 16
+        local_hour_angle    # 17
     ]
 
 def equation_of_time(julian_day, local_latitude, local_longitude):
@@ -288,3 +303,9 @@ def sunrise_sunset(set_or_rise, hour_angle):
 
     offset = 12 + set_or_rise * hours_offset_from_noon
     return  offset
+
+# today = datetime.datetime(1987, 4, 10, 19, 21, 0)
+# print(today.day + fraction_of_day(today))
+# jd = gregorian_to_jd(today.year, today.month, today.day + fraction_of_day(today))
+# print(jd)
+# sunpos(jd, 0, 0)

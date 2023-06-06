@@ -5,12 +5,16 @@ import pytz
 from timezonefinder import TimezoneFinder
 
 J2000              	= 2451545.0
+HIJRI_JD            = 1948439.389675
+HIJRI_STANDARD_LNG  = 39.71658
 JULIAN_CENTURY    	= 36525.0
 JULIAN_MILLENNIUM 	= JULIAN_CENTURY * 10
 ASTRONOMICAL_UNIT 	= 149597870.7
 TROPICAL_YEAR     	= 365.24219878
-TO_LAT 				= 43.74533
-TO_LONG             = -79.30945
+TO_LAT 				= 43.74506
+TO_LONG             = -79.30947
+TO_ELEV             = 173.00
+EARTH_RADIUS_KM     = 6378.14
 
 def bound_angle_deg(a):
     return a - 360.0 * (math.floor(a / 360.0))
@@ -42,7 +46,7 @@ def decimal_to_hms(decimal_degrees):
 
 
 def fraction_of_day(date):
-    return (date - datetime.datetime.combine(date.date(), datetime.datetime.time(date))).total_seconds() / (3600 * 24)
+    return (date - datetime.datetime.combine(date.date(), datetime.time(0))).total_seconds() / (3600 * 24)
 
 def leap_gregorian(year):
     if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
@@ -58,6 +62,8 @@ def siderial_time(julian_day):
     theta_zero = 280.46061837 + 360.98564736629 * (julian_day - J2000) + \
                  0.000387933 * t2 - t3 / 38710000
 
+    bound_angle_deg(theta_zero)
+
     return theta_zero
 
 # Look to Jean Meeus' "Astronomical Algorithms"
@@ -69,28 +75,28 @@ def gregorian_to_jd(year, month, day, zone = 0):
         y -= 1
         m += 12
     
-    a = int(y / 100)
-    b = 2 - a + int(a / 4)
+    a = int(np.floor(y / 100))
+    b = 2 - a + int(np.floor(a / 4))
 
-    jd = int(365.25 * (year + 4716)) + int(30.6001 * (m + 1)) + day + b - 1524.5 - zone / 24
+    jd = int(np.floor(365.25 * (y + 4716))) + int(np.floor(30.6001 * (m + 1))) + day + b - 1524.5 - zone / 24
     return jd
 
 # Look to Jean Meeus' "Astronomical Algorithms"
 def jd_to_gregorian(jd):
     jd = jd + 0.5
-    z = int(jd)
+    z = int(np.floor(jd))
     f = jd - z
 
     if z < 2299161:
         a = z
     else:
-        alpha = int((z - 1867216.25) / 36524.25)
-        a = z + 1 + alpha - int(alpha / 4)
+        alpha = int(np.floor((z - 1867216.25) / 36524.25))
+        a = z + 1 + alpha - int(np.floor(alpha / 4))
 
     b = a + 1524
-    c = int((b - 122.1) / 365.25)
-    d = int(365.25 * c)
-    e = int((b - d) / 30.6001)
+    c = int(np.floor((b - 122.1) / 365.25))
+    d = int(np.floor(365.25 * c))
+    e = int(np.floor((b - d) / 30.6001))
 
     day = b - d - int(30.6001 * e) + f
     if e < 14:
@@ -103,11 +109,11 @@ def jd_to_gregorian(jd):
         year = c - 4715
 
     # calculate hours, minutes, and seconds
-    f_day = day - int(day)
+    f_day = day - int(np.floor(day))
     hour = f_day * 24
-    minute = (hour - int(hour)) * 60
-    second = (minute - int(minute)) * 60
-    microsec = (second - int(second)) * 1000
+    minute = (hour - int(np.floor(hour))) * 60
+    second = (minute - int(np.floor(minute))) * 60
+    microsec = (second - int(np.floor(second))) * 1000
 
     return datetime.datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(microsec))
 
@@ -189,7 +195,7 @@ def find_utc_offset(lat, long, day):
     utc_offset = localized_datetime.utcoffset()
 
     # Calculate the UTC offset in hours
-    return utc_offset.total_seconds() / 3600
+    return timezone_str, utc_offset.total_seconds() / 3600
 
 def time_midpoint(time1, time2):
     # Convert hours to datetime objects
@@ -211,3 +217,14 @@ def time_midpoint(time1, time2):
         middle_time_in_hours -= 24
 
     return middle_time_in_hours
+
+def format_utc_offset(utc_offset):
+    hours = int(utc_offset)
+    minutes = int((utc_offset - hours) * 60)
+
+    # Since minutes are absolute, take the absolute value
+    minutes = abs(minutes)
+
+    # Use the built-in `format` function to convert to the required format
+    offset_str = "UTC{:+03d}:{:02d}".format(hours, minutes)
+    return offset_str
