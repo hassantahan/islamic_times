@@ -72,7 +72,8 @@ jd = gregorian_to_jd(today.year, today.month, today.day + fraction_of_day(today)
 ### Sun & Moon Properties Calculations
 # Get factors arrays
 sun_factors = sunpos(jd, latitude, longitude)
-moon_factors = moonpos(jd, latitude, longitude, sun_factors[13])
+delPsi, delEps = sun_nutation(jd)
+moon_factors = moonpos(jd, latitude, longitude, delPsi, sun_factors[13], TO_ELEV)
 
 # Important Sun Factors placed into local variables
 sun_declination = sun_factors[11]
@@ -84,10 +85,10 @@ sun_alt = sun_factors[15]
 sun_az = sun_factors[16]
 
 # Important Moon Factors placed into local variables
-moon_declination = moon_factors[5]
-moon_alpha = decimal_to_hms(moon_factors[4])
-moon_alt = moon_factors[7]
-moon_az = moon_factors[8]
+moon_declination = moon_factors[7]
+moon_alpha = decimal_to_hms(moon_factors[6])
+moon_alt = moon_factors[9]
+moon_az = moon_factors[10]
 
 
 ### Equation of Time
@@ -132,7 +133,7 @@ moon_phases = sorted(moon_phases, key = lambda item: item["datetime"])
 
 # TODO: Calculate Moon Illumination
 moon_illumin = moon_illumination(sun_declination, sun_factors[10], sun_factors[4], 
-                                 moon_declination, moon_factors[4], moon_factors[1], 
+                                 moon_declination, moon_factors[6], moon_factors[1], 
                                  moon_factors[0], sun_factors[6], moon_factors[2] / ASTRONOMICAL_UNIT)
 
 # TODO: Find Day of Clear Visibility of Next New Moon
@@ -194,6 +195,6 @@ print("\t{}:\t\t{}".format(moon_phases[2]["phase"], moon_phases[2]["datetime"].s
 print("\t{}:\t\t{}".format(moon_phases[3]["phase"], moon_phases[3]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
 
 # TODO: New Moon First Visibility
-print("New Moon Visibility (Q) after New Moon\n\t0 days after:\t\t{:.3f} ({})".format(q_values[0][0], q_values[0][1]))
+print("Visibility (Q) of New Moon\n\t0 days after:\t\t{:.3f} ({})".format(q_values[0][0], q_values[0][1]))
 print("\t1 days after:\t\t{:.3f} ({})".format(q_values[1][0], q_values[1][1]))
 print("\t2 days after:\t\t{:.3f} ({})".format(q_values[2][0], q_values[2][1]))

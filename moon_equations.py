@@ -443,7 +443,7 @@ def moon_nutation(julian_day):
 
 	return [fundamental_arguments, sum_l, sum_b, sum_r]
 
-def moonpos(julian_day, local_latitude, local_longitude, ecliptic):
+def moonpos(julian_day, local_latitude, local_longitude, deltaPsi, ecliptic, elev):
 	t = (julian_day - J2000) / JULIAN_CENTURY
 	t2 = t ** 2
 	t3 = t ** 3
@@ -453,9 +453,9 @@ def moonpos(julian_day, local_latitude, local_longitude, ecliptic):
 	nut = moon_nutation(julian_day)
 
 	# Rect Coordinates + Distance
-	longitude = nut[0][4] + nut[1] / 1000000
-	latitude = nut[2] / 1000000
-	distance = 385000.56 + nut[3] / 1000
+	longitude = nut[0][4] + nut[1] / 10 ** 6 + deltaPsi
+	latitude = nut[2] / 10 ** 6
+	distance = 385000.56 + nut[3] / 10 ** 3
 
 	# Place in the sky
 	ascension = bound_angle_deg(np.rad2deg(math.atan2((sin(longitude) * cos(ecliptic) - tan(latitude) * sin(ecliptic)), cos(longitude))))
@@ -470,7 +470,7 @@ def moonpos(julian_day, local_latitude, local_longitude, ecliptic):
 	local_hour_angle = greenwich_hour_angle + local_longitude - ascension
 
 	# Modify RA and Declination to their apparent equivalents
-	ascension, declination = correct_ra_dec(ascension, declination, local_hour_angle, eh_parallax, lat = local_latitude)
+	app_ascension, app_declination = correct_ra_dec(ascension, declination, local_hour_angle, eh_parallax, lat = local_latitude, elev = elev / 1000)
 
 	# Final calculations
 	altitude = np.rad2deg(math.asin(sin(local_latitude) * sin(declination) + cos(local_latitude) * cos(declination)* cos(local_hour_angle)))
@@ -487,9 +487,11 @@ def moonpos(julian_day, local_latitude, local_longitude, ecliptic):
 		ecliptic,			# 3:
 		ascension,			# 4:
 		declination,		# 5:
-		eh_parallax,		# 6:
-		altitude,			# 7:
-		azimuth				# 8:
+		app_ascension,		# 6
+		app_declination,	# 7
+		eh_parallax,		# 8:
+		altitude,			# 9:
+		azimuth				# 10:
 	]
 
 # Fixing RA and Dec for apparency pg. 279
@@ -651,11 +653,13 @@ def next_phases_of_moon_utc(date):
 def moon_illumination(sun_dec, sun_ra, sun_long, moon_dec, moon_ra, moon_lat, moon_long, sun_earth_distance, moon_earth_distance):
 	
 	# Eqs. 48.2
-	sin_psi = cos(moon_lat) * cos(moon_long - sun_long)
 	cos_psi = sin(sun_dec) * sin(moon_dec) + cos(sun_dec) * cos(moon_dec) * cos(sun_ra - moon_ra)
+	psi = np.rad2deg(np.arccos(cos_psi))
+	sin_psi = sin(psi)
 	
 	# Eq. 48.3
-	phase_angle = np.rad2deg(np.arctan2((sun_earth_distance * sin_psi), (moon_earth_distance - sun_earth_distance * cos_psi)))
+	phase_angle = np.rad2deg(np.arctan2(sun_earth_distance * sin_psi, moon_earth_distance - sun_earth_distance * cos_psi))
+	print(phase_angle)
 	
 	# Eq. 48.1
 	fraction_illuminated = (1 + cos(phase_angle)) / 2
