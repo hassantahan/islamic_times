@@ -1,4 +1,5 @@
 from moon_equations import *
+from hijri_converter import convert
 
 ##### Definitions #####
 FAJR_ANGLE = 16
@@ -8,9 +9,10 @@ MECCA_LAT = 21.420164986
 MECCA_LONG = 39.822330044
 
 ##### Inputs #####
-today = datetime.datetime.now() #datetime.datetime(2023, 3, 17, 12, 0 ,0)
-latitude = 43.74533 #27.7172 #  #45.508888 #39.0 
-longitude = -79.30945 #85.3240 #  #-73.561668 #-76.8 
+today = datetime.datetime.now()
+latitude = TO_LAT #37.336111 #43.74533
+longitude = TO_LONG #-121.890556 #-79.30945
+elev = TO_ELEV #25
 
 ##### Functions #####
 def find_tomorrow_fajr(jd, utc_change, long, eq_of_time_minutes):
@@ -73,7 +75,7 @@ jd = gregorian_to_jd(today.year, today.month, today.day + fraction_of_day(today)
 # Get factors arrays
 sun_factors = sunpos(jd, latitude, longitude)
 delPsi, delEps = sun_nutation(jd)
-moon_factors = moonpos(jd, latitude, longitude, delPsi, sun_factors[13], TO_ELEV)
+moon_factors = moonpos(jd, latitude, longitude, delPsi, sun_factors[13], elev)
 
 # Important Sun Factors placed into local variables
 sun_declination = sun_factors[11]
@@ -131,21 +133,56 @@ for i, phase in enumerate(moon_phases):
 
 moon_phases = sorted(moon_phases, key = lambda item: item["datetime"])
 
-# TODO: Calculate Moon Illumination
+### Calculate Moon Illumination
 moon_illumin = moon_illumination(sun_declination, sun_factors[10], sun_factors[4], 
                                  moon_declination, moon_factors[6], moon_factors[1], 
                                  moon_factors[0], sun_factors[6], moon_factors[2] / ASTRONOMICAL_UNIT)
 
-# TODO: Find Day of Clear Visibility of Next New Moon
+### Calculate New Moon Visibilities
+
+# Get New Moon Date from moon_phases list
+for item in moon_phases:
+        if item['phase'] == "New Moon":
+            new_moon = item['datetime']
+
+# Find JD for the given date; adjust day for difference in UTC and local timezone
+jd_new_moon = gregorian_to_jd(new_moon.year, new_moon.month, new_moon.day + fraction_of_day(new_moon), -1 * utc_diff)
+if new_moon.day != jd_to_gregorian(jd_new_moon).day:
+    if new_moon.day < jd_to_gregorian(jd_new_moon).day:
+        new_moon += datetime.timedelta(days=1)
+    else:
+        new_moon -= datetime.timedelta(days=1)
+    jd_new_moon = gregorian_to_jd(new_moon.year, new_moon.month, new_moon.day, -1 * utc_diff)
+
+# Find local sunset as visibilities are calculated from then
+nm_sun_factors = sunpos(jd_new_moon, latitude, longitude)
+nm_sunset = solar2standard(sunrise_sunset(1, solar_hour_angle(latitude, nm_sun_factors[11])), utc_diff, longitude, equation_of_time(jd_new_moon, latitude, longitude))
+jd_new_moon = gregorian_to_jd(new_moon.year, new_moon.month, new_moon.day + nm_sunset / 24, -1 * utc_diff)
+
+# Find visibilities for the three days
+visibilities = []
+i = 0
+while (i < 3):
+    nm_sun_factors = sunpos(jd_new_moon + i, latitude, longitude)
+    delPsi, delEps = sun_nutation(jd_new_moon + i)
+    nm_moon_factors = moonpos(jd_new_moon + i, latitude, longitude, delPsi, nm_sun_factors[13], elev)
+
+    #print(jd_to_gregorian(jd_new_moon + i))
+    visibilities.append(calculate_visibility(nm_sun_factors[16], nm_sun_factors[15], nm_moon_factors[10], nm_moon_factors[9], np.deg2rad(nm_moon_factors[8])))
+    i += 1
+
+# Arrange and classify visibilties
 q_values = [
-    [1.0, "Easily Visible"],
-    [2.0, "Easily Visible"],
-    [3.0, "Easily Visible"],
+    [visibilities[0], classify_visibility(visibilities[0])],
+    [visibilities[1], classify_visibility(visibilities[1])],
+    [visibilities[2], classify_visibility(visibilities[2])],
 ]
 
-
-### TODO: Calculate Current Islamic Date
-
+### Calculate Current Islamic Date (estimate)
+# TODO: Look into newer versions of this, see if it can be corrected.
+islamic_date = gregorian_to_hijri(today.year, today.month, today.day)
+hijri_date = convert.Gregorian(today.year, today.month, today.day).to_hijri()
+#print(hijri_date)
 
 ### Misc
 # Distance from Given Coordinates to Mecca + direction
@@ -155,10 +192,10 @@ mecca_direction = bound_angle_deg(mecca_direction)
 
 ##### Outputs #####
 # Date & Time
-#TODO: Islamic Calendar
 print("Time & Date\n\tGregorian Date:\t\t{}".format(today.strftime("%A, %d %B, %Y")))
+print(f"\tIslamic Date:\t\t{get_islamic_day(today.strftime('%A'))}, {islamic_date[2]} {get_islamic_month(islamic_date[1])}, {islamic_date[0]}")
 print("\t24h-Time:\t\t{}\n\tTime Zone:\t\t{} {}".format(today.strftime("%X"), tz_name, format_utc_offset(utc_diff * -1)))
-print("\tEquation of time:\t{:.2f} mins".format(equation_of_time(jd, latitude, longitude)))
+print("\tEquation of time:\t{:.2f} minutes".format(equation_of_time(jd, latitude, longitude)))
 
 # Prayer Times
 print("Prayer Times\n\tFajr:\t\t\t{}".format(float_to_24time(standard_fajr)))
@@ -195,6 +232,6 @@ print("\t{}:\t\t{}".format(moon_phases[2]["phase"], moon_phases[2]["datetime"].s
 print("\t{}:\t\t{}".format(moon_phases[3]["phase"], moon_phases[3]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
 
 # TODO: New Moon First Visibility
-print("Visibility (Q) of New Moon\n\t0 days after:\t\t{:.3f} ({})".format(q_values[0][0], q_values[0][1]))
+print("Visibility Values of New Moon\n\t0 days after:\t\t{:.3f} ({})".format(q_values[0][0], q_values[0][1]))
 print("\t1 days after:\t\t{:.3f} ({})".format(q_values[1][0], q_values[1][1]))
 print("\t2 days after:\t\t{:.3f} ({})".format(q_values[2][0], q_values[2][1]))

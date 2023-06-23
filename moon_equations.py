@@ -445,9 +445,6 @@ def moon_nutation(julian_day):
 
 def moonpos(julian_day, local_latitude, local_longitude, deltaPsi, ecliptic, elev):
 	t = (julian_day - J2000) / JULIAN_CENTURY
-	t2 = t ** 2
-	t3 = t ** 3
-	t4 = t ** 4
 
 	# Calculation nutations
 	nut = moon_nutation(julian_day)
@@ -470,7 +467,7 @@ def moonpos(julian_day, local_latitude, local_longitude, deltaPsi, ecliptic, ele
 	local_hour_angle = greenwich_hour_angle + local_longitude - ascension
 
 	# Modify RA and Declination to their apparent equivalents
-	app_ascension, app_declination = correct_ra_dec(ascension, declination, local_hour_angle, eh_parallax, lat = local_latitude, elev = elev / 1000)
+	app_ascension, app_declination = correct_ra_dec(ascension, declination, local_hour_angle, eh_parallax, local_latitude, elev / 1000)
 
 	# Final calculations
 	altitude = np.rad2deg(math.asin(sin(local_latitude) * sin(declination) + cos(local_latitude) * cos(declination)* cos(local_hour_angle)))
@@ -495,7 +492,7 @@ def moonpos(julian_day, local_latitude, local_longitude, deltaPsi, ecliptic, ele
 	]
 
 # Fixing RA and Dec for apparency pg. 279
-def correct_ra_dec(ra, dec, lha, parallax, dist = EARTH_RADIUS_KM, lat = TO_LAT, elev = TO_ELEV / 1000):
+def correct_ra_dec(ra, dec, lha, parallax, lat, elev, dist = EARTH_RADIUS_KM):
 	a = dist
 	f = 1 / 298.257
 	b = a * (1 - f)
@@ -659,8 +656,45 @@ def moon_illumination(sun_dec, sun_ra, sun_long, moon_dec, moon_ra, moon_lat, mo
 	
 	# Eq. 48.3
 	phase_angle = np.rad2deg(np.arctan2(sun_earth_distance * sin_psi, moon_earth_distance - sun_earth_distance * cos_psi))
-	print(phase_angle)
+	# print(phase_angle)
 	
 	# Eq. 48.1
 	fraction_illuminated = (1 + cos(phase_angle)) / 2
 	return fraction_illuminated
+
+# Visibility calculations from HMNAO TN No. 69
+def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi):
+	
+	# print(sun_az, sun_alt, moon_az, moon_alt, moon_pi)
+
+	arcl = calculate_angle_diff(sun_az, sun_alt, moon_az, moon_alt)
+	arcv = np.abs(sun_alt - moon_alt)
+	daz = sun_az - moon_az
+	moon_pi *= 206265 / 60
+
+	semi_diameter = 0.27245 * moon_pi
+	semi_diameter_prime = semi_diameter * (1 + sin(moon_alt) * sin(moon_pi / 60))
+
+	w_prime = semi_diameter_prime * (1 - cos(arcl))
+
+	q_value = (arcv - (11.8371 - 6.3226 * w_prime + 0.7319 * w_prime ** 2 - 0.1018 * w_prime ** 3)) / 10
+
+	# print(arcl, arcv, daz, cos(arcl) - cos(arcv) * cos(daz))
+	# print(moon_pi, w_prime)
+
+	return q_value
+
+# Classification according to HMNAO TN No.69
+def classify_visibility(q):
+    if q > 0.216:
+        return "Easily visible"
+    elif 0.216 >= q > -0.014:
+        return "Visible under perfect conditions"
+    elif -0.014 >= q > -0.160:
+        return "May need optical aid"
+    elif -0.160 >= q > -0.232:
+        return "Will need optical aid"
+    elif -0.232 >= q:
+        return "Not visible"
+    else:
+        return "Invalid Input"

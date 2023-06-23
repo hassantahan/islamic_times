@@ -303,9 +303,3 @@ def sunrise_sunset(set_or_rise, hour_angle):
 
     offset = 12 + set_or_rise * hours_offset_from_noon
     return  offset
-
-# today = datetime.datetime(1987, 4, 10, 19, 21, 0)
-# print(today.day + fraction_of_day(today))
-# jd = gregorian_to_jd(today.year, today.month, today.day + fraction_of_day(today))
-# print(jd)
-# sunpos(jd, 0, 0)

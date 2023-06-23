@@ -117,6 +117,110 @@ def jd_to_gregorian(jd):
 
     return datetime.datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(microsec))
 
+# Look to Jean Meeus' "Astronomical Algorithms"
+def gregorian_to_hijri(year, month, day, zone = 0):
+    x = year
+    m = month
+
+    if m < 3:
+        x -= 1
+        m += 12
+    
+    alpha = int(x / 100)
+    beta = 2 - alpha + int(alpha / 4)
+ 
+    day += beta
+    if day == 0:
+        m -= 1
+        if m in [1, 3, 5, 7, 8, 10, 12]:
+            day = 31
+        elif m == 2:
+            day = 28
+        else:
+            day = 30
+
+    b = int(365.25 * x) + int(30.6001 * (m + 1)) + day + 1722519 + beta
+    c = int((b - 122.1) / 365.25)
+    d = int(365.25 * c)
+    e = int((b - d) / 30.6001)
+
+    if x % 4 == 0:
+        w = 1
+    else:
+        w = 2
+    
+    n = int(275 * m / 9) - w * int((m + 9) / 12) + day - 30
+    A = x - 623
+    B = int(A / 4)
+    C = A % 4
+    C_1 = 365.2501 * C
+    C_2 = int(C_1)
+
+    if C_1 - C_2 > 0.5:
+        C_2 += 1
+
+    D_prime = 1461 * B + 170 + C_2
+    q = int(D_prime / 10631)
+    r = D_prime % 10631
+    j = int(r / 354)
+    k = r % 354
+    o = int((11 * j + 14) / 30)
+    h = 30 * q + j + 1
+    jj = k - o + n - 1
+
+    if jj > 354:
+        cl = h % 30
+        dl = (11 * cl + 3) % 30
+        if dl < 19:
+            jj -= 354
+            h += 1
+        elif dl > 18:
+            jj -= 355
+            h += 1
+    elif jj == 0:
+        jj = 355
+        h -= 1
+    
+    s = int((jj - 1) / 29.5)
+    if jj != 355:
+        i_month = 1 + s
+        i_day = int(jj - 29.5 * s)
+    else:
+        i_month = 12
+        i_day = 30
+    i_year = h
+
+    return [i_year, i_month, i_day]
+
+def get_islamic_month(month):
+    islamic_months = {
+        1: 'Muḥarram',
+        2: 'Ṣaffar',
+        3: 'Rabīʿ al-’Awwal',
+        4: 'Rabīʿ al-Thānī',
+        5: 'Jumādā al-’Ūlā',
+        6: 'Jumādā al-Thāniyah',
+        7: 'Rajab',
+        8: 'Sha‘bān',
+        9: 'Ramaḍān',
+        10: 'Shawwāl',
+        11: 'Ḏū al-Qa‘dah',
+        12: 'Ḏū al-Ḥijjah',
+    }
+    return islamic_months.get(month, "Invalid month number")
+
+def get_islamic_day(day):
+    islamic_days = {
+        'Sunday': 'al-’Aḥad',
+        'Monday': 'al-Ithnayn',
+        'Tuesday': 'al-Thulāthā’',
+        'Wednesday': 'al-’Arbi‘ā’',
+        'Thursday': 'al-Khamīs',
+        'Friday': 'al-Jum‘ah',
+        'Saturday': 'al-Sabt',
+    }
+    return islamic_days.get(day, "Invalid day")
+
 # Based off of https://eclipse.gsfc.nasa.gov/LEcat5/deltatpoly.html
 def delta_t_approx(year):
     t = (year - 2000) / 100
@@ -228,3 +332,19 @@ def format_utc_offset(utc_offset):
     # Use the built-in `format` function to convert to the required format
     offset_str = "UTC{:+03d}:{:02d}".format(hours, minutes)
     return offset_str
+
+def calculate_angle_diff(azimuth1, altitude1, azimuth2, altitude2):
+    # Convert degrees to radians
+    azimuth1, altitude1, azimuth2, altitude2 = map(math.radians, [azimuth1, altitude1, azimuth2, altitude2])
+
+    # Apply the haversine formula
+    delta_azimuth = azimuth2 - azimuth1
+    delta_altitude = altitude2 - altitude1
+
+    a = math.sin(delta_altitude / 2)**2 + math.cos(altitude1) * math.cos(altitude2) * math.sin(delta_azimuth / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    # Convert the angle difference from radians to degrees
+    angle_diff = math.degrees(c)
+    
+    return angle_diff
