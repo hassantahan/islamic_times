@@ -1,8 +1,7 @@
-import math
 import datetime
-import numpy as np
 import pytz
 from timezonefinder import TimezoneFinder
+from calculation_equations import *
 
 J2000              	= 2451545.0
 HIJRI_JD            = 1948439.389675
@@ -11,39 +10,7 @@ JULIAN_CENTURY    	= 36525.0
 JULIAN_MILLENNIUM 	= JULIAN_CENTURY * 10
 ASTRONOMICAL_UNIT 	= 149597870.7
 TROPICAL_YEAR     	= 365.24219878
-TO_LAT 				= 43.74506
-TO_LONG             = -79.30947
-TO_ELEV             = 173.00
 EARTH_RADIUS_KM     = 6378.14
-
-def bound_angle_deg(a):
-    return a - 360.0 * (math.floor(a / 360.0))
-
-def bound_angle_rad(a):
-    return a - (2 * math.pi) * (math.floor(a / (2 * math.pi)))
-
-def sin(a):
-    return math.sin(np.deg2rad(a))
-
-def cos(a):
-    return math.cos(np.deg2rad(a))
-
-def tan(a):
-    return math.tan(np.deg2rad(a))
-
-def decimal_to_dms(decimal_deg):
-    degrees = int(decimal_deg)
-    minutes = int((decimal_deg - degrees) * 60)
-    seconds = (decimal_deg - degrees - minutes / 60) * 3600
-
-    return [degrees, minutes, seconds]
-
-def decimal_to_hms(decimal_degrees):
-    hours = int(decimal_degrees / 15)
-    minutes = int((decimal_degrees / 15 - hours) * 60)
-    seconds = (decimal_degrees / 15 - hours - minutes / 60) * 3600
-    return [hours , round(minutes), seconds]
-
 
 def fraction_of_day(date):
     return (date - datetime.datetime.combine(date.date(), datetime.time(0))).total_seconds() / (3600 * 24)
@@ -332,19 +299,3 @@ def format_utc_offset(utc_offset):
     # Use the built-in `format` function to convert to the required format
     offset_str = "UTC{:+03d}:{:02d}".format(hours, minutes)
     return offset_str
-
-def calculate_angle_diff(azimuth1, altitude1, azimuth2, altitude2):
-    # Convert degrees to radians
-    azimuth1, altitude1, azimuth2, altitude2 = map(math.radians, [azimuth1, altitude1, azimuth2, altitude2])
-
-    # Apply the haversine formula
-    delta_azimuth = azimuth2 - azimuth1
-    delta_altitude = altitude2 - altitude1
-
-    a = math.sin(delta_altitude / 2)**2 + math.cos(altitude1) * math.cos(altitude2) * math.sin(delta_azimuth / 2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-    # Convert the angle difference from radians to degrees
-    angle_diff = math.degrees(c)
-    
-    return angle_diff

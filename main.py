@@ -1,70 +1,27 @@
-from moon_equations import *
+from prayer_times import *
 from hijri_converter import convert
 
 ##### Definitions #####
-FAJR_ANGLE = 16
-MAGHRIB_ANGLE = 4
-ISHA_ANGLE = 14
-MECCA_LAT = 21.420164986 
-MECCA_LONG = 39.822330044
+FAJR_ANGLE          = 16
+MAGHRIB_ANGLE       = 4
+ISHA_ANGLE          = 14
+MECCA_LAT           = 21.420164986 
+MECCA_LONG          = 39.822330044
+TO_LAT 				= 43.74506
+TO_LONG             = -79.30947
+TO_ELEV             = 170.5
 
 ##### Inputs #####
-today = datetime.datetime.now()
-latitude = TO_LAT #37.336111 #43.74533
-longitude = TO_LONG #-121.890556 #-79.30945
+latitude = TO_LAT #37.336111
+longitude = TO_LONG #-121.890556
 elev = TO_ELEV #25
 
-##### Functions #####
-def find_tomorrow_fajr(jd, utc_change, long, eq_of_time_minutes):
-    jd_tomorrow = jd + 1
-
-    tomorrow_sun_declination = sunpos(jd_tomorrow, latitude, longitude)[11]
-    tomorrow_fajr_solar_angle = solar_hour_angle(latitude, tomorrow_sun_declination, FAJR_ANGLE)
-    tomorrow_solar_fajr = sunrise_sunset(-1, tomorrow_fajr_solar_angle)
-    tomorrow_standard_fajr = solar2standard(tomorrow_solar_fajr, utc_change, long, eq_of_time_minutes)
-
-    return tomorrow_standard_fajr
-
-def haversine(lat1, lon1, lat2 = MECCA_LAT, lon2 = MECCA_LONG):
-    # Convert latitude and longitude to radians
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-
-    # Haversine formula
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    distance = 6371 * c  # Earth radius in km
-
-    # Calculate course angle
-    y = math.sin(dlon) * math.cos(lat2)
-    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
-    course_angle = math.degrees(math.atan2(y, x))
-
-    return distance, course_angle
-
-def get_cardinal_direction(degree):
-    cardinals = [
-        'N', 'NNE', 'NE', 'ENE',
-        'E', 'ESE', 'SE', 'SSE',
-        'S', 'SSW', 'SW', 'WSW',
-        'W', 'WNW', 'NW', 'NNW'
-    ]
-    idx = int(((degree + 11.25) % 360) / 22.5)
-    return cardinals[idx]
-
-def asr_time(lat, dec, t = 1):
-    temp_num = sin(np.rad2deg(np.arctan2(1, t + tan(lat - dec)))) - sin(lat) * sin(dec)
-    temp_denom = cos(lat) * cos(dec)
-    return 1 / 15 * np.rad2deg(np.arccos(temp_num / temp_denom))
-
 ##### Calculations #####
-### Find UTC Offset According to Lat/Long
+### Find UTC Offset According to Lat/Long & adjust datetime
+today = datetime.datetime.utcnow()
 tz_name, utc_diff = find_utc_offset(latitude, longitude, today)
+today += datetime.timedelta(hours=utc_diff)
 utc_diff *= -1
-
-# Fix time for timezone
-today = today + datetime.timedelta(hours=-utc_diff + 4)
 
 
 ### Calculate Julian Date
@@ -113,7 +70,7 @@ standard_asr = standard_noon + asr_time(latitude, sun_declination)
 standard_sunset = solar2standard(solar_sunset, utc_diff, longitude, eq_of_time)
 standard_maghrib = solar2standard(solar_maghrib, utc_diff, longitude, eq_of_time)
 standard_isha = solar2standard(solar_isha, utc_diff, longitude, eq_of_time)
-standard_midnight = time_midpoint(standard_sunset, find_tomorrow_fajr(jd, utc_diff, longitude, eq_of_time))
+standard_midnight = time_midpoint(standard_sunset, find_tomorrow_fajr(jd, utc_diff, latitude, longitude, eq_of_time, FAJR_ANGLE))
 
 
 ### Find Next New Moon (and the rest of the phases)
@@ -186,7 +143,7 @@ hijri_date = convert.Gregorian(today.year, today.month, today.day).to_hijri()
 
 ### Misc
 # Distance from Given Coordinates to Mecca + direction
-mecca_distance, mecca_direction = haversine(latitude, longitude)
+mecca_distance, mecca_direction = haversine(latitude, longitude, MECCA_LAT, MECCA_LONG)
 mecca_direction = bound_angle_deg(mecca_direction)
 
 
@@ -201,10 +158,10 @@ print("\tEquation of time:\t{:.2f} minutes".format(equation_of_time(jd, latitude
 print("Prayer Times\n\tFajr:\t\t\t{}".format(float_to_24time(standard_fajr)))
 print("\tSunrise:\t\t{}".format(float_to_24time(standard_sunrise)))
 print("\tẒuhr:\t\t\t {}".format(float_to_24time(standard_noon)))
-print("\t`Asr:\t\t\t{}".format(float_to_24time(standard_asr)))
+print("\t‘Asr:\t\t\t{}".format(float_to_24time(standard_asr)))
 print("\tSunset: \t\t{}".format(float_to_24time(standard_sunset)))
 print("\tMaghrib: \t\t{}".format(float_to_24time(standard_maghrib)))
-print("\t`Isha: \t\t\t{}".format(float_to_24time(standard_isha)))
+print("\t‘Isha: \t\t\t{}".format(float_to_24time(standard_isha)))
 print("\tMidnight: \t\t{}".format(float_to_24time(standard_midnight)))
 
 # Mecca
@@ -223,7 +180,7 @@ print("The Moon\n\tApp. Declination:\t{:.3f}°".format(moon_declination))
 print("\tApp. Right Ascenscion:\t{}h {}m {:.2f}s".format(moon_alpha[0], moon_alpha[1], moon_alpha[2]))
 print("\tAltitude:\t\t{:.2f}°".format(moon_alt))
 print("\tAzimuth:\t\t{:.2f}°".format(moon_az))
-print("\tIllumination:\t\t{:.2f}%".format(moon_illumin * 100))
+print("\tIllumination:\t\t{:.1f}%".format(moon_illumin * 100))
 
 # Moon Phases
 print("Moon Phases\n\t{}:\t\t{}".format(moon_phases[0]["phase"], moon_phases[0]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
@@ -232,6 +189,6 @@ print("\t{}:\t\t{}".format(moon_phases[2]["phase"], moon_phases[2]["datetime"].s
 print("\t{}:\t\t{}".format(moon_phases[3]["phase"], moon_phases[3]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
 
 # TODO: New Moon First Visibility
-print("Visibility Values of New Moon\n\t0 days after:\t\t{:.3f} ({})".format(q_values[0][0], q_values[0][1]))
-print("\t1 days after:\t\t{:.3f} ({})".format(q_values[1][0], q_values[1][1]))
-print("\t2 days after:\t\t{:.3f} ({})".format(q_values[2][0], q_values[2][1]))
+print("Visibility Values of New Moon after\n\t0 days:\t\t\t{:.3f} ({})".format(q_values[0][0], q_values[0][1]))
+print("\t1 day:\t\t\t{:.3f} ({})".format(q_values[1][0], q_values[1][1]))
+print("\t2 days:\t\t\t{:.3f} ({})".format(q_values[2][0], q_values[2][1]))

@@ -273,16 +273,11 @@ def sunpos(julian_day, local_latitude, local_longitude):
 def equation_of_time(julian_day, local_latitude, local_longitude):
     sun_factors = sunpos(julian_day, local_latitude, local_longitude)
     L0 = sun_factors[0]
-    M = sun_factors[1]
-    eccentricity = sun_factors[2]
- 
     nut = sun_nutation(julian_day)
-    
     epsilon = oblique_eq(julian_day) + nut[1]
-    y = (math.tan(np.deg2rad(epsilon) / 2)) ** 2
-
     alpha = sun_factors[10]
     deltaPsi = nut[0]
+    
     E = L0 - 0.0057183 - alpha + deltaPsi * cos(epsilon)
     E *= 4
 
