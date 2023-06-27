@@ -1,4 +1,5 @@
 import islamic_times
+from datetime import datetime
 
 ##### Definitions #####
 TO_LAT 	= 43.74506
@@ -11,7 +12,7 @@ longitude = TO_LONG #-121.890556
 elev = TO_ELEV #25
 
 ##### Calculation #####
-it = islamic_times.ITLocation(TO_LAT, TO_LONG, TO_ELEV)
+it = islamic_times.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime(2076, 11, 28, 11, 11, 11))
 
 ##### Outputs #####
 # Date & Time

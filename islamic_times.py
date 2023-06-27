@@ -8,17 +8,21 @@ class ITLocation:
     MECCA_LAT = 21.420164986
     MECCA_LONG = 39.822330044
 
-    def __init__(self, latitude, longitude, elev):
+    def __init__(self, latitude, longitude, elev, today = None):
         self.latitude = latitude
         self.longitude = longitude
         self.elev = elev
+        self.today = today
         self.update()
 
     def update(self):
         ### Find UTC Offset According to Lat/Long & adjust datetime
-        self.today = datetime.datetime.utcnow()
+        local = True
+        if self.today == None:
+            self.today = datetime.datetime.utcnow()
+            local = False
         self.tz_name, self.utc_diff = find_utc_offset(self.latitude, self.longitude, self.today)
-        self.today += datetime.timedelta(hours=self.utc_diff)
+        if not(local): self.today += datetime.timedelta(hours=self.utc_diff)
         self.utc_diff *= -1
 
         ### Calculate Julian Date
