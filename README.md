@@ -1,4 +1,4 @@
-# IslamicTimes: An Astronomical Library for Islamic Astronomical Calculations
+# islamic_times: An Astronomical Library for Islamic Astronomical Calculations
 
 The IslamicTimes is a Python library dedicated to providing comprehensive solutions for various Islamic astronomical calculations. This includes but is not limited to, the calculation of prayer times, the positions of the sun and the moon, the moon phases, as well as related astronomical phenomena such as solar and lunar eclipses.
 
