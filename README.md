@@ -47,6 +47,8 @@ print("\tẒuhr:\t\t\t {}".format(it.prayertimes()["noon"]))
 
 In the above script, the `ITLocation` class is initialized with the latitude, longitude, and elevation of the location, as well as the date for which calculations are to be performed. The `datetime` and `prayertimes` methods are then called to retrieve the date and prayer times respectively.
 
+A more comprehensive example of usage can be seen in `test.py`.
+
 ## Installation
 
 You can install this package using pip:
