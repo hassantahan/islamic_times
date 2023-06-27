@@ -1,2 +1,5 @@
 __pycache__/
 misc/
+build/
+dist/
+islamic_times.egg-info/
