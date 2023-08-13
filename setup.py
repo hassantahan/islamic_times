@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='islamic_times',
-    version='1.0.1',
+    version='1.0.2',
     description='Various calculations for Islamic purposes',
     author='Hassan Tahan',
     author_email='contact@hassantahan.com',
