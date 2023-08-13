@@ -1,7 +1,8 @@
 import datetime
 import pytz
 from timezonefinder import TimezoneFinder
-from calculation_equations import *
+from islamic_times import calculation_equations as ce
+import numpy as np
 
 J2000              	= 2451545.0
 HIJRI_JD            = 1948439.389675
@@ -29,7 +30,7 @@ def siderial_time(julian_day):
     theta_zero = 280.46061837 + 360.98564736629 * (julian_day - J2000) + \
                  0.000387933 * t2 - t3 / 38710000
 
-    bound_angle_deg(theta_zero)
+    ce.bound_angle_deg(theta_zero)
 
     return theta_zero
 

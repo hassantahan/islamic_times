@@ -4,6 +4,7 @@ setup(
     name='islamic_times',
     version='1.0.1',
     description='Various calculations for Islamic purposes',
+    readme = "README.md",
     author='Hassan Tahan',
     author_email='contact@hassantahan.com',
     url='https://github.com/hassantahan/islamic_times',

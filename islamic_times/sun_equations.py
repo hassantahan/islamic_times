@@ -1,4 +1,7 @@
-from time_equations import *
+import math
+from islamic_times import calculation_equations as ce
+from islamic_times import time_equations as te
+import numpy as np
 
 obliquity_terms = [
     -4680.93,
@@ -147,7 +150,7 @@ sun_nutation_coefficients = [
 
 # Chapter 22
 def oblique_eq(julian_day):
-    u = ((julian_day - J2000) / JULIAN_CENTURY) / 100
+    u = ((julian_day - te.J2000) / te.JULIAN_CENTURY) / 100
 
     eps = 23 + 26 / 60 + (21.448 / 3600)
 
@@ -157,7 +160,7 @@ def oblique_eq(julian_day):
     return eps
 
 def sun_nutation(julian_day):
-    t = (julian_day - J2000) / JULIAN_CENTURY
+    t = (julian_day - te.J2000) / te.JULIAN_CENTURY
     t2 = t ** 2
     t3 = t ** 3
 
@@ -168,7 +171,7 @@ def sun_nutation(julian_day):
           np.deg2rad(125.04452 - 1934.136261 * t + 0.0020708 * t2 + t3 / 450000.0)]
 
     for i in range(5):
-        ta[i] = bound_angle_rad(ta[i])
+        ta[i] = ce.bound_angle_rad(ta[i])
 
     dp, de = 0, 0
 
@@ -186,31 +189,31 @@ def sun_nutation(julian_day):
 
 # Chapter 25
 def sunpos(julian_day, local_latitude, local_longitude):
-    T = (julian_day - J2000) / JULIAN_MILLENNIUM
+    T = (julian_day - te.J2000) / te.JULIAN_MILLENNIUM
     T2 = T ** 2
     T3 = T ** 3
     T4 = T ** 4
     T5 = T ** 5
 
     L0 = 280.4664567 + (360007.6982779 * T) + (0.03032028 * T2) + (T3 / 49931) - (T4 / 15300) - (T5 / 2000000)
-    L0 = bound_angle_deg(L0)
+    L0 = ce.bound_angle_deg(L0)
 
     M = 357.52911 + 359990.50340 * T - 0.001603 * T2 - T3 / 30000
-    M = bound_angle_deg(M)
+    M = ce.bound_angle_deg(M)
 
     e = 0.016708634 - 0.00042037 * T - 0.000001267 * T2
 
-    C = (1.914602 - 0.04817 * T - 0.000014 * T2) * sin(M) + \
-        (0.019993 - 0.000101 * T) * sin(2 * M) + \
-        0.000289 * sin(3 * M)
+    C = (1.914602 - 0.04817 * T - 0.000014 * T2) * ce.sin(M) + \
+        (0.019993 - 0.000101 * T) * ce.sin(2 * M) + \
+        0.000289 * ce.sin(3 * M)
 
     sunLong = L0 + C
     sunAnomaly = M + C
 
-    sunR = (1.000001018 * (1 - e ** 2)) / (1 + (e * cos(sunAnomaly)))
+    sunR = (1.000001018 * (1 - e ** 2)) / (1 + (e * ce.cos(sunAnomaly)))
 
     omega = 125.04452 - 19341.36261 * T + 0.020708 * T2 + T3 / 45000
-    Lambda = sunLong - 0.00569 - 0.00478 * sin(omega)
+    Lambda = sunLong - 0.00569 - 0.00478 * ce.sin(omega)
 
     nut = sun_nutation(julian_day)
     delta_epsilon = nut[1]
@@ -219,31 +222,31 @@ def sunpos(julian_day, local_latitude, local_longitude):
     
 
     # Right ascension (RA) & declination calculations
-    alpha = bound_angle_deg(np.rad2deg(math.atan2(cos(epsilon0) * sin(sunLong), cos(sunLong))))
-    delta = np.rad2deg(math.asin(sin(epsilon0) * sin(sunLong)))
+    alpha = ce.bound_angle_deg(np.rad2deg(math.atan2(ce.cos(epsilon0) * ce.sin(sunLong), ce.cos(sunLong))))
+    delta = np.rad2deg(math.asin(ce.sin(epsilon0) * ce.sin(sunLong)))
 
     # Adjust RA and declination to find their apparents
-    alphaApp = bound_angle_deg(np.rad2deg(math.atan2(cos(epsilon) * sin(Lambda), cos(Lambda))))
-    deltaApp = np.rad2deg(math.asin(sin(epsilon) * sin(Lambda)))
+    alphaApp = ce.bound_angle_deg(np.rad2deg(math.atan2(ce.cos(epsilon) * ce.sin(Lambda), ce.cos(Lambda))))
+    deltaApp = np.rad2deg(math.asin(ce.sin(epsilon) * ce.sin(Lambda)))
 
     # Local Hour Angle calculation
     # Start by calculating Mean Greenwich Sidereal Time
-    greenwich_hour_angle = bound_angle_deg(siderial_time(julian_day))
+    greenwich_hour_angle = ce.bound_angle_deg(te.siderial_time(julian_day))
 
     # Attain the sun's nutation in the longitude in DMS
-    nut_long_dms = decimal_to_dms(nut[0])
+    nut_long_dms = ce.decimal_to_dms(nut[0])
     
     # Make correction for the apparent sidereal time according to pg. 88
-    st_correction = (nut_long_dms[2] + nut_long_dms[1] * 60 + nut_long_dms[0] * 3600) * cos(epsilon) / 15
+    st_correction = (nut_long_dms[2] + nut_long_dms[1] * 60 + nut_long_dms[0] * 3600) * ce.cos(epsilon) / 15
     greenwich_hour_angle += (st_correction / 240)
 
     # Local Hour angle is then simply the GHA minus the apparent RA adjusted for the local longitude
-    local_hour_angle = bound_angle_deg(greenwich_hour_angle + local_longitude - alphaApp)
+    local_hour_angle = ce.bound_angle_deg(greenwich_hour_angle + local_longitude - alphaApp)
 
     # Altitude & Azimuth calculations
-    altitude = np.rad2deg(math.asin(sin(local_latitude) * sin(delta) + cos(local_latitude) * cos(delta) * cos(local_hour_angle))) 
-    azimuth = np.rad2deg(np.arccos((sin(delta) * cos(local_latitude) - cos(delta) * sin(local_latitude) * cos(local_hour_angle)) / cos(altitude)))
-    azimuth = bound_angle_deg(azimuth)
+    altitude = np.rad2deg(math.asin(ce.sin(local_latitude) * ce.sin(delta) + ce.cos(local_latitude) * ce.cos(delta) * ce.cos(local_hour_angle))) 
+    azimuth = np.rad2deg(np.arccos((ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle)) / ce.cos(altitude)))
+    azimuth = ce.bound_angle_deg(azimuth)
 
     # Might be redundant
     if local_hour_angle >= 0:
@@ -278,7 +281,7 @@ def equation_of_time(julian_day, local_latitude, local_longitude):
     alpha = sun_factors[10]
     deltaPsi = nut[0]
     
-    E = L0 - 0.0057183 - alpha + deltaPsi * cos(epsilon)
+    E = L0 - 0.0057183 - alpha + deltaPsi * ce.cos(epsilon)
     E *= 4
 
     return E
