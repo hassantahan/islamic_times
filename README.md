@@ -23,7 +23,7 @@ The IslamicTimes is a Python library dedicated to providing comprehensive soluti
 Below is a simple usage example:
 
 ```python
-import islamic_times
+from islamic_times import islamic_times as it
 from datetime import datetime
 
 # Definitions
@@ -32,15 +32,15 @@ TO_LONG = -79.309
 TO_ELEV = 150
 
 # Calculation
-it = islamic_times.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime(2023, 6, 27, 11, 10, 52))
+local = it.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime(2023, 6, 27, 11, 10, 52))
 
 # Outputs
-print("Time & Date\n\tGregorian Date:\t\t{}".format(it.datetime()["gregorian"]))
-print(f"\tIslamic Date:\t\t{it.datetime()['hijri']}")
+print("Time & Date\n\tGregorian Date:\t\t{}".format(local.datetime()["gregorian"]))
+print(f"\tIslamic Date:\t\t{local.datetime()['hijri']}")
 
 # Prayer Times
-print("Prayer Times\n\tFajr:\t\t\t{}".format(it.prayertimes()["fajr"]))
-print("\tẒuhr:\t\t\t {}".format(it.prayertimes()["noon"]))
+print("Prayer Times\n\tFajr:\t\t\t{}".format(local.prayertimes()["fajr"]))
+print("\tẒuhr:\t\t\t {}".format(local.prayertimes()["noon"]))
 
 # More Outputs as required...
 ```
