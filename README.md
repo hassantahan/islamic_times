@@ -1,4 +1,4 @@
-# IslamicTimes: An Astronomical Library for Islamic Astronomical Calculations
+# islamic_times: An Astronomical Library for Islamic Astronomical Calculations
 
 The IslamicTimes is a Python library dedicated to providing comprehensive solutions for various Islamic astronomical calculations. This includes but is not limited to, the calculation of prayer times, the positions of the sun and the moon, the moon phases, as well as related astronomical phenomena such as solar and lunar eclipses.
 
@@ -46,6 +46,8 @@ print("\tẒuhr:\t\t\t {}".format(it.prayertimes()["noon"]))
 ```
 
 In the above script, the `ITLocation` class is initialized with the latitude, longitude, and elevation of the location, as well as the date for which calculations are to be performed. The `datetime` and `prayertimes` methods are then called to retrieve the date and prayer times respectively.
+
+A more comprehensive example of usage can be seen in `test.py`.
 
 ## Installation
 
