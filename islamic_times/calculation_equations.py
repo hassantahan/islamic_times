@@ -19,7 +19,7 @@ def tan(a):
 def decimal_to_dms(decimal_deg):
     degrees = int(decimal_deg)
     minutes = int((decimal_deg - degrees) * 60)
-    seconds = (decimal_deg - degrees - minutes / 60) * 3600
+    seconds = np.round((decimal_deg - degrees - minutes / 60) * 3600, 2)
 
     return [degrees, minutes, seconds]
 
@@ -28,6 +28,11 @@ def decimal_to_hms(decimal_degrees):
     minutes = int((decimal_degrees / 15 - hours) * 60)
     seconds = (decimal_degrees / 15 - hours - minutes / 60) * 3600
     return [hours , round(minutes), seconds]
+
+def hms_to_decimal(hour_angle):
+    degree = hour_angle[0] + hour_angle[1] / 60 + hour_angle[2] / 3600
+    degree *= 15
+    return degree
 
 def calculate_angle_diff(azimuth1, altitude1, azimuth2, altitude2):
     # Convert degrees to radians

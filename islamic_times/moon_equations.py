@@ -482,17 +482,19 @@ def moonpos(julian_day, local_latitude, local_longitude, deltaPsi, ecliptic, ele
 		azimuth = 360 - azimuth
 
 	return [
-		longitude, 			# 0: lambda
-		latitude, 			# 1: beta
-		distance,			# 2:
-		ecliptic,			# 3:
-		ascension,			# 4:
-		declination,		# 5:
-		app_ascension,		# 6
-		app_declination,	# 7
-		eh_parallax,		# 8:
-		altitude,			# 9:
-		azimuth				# 10:
+		longitude, 				# 0: lambda
+		latitude, 				# 1: beta
+		distance,				# 2:
+		ecliptic,				# 3:
+		ascension,				# 4:
+		declination,			# 5:
+		app_ascension,			# 6
+		app_declination,		# 7
+		eh_parallax,			# 8:
+		altitude,				# 9:
+		azimuth,				# 10:
+		greenwich_hour_angle,	# 11:
+		local_hour_angle		# 12:
 	]
 
 # Fixing RA and Dec for apparency pg. 279
@@ -643,7 +645,7 @@ def next_phases_of_moon_utc(date):
 			moon_phases[p] -= w
 
 		# Convert from TD to UT in this approximation.
-		moon_phases[p] -= te.delta_t_approx(date.year) / 86400
+		moon_phases[p] -= te.delta_t_approx(date.year, date.month) / 86400
 		
 		# Convert from JD to Gregorian
 		moon_phases[p] = te.jd_to_gregorian(moon_phases[p])
@@ -666,8 +668,31 @@ def moon_illumination(sun_dec, sun_ra, sun_long, moon_dec, moon_ra, moon_lat, mo
 	fraction_illuminated = (1 + ce.cos(phase_angle)) / 2
 	return fraction_illuminated
 
+
+def find_lag(jd, lat, long, sun_dec, moon_dec, moon_ra, moon_alt, moon_pi, lunar_apparent_sideral, lunar_local_hour_angle, utc_diff):
+	eq_of_time = se.equation_of_time(jd, lat, long)
+	
+	# Calculate sunset
+	solar_angle = se.solar_hour_angle(lat, sun_dec)
+	solar_sunset = se.sunrise_sunset(1, solar_angle)
+	sunset = te.solar2standard(solar_sunset, utc_diff, long, eq_of_time)
+
+	# Calculate moonset, refer to chapter 15
+	h_zero = 0.7275 * moon_pi - 0.5667
+	cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(moon_dec)) / (ce.cos(lat) * ce.cos(moon_dec))
+	H_zero = np.rad2deg(np.arccos(cosH_zero))
+
+	m0 = (ce.hms_to_decimal(moon_ra) + -1 * long - lunar_apparent_sideral) / 360
+	m2 = m0 + H_zero / 360
+
+	deltaM = 0#(moon_alt - h_zero) / (360 * ce.cos(moon_dec) * ce.cos(lat) * ce.sin(lunar_local_hour_angle))
+
+	moonset = (m2 + deltaM) * 24
+
+	return sunset - moonset
+
 # Visibility calculations from HMNAO TN No. 69
-def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi):
+def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi, type = 0):
 	
 	# print(sun_az, sun_alt, moon_az, moon_alt, moon_pi)
 
@@ -679,26 +704,41 @@ def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi):
 	semi_diameter = 0.27245 * moon_pi
 	semi_diameter_prime = semi_diameter * (1 + ce.sin(moon_alt) * ce.sin(moon_pi / 60))
 
-	w_prime = semi_diameter_prime * (1 - ce.cos(arcl))
+	w_prime = semi_diameter_prime * (1 - ce.cos(arcl)) / 60
 
-	q_value = (arcv - (11.8371 - 6.3226 * w_prime + 0.7319 * w_prime ** 2 - 0.1018 * w_prime ** 3)) / 10
+	if type != 0:
+		q_value = (arcv - (11.8371 - 6.3226 * w_prime + 0.7319 * w_prime ** 2 - 0.1018 * w_prime ** 3)) / 10
+	else:
+		q_value = (arcv - (-0.1018 * w_prime ** 3 + 0.7319 * w_prime ** 2 - 6.3226 * w_prime + 7.1651))
 
-	# print(arcl, arcv, daz, cos(arcl) - cos(arcv) * cos(daz))
-	# print(moon_pi, w_prime)
+	#print(ce.decimal_to_dms(arcl), ce.decimal_to_dms(arcv), ce.decimal_to_dms(daz))#, ce.cos(arcl) - ce.cos(arcv) * ce.cos(daz))
+	#print(ce.decimal_to_dms(moon_pi / 60), ce.decimal_to_dms(w_prime), ce.decimal_to_dms(semi_diameter / 60), ce.decimal_to_dms(semi_diameter_prime / 60))
 
 	return q_value
 
 # Classification according to HMNAO TN No.69
-def classify_visibility(q):
-    if q > 0.216:
-        return "Easily visible"
-    elif 0.216 >= q > -0.014:
-        return "Visible under perfect conditions"
-    elif -0.014 >= q > -0.160:
-        return "May need optical aid"
-    elif -0.160 >= q > -0.232:
-        return "Will need optical aid"
-    elif -0.232 >= q:
-        return "Not visible"
-    else:
-        return "Invalid Input"
+def classify_visibility(q, type = 0):
+	if type == 0:
+		if q >= 5.65:
+			return "Crescent is visible by naked eyes."
+		elif 5.65 > q >= 2:
+			return "Crescent is visible by optical aid, and it could be seen by naked eyes."
+		elif 2 > q >= -0.96:
+			return "Crescent is visible by optical aid only."
+		elif -0.96 > q:
+			return "Crescent is not visible even by optical aid."
+		else:
+			return "Invalid Input"
+	else:
+		if q > 0.216:
+			return "Easily visible"
+		elif 0.216 >= q > -0.014:
+			return "Visible under perfect conditions"
+		elif -0.014 >= q > -0.160:
+			return "May need optical aid"
+		elif -0.160 >= q > -0.232:
+			return "Will need optical aid"
+		elif -0.232 >= q:
+			return "Not visible"
+		else:
+			return "Invalid Input"

@@ -286,7 +286,7 @@ def equation_of_time(julian_day, local_latitude, local_longitude):
 
     return E
 
-def solar_hour_angle(latitude, declination, angle = 0.833):
+def solar_hour_angle(latitude, declination, angle = 0.8333):
     dec = np.deg2rad(declination)
     lat = np.deg2rad(latitude)
 
@@ -296,6 +296,8 @@ def solar_hour_angle(latitude, declination, angle = 0.833):
     angle = np.arccos(num / denom)
     return np.rad2deg(angle)
 
+# -1 for Sunrise
+# 1 for Sunset
 def sunrise_sunset(set_or_rise, hour_angle):
     hours_offset_from_noon = hour_angle / 15
 
