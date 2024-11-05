@@ -397,10 +397,10 @@ def moon_nutation(julian_day):
 		313.45 + 481266.484 * t
 	]
 
-	for i in range(5):
+	for i in range(len(fundamental_arguments)):
 		fundamental_arguments[i] = ce.bound_angle_deg(fundamental_arguments[i])
 	
-	for i in range(3):
+	for i in range(len(a)):
 		a[i] = ce.bound_angle_deg(a[i])
 
 	sum_l = 0
@@ -410,10 +410,10 @@ def moon_nutation(julian_day):
 	eccentricity = 1 - 0.002516 * t - 0.0000074 * t2
 
 	for i in np.arange(0, np.size(moon_nutation_arguments_lr), 4):
-		temp =  moon_nutation_arguments_lr[i] * fundamental_arguments[0] + \
-				moon_nutation_arguments_lr[i + 1] * fundamental_arguments[1] + \
-				moon_nutation_arguments_lr[i + 2] * fundamental_arguments[2] + \
-				moon_nutation_arguments_lr[i + 3] * fundamental_arguments[3]
+		temp =  moon_nutation_arguments_lr[i] 		* 	fundamental_arguments[0] + \
+				moon_nutation_arguments_lr[i + 1] 	* 	fundamental_arguments[1] + \
+				moon_nutation_arguments_lr[i + 2] 	* 	fundamental_arguments[2] + \
+				moon_nutation_arguments_lr[i + 3] 	* 	fundamental_arguments[3]
 
 		if (moon_nutation_arguments_lr[i + 1] == 0):
 			eccentricity_compensation = 1
@@ -447,7 +447,7 @@ def moon_nutation(julian_day):
 
 	return [fundamental_arguments, sum_l, sum_b, sum_r]
 
-def moonpos(julian_day, local_latitude, local_longitude, deltaPsi, ecliptic, elev):
+def moonpos(julian_day, deltaT, local_latitude, local_longitude, deltaPsi, ecliptic, elev):
 	t = (julian_day - te.J2000) / te.JULIAN_CENTURY
 
 	# Calculation nutations
@@ -458,23 +458,25 @@ def moonpos(julian_day, local_latitude, local_longitude, deltaPsi, ecliptic, ele
 	latitude = nut[2] / 10 ** 6
 	distance = 385000.56 + nut[3] / 10 ** 3
 
-	# Place in the sky
+	# Place in the sky (pg. 93)
 	ascension = ce.bound_angle_deg(np.rad2deg(math.atan2((ce.sin(longitude) * ce.cos(ecliptic) - ce.tan(latitude) * ce.sin(ecliptic)), ce.cos(longitude))))
 	declination = np.rad2deg(math.asin(ce.sin(latitude) * ce.cos(ecliptic) + ce.cos(latitude) * ce.sin(ecliptic) * ce.sin(longitude)))
 	eh_parallax = np.rad2deg(np.arcsin(te.EARTH_RADIUS_KM / distance))
 
-	# Local Hour Angle Calculations (see sun_equations.py for more info)
-	greenwich_hour_angle = ce.bound_angle_deg(te.siderial_time(julian_day))
-	delta_psi = se.sun_nutation(julian_day)[0]
-	st_correction = ce.decimal_to_dms(delta_psi)[2] * ce.cos(ecliptic) / 15
-	greenwich_hour_angle += (st_correction / 240)
-	local_hour_angle = greenwich_hour_angle + local_longitude - ascension
+	# Local Hour Angle Calculations (pg. 88 & 92)
+	mean_greenwich_sidereal_time = te.greenwich_mean_sidereal_time(julian_day - deltaT / 86400)
+	st_correction = ce.decimal_to_dms(deltaPsi)[2] * ce.cos(ecliptic) / 15
+	app_greenwich_sidereal_time = mean_greenwich_sidereal_time + (st_correction / 3600)
+	local_hour_angle = ce.bound_angle_deg(app_greenwich_sidereal_time - -1 * local_longitude - ascension)
 
-	# Modify RA and Declination to their apparent equivalents
-	app_ascension, app_declination = correct_ra_dec(ascension, declination, local_hour_angle, eh_parallax, local_latitude, elev / 1000)
+	# Modify RA and Declination to their topocentric equivalents
+	top_ascension, top_declination = correct_ra_dec(ascension, declination, local_hour_angle, eh_parallax, local_latitude, elev / 1000)
 
 	# Final calculations
 	altitude = np.rad2deg(math.asin(ce.sin(local_latitude) * ce.sin(declination) + ce.cos(local_latitude) * ce.cos(declination)* ce.cos(local_hour_angle)))
+	refraction = 1.02 / (math.tan(math.radians(altitude) + 10.3 / (altitude + 5.11))) + 0.0019279 - 0.000034 * elev
+	altitude += refraction
+
 	azimuth = np.rad2deg(np.arccos((ce.sin(declination) * ce.cos(local_latitude) - ce.cos(declination) * ce.sin(local_latitude) * ce.cos(local_hour_angle)) / ce.cos(altitude)))
 
 	# Possibly useless
@@ -482,23 +484,24 @@ def moonpos(julian_day, local_latitude, local_longitude, deltaPsi, ecliptic, ele
 		azimuth = 360 - azimuth
 
 	return [
-		longitude, 				# 0: lambda
-		latitude, 				# 1: beta
-		distance,				# 2:
-		ecliptic,				# 3:
-		ascension,				# 4:
-		declination,			# 5:
-		app_ascension,			# 6
-		app_declination,		# 7
-		eh_parallax,			# 8:
-		altitude,				# 9:
-		azimuth,				# 10:
-		greenwich_hour_angle,	# 11:
-		local_hour_angle		# 12:
+		longitude, 						# 0:  deg. decimal (lambda)
+		latitude, 						# 1:  deg. decimal (beta)
+		distance,						# 2:  km
+		ecliptic,						# 3:  deg. decimal
+		ascension,						# 4:  deg. decimal
+		declination,					# 5:  deg. decimal
+		top_ascension,					# 6:  deg. decimal
+		top_declination,				# 7:  deg. decimal
+		eh_parallax,					# 8:  deg. decimal
+		altitude,						# 9:  deg. decimal
+		azimuth,						# 10: deg. decimal
+		mean_greenwich_sidereal_time,	# 11: deg. decimal
+		local_hour_angle				# 12: deg. decimal
 	]
 
 # Fixing RA and Dec for apparency pg. 279
 def correct_ra_dec(ra, dec, lha, parallax, lat, elev, dist = te.EARTH_RADIUS_KM):
+	#
 	a = dist
 	f = 1 / 298.257
 	b = a * (1 - f)
@@ -506,7 +509,6 @@ def correct_ra_dec(ra, dec, lha, parallax, lat, elev, dist = te.EARTH_RADIUS_KM)
 	u = np.rad2deg(np.arctan2(b * ce.tan(lat), a))
 	p_sin_psi_prime = b / a * ce.sin(u) + elev / dist * ce.sin(lat)
 	p_cos_psi_prime = ce.cos(u) + elev / dist * ce.cos(lat)
-
 
 	temp_num = -1 * p_cos_psi_prime * ce.sin(parallax) * ce.sin(lha)
 	temp_denom = ce.cos(dec) - p_cos_psi_prime * ce.sin(parallax) * ce.sin(lha)
@@ -653,7 +655,7 @@ def next_phases_of_moon_utc(date):
 	return moon_phases
 
 # Chapter 48
-def moon_illumination(sun_dec, sun_ra, sun_long, moon_dec, moon_ra, moon_lat, moon_long, sun_earth_distance, moon_earth_distance):
+def moon_illumination(sun_dec, sun_ra, moon_dec, moon_ra, sun_earth_distance, moon_earth_distance):
 	
 	# Eqs. 48.2
 	cos_psi = ce.sin(sun_dec) * ce.sin(moon_dec) + ce.cos(sun_dec) * ce.cos(moon_dec) * ce.cos(sun_ra - moon_ra)
@@ -669,29 +671,52 @@ def moon_illumination(sun_dec, sun_ra, sun_long, moon_dec, moon_ra, moon_lat, mo
 	return fraction_illuminated
 
 
-def find_lag(jd, lat, long, sun_dec, moon_dec, moon_ra, moon_alt, moon_pi, lunar_apparent_sideral, lunar_local_hour_angle, utc_diff):
-	eq_of_time = se.equation_of_time(jd, lat, long)
+def find_lag(jd, delT, lat, long, sun_dec, moon_dec, moon_ra, moon_alt, moon_pi, lunar_apparent_sideral, lunar_local_hour_angle, utc_diff):
+	jd += 1
+	eq_of_time = se.equation_of_time(jd + delT / 86400, delT, lat, long)
 	
 	# Calculate sunset
 	solar_angle = se.solar_hour_angle(lat, sun_dec)
 	solar_sunset = se.sunrise_sunset(1, solar_angle)
 	sunset = te.solar2standard(solar_sunset, utc_diff, long, eq_of_time)
 
-	# Calculate moonset, refer to chapter 15
-	h_zero = 0.7275 * moon_pi - 0.5667
-	cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(moon_dec)) / (ce.cos(lat) * ce.cos(moon_dec))
+	# Refer to Chapter 15
+	# First find the Year Month Day at UT 0h from JD
+	ymd = te.jd_to_gregorian(jd, utc_diff)
+	new_jd = te.gregorian_to_jd(ymd.year, ymd.month, ymd.day + 1)
+	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
+
+	# Calculate new sun and moon params with the new_jd
+	sun_params = se.sunpos(new_jd + delT / 86400, delT, lat, long)
+	delPsi, delEps = se.sun_nutation(new_jd + delT / 86400)
+	moon_params = moonpos(new_jd + delT / 86400, delT, lat, long, delPsi, sun_params[13], 170)
+
+	# Calculate moonset
+	h_zero = 0.7275 * moon_params[8] - 0.566667
+	cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(moon_params[5])) / (ce.cos(lat) * ce.cos(moon_params[5]))
 	H_zero = np.rad2deg(np.arccos(cosH_zero))
 
-	m0 = (ce.hms_to_decimal(moon_ra) + -1 * long - lunar_apparent_sideral) / 360
+	m0 = (moon_params[4] + -1 * long - sidereal_time) / 360
+	if m0 < 0: m0 += 1
+	elif m0 > 1: m0 -= 1
+
 	m2 = m0 + H_zero / 360
+	if m2 < 0: m2 += 1
+	elif m2 > 1: m2 -= 1
 
-	deltaM = 0#(moon_alt - h_zero) / (360 * ce.cos(moon_dec) * ce.cos(lat) * ce.sin(lunar_local_hour_angle))
+	# Minor corrective steps
+	#little_theta_zero = (sidereal_time + 360.985647 * m2) % 360
+	#lunar_local_hour_angle = (little_theta_zero - -1 * long - ce.hms_to_decimal(moon_ra)) % 360
+	#moon_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(moon_dec) + ce.cos(lat) * ce.cos(moon_dec) * ce.cos(lunar_local_hour_angle))) % 360
+	deltaM = 0 * (moon_alt - h_zero) / (360 * ce.cos(moon_dec) * ce.cos(lat) * ce.sin(lunar_local_hour_angle))
 
-	moonset = (m2 + deltaM) * 24
+	moonset = ((m2 + deltaM) * 24 - utc_diff - 1) % 24
 
 	return sunset - moonset
 
-# Visibility calculations from HMNAO TN No. 69
+# Visibility calculations either:
+# Type 0: from HMNAO TN No. 69
+# Type 1: 
 def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi, type = 0):
 	
 	# print(sun_az, sun_alt, moon_az, moon_alt, moon_pi)

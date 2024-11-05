@@ -25,7 +25,7 @@ class ITLocation:
         ### Find UTC Offset According to Lat/Long & adjust datetime
         local = True
         if self.today == None:
-            self.today = datetime.datetime.utcnow()
+            self.today = datetime.datetime.now(datetime.timezone.utc)
             local = False
         self.tz_name, self.utc_diff = te.find_utc_offset(self.latitude, self.longitude, self.today)
         if not(local): self.today += datetime.timedelta(hours=self.utc_diff)
@@ -33,12 +33,13 @@ class ITLocation:
 
         ### Calculate Julian Date
         self.jd = te.gregorian_to_jd(self.today.year, self.today.month, self.today.day + te.fraction_of_day(self.today), -1 * self.utc_diff)
+        self.deltaT = te.delta_t_approx(self.today.year, self.today.month)
 
         ### Sun & Moon Properties Calculations
         # Get factors arrays
-        self.sun_factors = se.sunpos(self.jd, self.latitude, self.longitude)
-        self.delPsi, self.delEps = se.sun_nutation(self.jd)
-        self.moon_factors = me.moonpos(self.jd, self.latitude, self.longitude, self.delPsi, self.sun_factors[13], self.elev)
+        self.sun_factors = se.sunpos(self.jd + self.deltaT / 86400, self.deltaT, self.latitude, self.longitude)
+        self.delPsi, self.delEps = se.sun_nutation(self.jd + self.deltaT / 86400)
+        self.moon_factors = me.moonpos(self.jd + self.deltaT / 86400, self.deltaT ,self.latitude, self.longitude, self.delPsi, self.sun_factors[13], self.elev)
 
         # Important Sun Factors placed into local variables
         self.sun_declination = self.sun_factors[11]
@@ -48,8 +49,8 @@ class ITLocation:
         self.sun_az = self.sun_factors[16]
 
         # Important Moon Factors placed into local variables
-        self.moon_declination = self.moon_factors[7]
-        self.moon_alpha = ce.decimal_to_hms(self.moon_factors[6])
+        self.moon_declination = self.moon_factors[5]
+        self.moon_alpha = ce.decimal_to_hms(self.moon_factors[4])
         self.moon_pi = self.moon_factors[8]
         self.moon_alt = self.moon_factors[9]
         self.moon_az = self.moon_factors[10]   
@@ -61,16 +62,19 @@ class ITLocation:
         # TODO: Look into newer versions of this, see if it can be corrected.
         islamic_date = te.gregorian_to_hijri(self.today.year, self.today.month, self.today.day)
 
-        return {"gregorian" : self.today.strftime("%A, %d %B, %Y"), 
+        return {
+                "gregorian" : self.today.strftime("%A, %d %B, %Y"), 
                 "hijri" : f"{te.get_islamic_day(self.today.strftime('%A'))}, {islamic_date[2]} {te.get_islamic_month(islamic_date[1])}, {islamic_date[0]}",
                 "time" : self.today.strftime("%X"), "timezone" : self.tz_name, "utc_offset" : te.format_utc_offset(self.utc_diff * -1),
-                "eq_of_time" : np.round(se.equation_of_time(self.jd, self.latitude, self.longitude), 2),
-                "deltaT" : np.round(te.delta_t_approx(self.today.year, self.today.month), 2)}
+                "jd" : self.jd,
+                "eq_of_time" : np.round(se.equation_of_time(self.jd + self.deltaT / 86400, self.deltaT, self.latitude, self.longitude), 2),
+                "deltaT" : np.round(te.delta_t_approx(self.today.year, self.today.month), 2)
+            }
 
     def prayertimes(self):
         ### Prayer Time Calculations
         # Equation of Time
-        eq_of_time = se.equation_of_time(self.jd, self.latitude, self.longitude)
+        eq_of_time = se.equation_of_time(self.jd + self.deltaT / 86400, self.deltaT, self.latitude, self.longitude)
 
         # Calculate prayer times in solar time
         solar_fajr = se.sunrise_sunset(-1, se.solar_hour_angle(self.latitude, self.sun_declination, self.FAJR_ANGLE))
@@ -87,7 +91,7 @@ class ITLocation:
         standard_sunset = te.solar2standard(solar_sunset, self.utc_diff, self.longitude, eq_of_time)
         standard_maghrib = te.solar2standard(solar_maghrib, self.utc_diff, self.longitude, eq_of_time)
         standard_isha = te.solar2standard(solar_isha, self.utc_diff, self.longitude, eq_of_time)
-        standard_midnight = te.time_midpoint(standard_sunset, pt.find_tomorrow_fajr(self.jd, self.utc_diff, self.latitude, self.longitude, eq_of_time, self.FAJR_ANGLE))
+        standard_midnight = te.time_midpoint(standard_sunset, pt.find_tomorrow_fajr(self.jd + self.deltaT / 86400, self.deltaT, self.utc_diff, self.latitude, self.longitude, eq_of_time, self.FAJR_ANGLE))
 
         return {"fajr" : te.float_to_24time(standard_fajr), "sunrise" : te.float_to_24time(standard_sunrise), "noon" : te.float_to_24time(standard_noon), 
                 "asr" : te.float_to_24time(standard_asr), "sunset" : te.float_to_24time(standard_sunset), "maghrib" : te.float_to_24time(standard_maghrib), 
@@ -105,9 +109,8 @@ class ITLocation:
     
     def moon(self):
         ### Calculate Moon Illumination
-        moon_illumin = me.moon_illumination(self.sun_declination, self.sun_factors[10], self.sun_factors[4], 
-                                            self.moon_declination, self.moon_factors[6], self.moon_factors[1], 
-                                            self.moon_factors[0], self.sun_factors[6], self.moon_factors[2] / 149597870.7)
+        moon_illumin = me.moon_illumination(self.sun_declination, self.sun_factors[10], self.moon_declination, 
+                                            self.moon_factors[6], self.sun_factors[6], self.moon_factors[2] / 149597870.7)
 
         return {"declination" : f"{self.moon_declination:.3f}°", "right_ascension" : f"{self.moon_alpha[0]}h {self.moon_alpha[1]}m {self.moon_alpha[2]:.2f}s",
                 "altitude" : f"{self.moon_alt:.2f}°", "azimuth" : f"{self.moon_az:.2f}°", "illumination" : f"{moon_illumin * 100:.1f}%"}
@@ -141,7 +144,7 @@ class ITLocation:
                 if item['phase'] == "New Moon":
                     new_moon = item['datetime']
 
-        k = me.find_lag(self.jd, self.latitude, self.longitude, self.sun_declination, self.moon_declination, self.moon_alpha, self.moon_alt, self.moon_pi, 
+        k = me.find_lag(self.jd, self.deltaT, self.latitude, self.longitude, self.sun_declination, self.moon_declination, self.moon_alpha, self.moon_alt, self.moon_pi, 
                         self.moon_factors[11], self.moon_factors[12], self.utc_diff)
 
         # Find JD for the given date; adjust day for difference in UTC and local timezone
@@ -154,7 +157,7 @@ class ITLocation:
             jd_new_moon = te.gregorian_to_jd(new_moon.year, new_moon.month, new_moon.day, -1 * self.utc_diff)
 
         # Find local sunset as visibilities are calculated from then
-        nm_sun_factors = se.sunpos(jd_new_moon, self.latitude, self.longitude)
+        nm_sun_factors = se.sunpos(jd_new_moon, self.deltaT, self.latitude, self.longitude)
         nm_sunset = te.solar2standard(se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, nm_sun_factors[11])), self.utc_diff, self.longitude, 
                                       se.equation_of_time(jd_new_moon, self.latitude, self.longitude))
         jd_new_moon = te.gregorian_to_jd(new_moon.year, new_moon.month, new_moon.day + nm_sunset / 24, -1 * self.utc_diff)
@@ -163,9 +166,9 @@ class ITLocation:
         visibilities = []
         i = 0
         while (i < 3):
-            nm_sun_factors = se.sunpos(jd_new_moon + i, self.latitude, self.longitude)
+            nm_sun_factors = se.sunpos(jd_new_moon + i, self.deltaT, self.latitude, self.longitude)
             delPsi, delEps = se.sun_nutation(jd_new_moon + i)
-            nm_moon_factors = me.moonpos(jd_new_moon + i, self.latitude, self.longitude, delPsi, nm_sun_factors[13], self.elev)
+            nm_moon_factors = me.moonpos(jd_new_moon + i, self.deltaT, self.latitude, self.longitude, delPsi, nm_sun_factors[13], self.elev)
 
             #print(jd_to_gregorian(jd_new_moon + i))
             visibilities.append(me.calculate_visibility(nm_sun_factors[16], nm_sun_factors[15], nm_moon_factors[10], nm_moon_factors[9], np.deg2rad(nm_moon_factors[8])))

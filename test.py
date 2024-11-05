@@ -35,58 +35,66 @@ latitude = TO_LAT #37.336111
 longitude = TO_LONG #-121.890556
 elev = TO_ELEV #25
 
-##### Calculation #####
-local = it.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime.now())#datetime(2024, 3, 1) )#, datetime(year=2002, month=2, day=12, hour=16, minute=19, second=12))
-
+##### Calculation #####datetime(1992, 4, 11, 20) - timedelta(seconds=58.558305243815866)
+local = it.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime(2024, 11, 5, 22, 4, 0))#, datetime(year=2002, month=2, day=12, hour=16, minute=19, second=12))
+ 
 ##### Outputs #####
 # Date & Time
 temp = local.datetime()
-print("Time & Date\n\tGregorian Date:\t\t{}".format(temp["gregorian"]))
+print("Time & Date")
+print(f"\tGregorian Date:\t\t{temp['gregorian']}")
 print(f"\tIslamic Date:\t\t{temp['hijri']}")
-print("\t24h-Time:\t\t{}\n\tTime Zone:\t\t{} {}".format(temp["time"], temp["timezone"], temp["utc_offset"]))
-print("\tEquation of time:\t{} minutes".format(temp["eq_of_time"]))
-print("\tEstimated ΔT:\t\t{}s".format(temp["deltaT"]))
+print(f"\t24h-Time:\t\t{temp['time']}\n\tTime Zone:\t\t{temp['timezone']} {temp['utc_offset']}")
+print(f"\tLocal JD:\t\t{temp['jd']}")
+print(f"\tEquation of time:\t{temp['eq_of_time']} minutes")
+print(f"\tEstimated ΔT:\t\t{temp['deltaT']}s")
 
 # Prayer Times
 temp = local.prayertimes()
-print("Local Prayer Times\n\tFajr:\t\t\t{}".format(temp["fajr"]))
-print("\tSunrise:\t\t{}".format(temp["sunrise"]))
-print("\tẒuhr:\t\t\t {}".format(temp["noon"]))
-print("\tʿAsr:\t\t\t{}".format(temp["asr"]))
-print("\tSunset: \t\t{}".format(temp["sunset"]))
-print("\tMaghrib: \t\t{}".format(temp["maghrib"]))
-print("\tʿIsha: \t\t\t{}".format(temp["isha"]))
-print("\tMidnight: \t\t{}".format(temp["midnight"]))
+print("Local Prayer Times")
+print(f"\tFajr:\t\t\t{temp['fajr']}")
+print(f"\tSunrise:\t\t{temp['sunrise']}")
+print(f"\tẒuhr:\t\t\t {temp['noon']}")
+print(f"\tʿAsr:\t\t\t{temp['asr']}")
+print(f"\tSunset:\t\t\t{temp['sunset']}")
+print(f"\tMaghrib:\t\t{temp['maghrib']}")
+print(f"\tʿIsha:\t\t\t{temp['isha']}")
+print(f"\tMidnight:\t\t{temp['midnight']}")
 
 # Mecca
 temp = local.mecca()
-print("Mecca\n\tDistance: \t\t{} km".format(temp["distance"]))
-print("\tDirection: \t\t{} ({}°)".format(temp["cardinal"], temp["angle"]))
+print("Mecca")
+print(f"\tDistance:\t\t{temp['distance']} km")
+print(f"\tDirection:\t\t{temp['cardinal']} ({temp['angle']}°)")
 
 # The Sun
 temp = local.sun()
-print("The Sun\n\tApp. Declination:\t{}\t\t{}".format(temp["declination"], decimal_to_dms(temp["declination"])))
-print("\tApp. Right Ascenscion:\t{}".format(temp["right_ascension"]))
-print("\tAltitude:\t\t{}\t\t{}".format(temp["altitude"], decimal_to_dms(temp["altitude"])))
-print("\tAzimuth:\t\t{}\t\t{}".format(temp["azimuth"], decimal_to_dms(temp["azimuth"])))
+print("The Sun")
+print(f"\tApp. Declination:\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
+print(f"\tApp. Right Ascenscion:\t{temp['right_ascension']}".format())
+print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")
+print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
 
 # The Moon
 temp = local.moon()
-print("The Moon\n\tApp. Declination:\t{}\t{}".format(temp["declination"], decimal_to_dms(temp["declination"])))
-print("\tApp. Right Ascenscion:\t{}".format(temp["right_ascension"]))
-print("\tAltitude:\t\t{}\t\t{}".format(temp["altitude"], decimal_to_dms(temp["altitude"])))
-print("\tAzimuth:\t\t{}\t\t{}".format(temp["azimuth"], decimal_to_dms(temp["azimuth"])))
-print("\tIllumination:\t\t{}".format(temp["illumination"]))
+print("The Moon")
+print(f"\tDeclination:\t\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
+print(f"\tRight Ascenscion:\t{temp['right_ascension']}")
+print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")
+print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
+print(f"\tIllumination:\t\t{temp['illumination']}")
 
 # Moon Phases
 temp = local.moonphases()
-print("Moon Phases\n\t{}:\t\t{}".format(temp[0]["phase"], temp[0]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
-print("\t{}:\t\t{}".format(temp[1]["phase"], temp[1]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
-print("\t{}:\t\t{}".format(temp[2]["phase"], temp[2]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
-print("\t{}:\t\t{}".format(temp[3]["phase"], temp[3]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
+print("Moon Phases")
+print(f"\t{temp[0]['phase']}:\t\t{temp[0]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
+print(f"\t{temp[1]['phase']}:\t\t{temp[1]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
+print(f"\t{temp[2]['phase']}:\t\t{temp[2]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
+print(f"\t{temp[3]['phase']}:\t\t{temp[3]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
 
 # New Moon Visibility
 temp = local.visibilities()
-print("Visibility Values of New Moon after...\n\t0 days:\t\t\t{:.3f} ({})".format(temp["0"][0], temp["0"][1]))
-print("\t1 day:\t\t\t{:.3f} ({})".format(temp["1"][0], temp["1"][1]))
-print("\t2 days:\t\t\t{:.3f} ({})".format(temp["2"][0], temp["2"][1]))
+print("Visibility Values of New Moon after...")
+print(f"\t0 days:\t\t\t{temp['0'][0]:.3f} ({temp['0'][1]})")
+print(f"\t1 day:\t\t\t{temp['1'][0]:.3f} ({temp['1'][1]})")
+print(f"\t2 days:\t\t\t{temp['2'][0]:.3f} ({temp['2'][1]})")

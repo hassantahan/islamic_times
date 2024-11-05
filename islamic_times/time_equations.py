@@ -22,7 +22,9 @@ def leap_gregorian(year):
     else:
         return False
 
-def siderial_time(julian_day):
+# Taken from pg. 88 of AA 
+# (DOES NOT TAKE JDE)
+def greenwich_mean_sidereal_time(julian_day):
     t = (julian_day - J2000) / JULIAN_CENTURY
     t2 = t ** 2
     t3 = t ** 3
@@ -30,9 +32,7 @@ def siderial_time(julian_day):
     theta_zero = 280.46061837 + 360.98564736629 * (julian_day - J2000) + \
                  0.000387933 * t2 - t3 / 38710000
 
-    ce.bound_angle_deg(theta_zero)
-
-    return theta_zero
+    return ce.bound_angle_deg(theta_zero)
 
 # Look to Jean Meeus' "Astronomical Algorithms"
 def gregorian_to_jd(year, month, day, zone = 0):
@@ -50,8 +50,8 @@ def gregorian_to_jd(year, month, day, zone = 0):
     return jd
 
 # Look to Jean Meeus' "Astronomical Algorithms"
-def jd_to_gregorian(jd):
-    jd = jd + 0.5
+def jd_to_gregorian(jd, adjust_for_tz_diff = 0):
+    jd = jd + 0.5 - adjust_for_tz_diff / 24
     z = int(np.floor(jd))
     f = jd - z
 

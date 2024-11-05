@@ -4,10 +4,10 @@ from islamic_times import calculation_equations as ce
 import numpy as np
 
 ##### Functions #####
-def find_tomorrow_fajr(jd, utc_change, lat, long, eq_of_time_minutes, angle):
+def find_tomorrow_fajr(jd, deltaT, utc_change, lat, long, eq_of_time_minutes, angle):
     jd_tomorrow = jd + 1
 
-    tomorrow_sun_declination = se.sunpos(jd_tomorrow, lat, long)[11]
+    tomorrow_sun_declination = se.sunpos(jd_tomorrow, deltaT, lat, long)[11]
     tomorrow_fajr_solar_angle = se.solar_hour_angle(lat, tomorrow_sun_declination, angle)
     tomorrow_solar_fajr = se.sunrise_sunset(-1, tomorrow_fajr_solar_angle)
     tomorrow_standard_fajr = te.solar2standard(tomorrow_solar_fajr, utc_change, long, eq_of_time_minutes)
