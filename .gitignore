@@ -4,3 +4,4 @@ build/
 dist/
 islamic_times.egg-info/
 distances.py
+tester.py

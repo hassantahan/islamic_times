@@ -188,7 +188,7 @@ def sun_nutation(julian_day):
     return deltaPsi, deltaEpsilon
 
 # Chapter 25
-def sunpos(julian_day, local_latitude, local_longitude):
+def sunpos(julian_day, deltaT, local_latitude, local_longitude):
     T = (julian_day - te.J2000) / te.JULIAN_MILLENNIUM
     T2 = T ** 2
     T3 = T ** 3
@@ -231,7 +231,7 @@ def sunpos(julian_day, local_latitude, local_longitude):
 
     # Local Hour Angle calculation
     # Start by calculating Mean Greenwich Sidereal Time
-    greenwich_hour_angle = ce.bound_angle_deg(te.siderial_time(julian_day))
+    greenwich_hour_angle = ce.bound_angle_deg(te.greenwich_mean_sidereal_time(julian_day - deltaT / 86400))
 
     # Attain the sun's nutation in the longitude in DMS
     nut_long_dms = ce.decimal_to_dms(nut[0])
@@ -273,8 +273,8 @@ def sunpos(julian_day, local_latitude, local_longitude):
         local_hour_angle    # 17
     ]
 
-def equation_of_time(julian_day, local_latitude, local_longitude):
-    sun_factors = sunpos(julian_day, local_latitude, local_longitude)
+def equation_of_time(julian_day, deltaT, local_latitude, local_longitude):
+    sun_factors = sunpos(julian_day, deltaT, local_latitude, local_longitude)
     L0 = sun_factors[0]
     nut = sun_nutation(julian_day)
     epsilon = oblique_eq(julian_day) + nut[1]
@@ -286,7 +286,7 @@ def equation_of_time(julian_day, local_latitude, local_longitude):
 
     return E
 
-def solar_hour_angle(latitude, declination, angle = 0.833):
+def solar_hour_angle(latitude, declination, angle = 0.8333):
     dec = np.deg2rad(declination)
     lat = np.deg2rad(latitude)
 
@@ -296,6 +296,8 @@ def solar_hour_angle(latitude, declination, angle = 0.833):
     angle = np.arccos(num / denom)
     return np.rad2deg(angle)
 
+# -1 for Sunrise
+# 1 for Sunset
 def sunrise_sunset(set_or_rise, hour_angle):
     hours_offset_from_noon = hour_angle / 15
 

@@ -1,60 +1,101 @@
 from islamic_times import islamic_times as it
 from datetime import datetime, timedelta
+import numpy as np
+
+def decimal_to_dms(decimal_string):
+    # Remove the degree symbol (°) if it's present
+    decimal_string = decimal_string.replace("°", "")
+
+    # Convert the input string to a float
+    decimal_value = float(decimal_string)
+
+    degrees = int(decimal_value)
+    decimal_minutes = (decimal_value - degrees) * 60
+    minutes = int(decimal_minutes)
+    seconds = (decimal_minutes - minutes) * 60
+
+    dms_string = f"{degrees}° {np.abs(minutes)}' {np.abs(seconds):.2f}\""
+    return dms_string
 
 ##### Definitions #####
 TO_LAT 	= 43.74506
 TO_LONG = -79.30947
 TO_ELEV = 170.5
 
+HAM_LAT = 43.232737
+HAM_LONG = -79.857990
+HAM_ELEV = 80
+
+MON_LAT = 45.53932
+MON_LONG = -73.58525
+MON_ELEV = 50
+
 ##### Inputs #####
-latitude = TO_LAT #37.336111
-longitude = TO_LONG #-121.890556
-elev = TO_ELEV #25
+latitude = TO_LAT
+longitude = TO_LONG
+elev = TO_ELEV
 
 ##### Calculation #####
-local = it.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime.now() + timedelta(days=20))
+local = it.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime.now() + timedelta(days=90))
 
 ##### Outputs #####
 # Date & Time
-print("Time & Date\n\tGregorian Date:\t\t{}".format(local.datetime()["gregorian"]))
-print(f"\tIslamic Date:\t\t{local.datetime()['hijri']}")
-print("\t24h-Time:\t\t{}\n\tTime Zone:\t\t{} {}".format(local.datetime()["time"], local.datetime()["timezone"], local.datetime()["utc_offset"]))
-print("\tEquation of time:\t{} minutes".format(local.datetime()["eq_of_time"]))
+temp = local.datetime()
+print("Time & Date")
+print(f"\tGregorian Date:\t\t{temp['gregorian']}")
+print(f"\tIslamic Date:\t\t{temp['hijri']}")
+print(f"\t24h-Time:\t\t{temp['time']}\n\tTime Zone:\t\t{temp['timezone']} {temp['utc_offset']}")
+print(f"\tLocal JD:\t\t{temp['jd']}")
+print(f"\tEquation of time:\t{temp['eq_of_time']} minutes")
+print(f"\tEstimated ΔT:\t\t{temp['deltaT']}s")
 
 # Prayer Times
-print("Prayer Times\n\tFajr:\t\t\t{}".format(local.prayertimes()["fajr"]))
-print("\tSunrise:\t\t{}".format(local.prayertimes()["sunrise"]))
-print("\tẒuhr:\t\t\t {}".format(local.prayertimes()["noon"]))
-print("\t‘Asr:\t\t\t{}".format(local.prayertimes()["asr"]))
-print("\tSunset: \t\t{}".format(local.prayertimes()["sunset"]))
-print("\tMaghrib: \t\t{}".format(local.prayertimes()["maghrib"]))
-print("\t‘Isha: \t\t\t{}".format(local.prayertimes()["isha"]))
-print("\tMidnight: \t\t{}".format(local.prayertimes()["midnight"]))
+temp = local.prayertimes()
+print("Local Prayer Times")
+print(f"\tFajr:\t\t\t{temp['fajr']}")
+print(f"\tSunrise:\t\t{temp['sunrise']}")
+print(f"\tẒuhr:\t\t\t {temp['noon']}")
+print(f"\tʿAsr:\t\t\t{temp['asr']}")
+print(f"\tSunset:\t\t\t{temp['sunset']}")
+print(f"\tMaghrib:\t\t{temp['maghrib']}")
+print(f"\tʿIsha:\t\t\t{temp['isha']}")
+print(f"\tMidnight:\t\t{temp['midnight']}")
 
 # Mecca
-print("Mecca\n\tDistance: \t\t{} km".format(local.mecca()["distance"]))
-print("\tDirection: \t\t{} ({}°)".format(local.mecca()["cardinal"], local.mecca()["angle"]))
+temp = local.mecca()
+print("Mecca")
+print(f"\tDistance:\t\t{temp['distance']} km")
+print(f"\tDirection:\t\t{temp['cardinal']} ({temp['angle']}°)")
 
 # The Sun
-print("The Sun\n\tApp. Declination:\t{}".format(local.sun()["declination"]))
-print("\tApp. Right Ascenscion:\t{}".format(local.sun()["right_ascension"]))
-print("\tAltitude:\t\t{}".format(local.sun()["altitude"]))
-print("\tAzimuth:\t\t{}".format(local.sun()["azimuth"]))
+temp = local.sun()
+print("The Sun")
+print(f"\tApp. Declination:\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
+print(f"\tApp. Right Ascenscion:\t{temp['right_ascension']}".format())
+print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")
+print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
 
 # The Moon
-print("The Moon\n\tApp. Declination:\t{}".format(local.moon()["declination"]))
-print("\tApp. Right Ascenscion:\t{}".format(local.moon()["right_ascension"]))
-print("\tAltitude:\t\t{}".format(local.moon()["altitude"]))
-print("\tAzimuth:\t\t{}".format(local.moon()["azimuth"]))
-print("\tIllumination:\t\t{}".format(local.moon()["illumination"]))
+temp = local.moon()
+print("The Moon")
+print(f"\tMoonset:\t\t{temp['moonset']}")
+print(f"\tDeclination:\t\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
+print(f"\tRight Ascenscion:\t{temp['right_ascension']}")
+print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")
+print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
+print(f"\tIllumination:\t\t{temp['illumination']}")
 
 # Moon Phases
-print("Moon Phases\n\t{}:\t\t{}".format(local.moonphases()[0]["phase"], local.moonphases()[0]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
-print("\t{}:\t\t{}".format(local.moonphases()[1]["phase"], local.moonphases()[1]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
-print("\t{}:\t\t{}".format(local.moonphases()[2]["phase"], local.moonphases()[2]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
-print("\t{}:\t\t{}".format(local.moonphases()[3]["phase"], local.moonphases()[3]["datetime"].strftime("%H:%M:%S %A, %d %B, %Y")))
+temp = local.moonphases()
+print("Moon Phases")
+print(f"\t{temp[0]['phase']}:\t\t{temp[0]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
+print(f"\t{temp[1]['phase']}:\t\t{temp[1]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
+print(f"\t{temp[2]['phase']}:\t\t{temp[2]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
+print(f"\t{temp[3]['phase']}:\t\t{temp[3]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
 
 # New Moon Visibility
-print("Visibility Values of New Moon after\n\t0 days:\t\t\t{:.3f} ({})".format(local.visibilities()["0"][0], local.visibilities()["0"][1]))
-print("\t1 day:\t\t\t{:.3f} ({})".format(local.visibilities()["1"][0], local.visibilities()["1"][1]))
-print("\t2 days:\t\t\t{:.3f} ({})".format(local.visibilities()["2"][0], local.visibilities()["2"][1]))
+temp = local.visibilities()
+print("Visibility Values of New Moon after...")
+print(f"\t0 days:\t\t\t{temp['0'][0]:.3f} ({temp['0'][1]})")
+print(f"\t1 day:\t\t\t{temp['1'][0]:.3f} ({temp['1'][1]})")
+print(f"\t2 days:\t\t\t{temp['2'][0]:.3f} ({temp['2'][1]})")
