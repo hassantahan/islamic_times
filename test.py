@@ -31,13 +31,13 @@ MON_LONG = -73.58525
 MON_ELEV = 50
 
 ##### Inputs #####
-latitude = TO_LAT #37.336111
-longitude = TO_LONG #-121.890556
-elev = TO_ELEV #25
+latitude = TO_LAT
+longitude = TO_LONG
+elev = TO_ELEV
 
-##### Calculation #####datetime(1992, 4, 11, 20) - timedelta(seconds=58.558305243815866)
-local = it.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime(2024, 11, 5, 22, 4, 0))#, datetime(year=2002, month=2, day=12, hour=16, minute=19, second=12))
- 
+##### Calculation #####
+local = it.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime.now() + timedelta(days=90))
+
 ##### Outputs #####
 # Date & Time
 temp = local.datetime()
@@ -78,6 +78,7 @@ print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
 # The Moon
 temp = local.moon()
 print("The Moon")
+print(f"\tMoonset:\t\t{temp['moonset']}")
 print(f"\tDeclination:\t\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
 print(f"\tRight Ascenscion:\t{temp['right_ascension']}")
 print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")

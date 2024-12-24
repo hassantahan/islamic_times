@@ -78,3 +78,12 @@ def get_cardinal_direction(degree):
     ]
     idx = int(((degree + 11.25) % 360) / 22.5)
     return cardinals[idx]
+
+def interpolation(n, y1, y2, y3):
+    a = y2 - y1
+    b = y3 - y2
+    c = b - a
+
+    value = y2 + n / 2 * (a + b + n * c)
+
+    return value

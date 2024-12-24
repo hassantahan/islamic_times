@@ -597,7 +597,6 @@ def next_phases_of_moon_utc(date):
 		# Iterate over the first group by 3 and the other group by 4
 		# TODO: change the moon_phase_corrections_arg[0] to account for the different phases (p) ==> done
 		while i < np.size(moon_phase_corrections_coeff) and j < np.size(moon_phase_corrections_arg):
-			# print('Term', i // 3 + 1,':')
 			sin_coeff = 0
 			
 			# Shift for the moon_phase_corrections_coeff array
@@ -616,18 +615,15 @@ def next_phases_of_moon_utc(date):
 				# Go through the sine argument terms and add them up
 				sin_argument = 0
 				for l in np.arange(0, 3):
-					# print(f'{fundamental_arguments[l + 1]:.4f}', moon_phase_corrections_arg[p % 2][j + l + 1])
 					sin_argument += fundamental_arguments[l + 1] * moon_phase_corrections_arg[p % 2][j + l + 1]
 				# Take the sine of the sum of the arguments
 				sin_coeff = ce.sin(sin_argument)
-				# print(moon_phase_corrections_coeff[i + s], f'{fundamental_arguments[0]:.7f}', moon_phase_corrections_arg[p % 2][j])
 				# Add to the correction term the product of the phase coefficient, the eccentricity factor, and the sine coefficient
 				temp += moon_phase_corrections_coeff[i + s] * pow(fundamental_arguments[0], moon_phase_corrections_arg[p % 2][j]) * sin_coeff
 			else:
 				# Omega term
-				# print(moon_phase_corrections_coeff[i + s], f'{fundamental_arguments[0]:.7f}', moon_phase_corrections_arg[p % 2][j], f'{fundamental_arguments[4]:.4f}')
 				temp += moon_phase_corrections_coeff[i + s] * pow(fundamental_arguments[0], 0) * ce.sin(fundamental_arguments[4])
-			# print(f'Temp: {temp:.5f}')
+
 			i += 3
 			j += 4
 
@@ -654,7 +650,7 @@ def next_phases_of_moon_utc(date):
 
 	return moon_phases
 
-# Chapter 48
+# Refer to Chapter 48 of AA
 def moon_illumination(sun_dec, sun_ra, moon_dec, moon_ra, sun_earth_distance, moon_earth_distance):
 	
 	# Eqs. 48.2
@@ -664,39 +660,34 @@ def moon_illumination(sun_dec, sun_ra, moon_dec, moon_ra, sun_earth_distance, mo
 	
 	# Eq. 48.3
 	phase_angle = np.rad2deg(np.arctan2(sun_earth_distance * sin_psi, moon_earth_distance - sun_earth_distance * cos_psi))
-	# print(phase_angle)
 	
 	# Eq. 48.1
 	fraction_illuminated = (1 + ce.cos(phase_angle)) / 2
 	return fraction_illuminated
 
-
-def find_lag(jd, delT, lat, long, sun_dec, moon_dec, moon_ra, moon_alt, moon_pi, lunar_apparent_sideral, lunar_local_hour_angle, utc_diff):
-	jd += 1
-	eq_of_time = se.equation_of_time(jd + delT / 86400, delT, lat, long)
-	
-	# Calculate sunset
-	solar_angle = se.solar_hour_angle(lat, sun_dec)
-	solar_sunset = se.sunrise_sunset(1, solar_angle)
-	sunset = te.solar2standard(solar_sunset, utc_diff, long, eq_of_time)
-
-	# Refer to Chapter 15
+# Refer to Chapter 15 of AA
+def calculate_moonset(jd, delT, lat, long, elev, utc_diff):	
 	# First find the Year Month Day at UT 0h from JD
 	ymd = te.jd_to_gregorian(jd, utc_diff)
-	new_jd = te.gregorian_to_jd(ymd.year, ymd.month, ymd.day + 1)
+	delT = te.delta_t_approx(ymd.year, ymd.month)
+	new_jd = te.gregorian_to_jd(ymd.year, ymd.month, ymd.day)
 	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
 
 	# Calculate new sun and moon params with the new_jd
-	sun_params = se.sunpos(new_jd + delT / 86400, delT, lat, long)
-	delPsi, delEps = se.sun_nutation(new_jd + delT / 86400)
-	moon_params = moonpos(new_jd + delT / 86400, delT, lat, long, delPsi, sun_params[13], 170)
+	moon_params = []
+	for i in range(3):
+		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_diff)
+		delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
+		sun_params = se.sunpos(new_jd + delT_temp / 86400 + i - 1, delT_temp, lat, long)
+		delPsi, delEps = se.sun_nutation(new_jd + delT_temp / 86400 + i - 1)
+		moon_params.append(moonpos(new_jd + delT_temp / 86400 + i - 1, delT_temp, lat, long, delPsi, sun_params[13], elev))
 
 	# Calculate moonset
-	h_zero = 0.7275 * moon_params[8] - 0.566667
-	cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(moon_params[5])) / (ce.cos(lat) * ce.cos(moon_params[5]))
+	h_zero = 0.7275 * moon_params[1][8] - 0.566667
+	cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(moon_params[1][5])) / (ce.cos(lat) * ce.cos(moon_params[1][5]))
 	H_zero = np.rad2deg(np.arccos(cosH_zero))
 
-	m0 = (moon_params[4] + -1 * long - sidereal_time) / 360
+	m0 = (moon_params[1][4] + -1 * long - sidereal_time) / 360
 	if m0 < 0: m0 += 1
 	elif m0 > 1: m0 -= 1
 
@@ -705,22 +696,27 @@ def find_lag(jd, delT, lat, long, sun_dec, moon_dec, moon_ra, moon_alt, moon_pi,
 	elif m2 > 1: m2 -= 1
 
 	# Minor corrective steps
-	#little_theta_zero = (sidereal_time + 360.985647 * m2) % 360
-	#lunar_local_hour_angle = (little_theta_zero - -1 * long - ce.hms_to_decimal(moon_ra)) % 360
-	#moon_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(moon_dec) + ce.cos(lat) * ce.cos(moon_dec) * ce.cos(lunar_local_hour_angle))) % 360
-	deltaM = 0 * (moon_alt - h_zero) / (360 * ce.cos(moon_dec) * ce.cos(lat) * ce.sin(lunar_local_hour_angle))
+	for _ in range(3):
+		little_theta_zero = (sidereal_time + 360.985647 * m2) % 360
 
-	moonset = ((m2 + deltaM) * 24 - utc_diff - 1) % 24
+		n = m2 + delT / 86400
+		interpolated_moon_dec = ce.interpolation(n, moon_params[0][5], moon_params[1][5], moon_params[2][5])
+		interpolated_moon_ra = ce.interpolation(n, moon_params[0][4], moon_params[1][4], moon_params[2][4])
 
-	return sunset - moonset
+		lunar_local_hour_angle = (little_theta_zero - -1 * long - interpolated_moon_ra) % 360
+		moon_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(interpolated_moon_dec) + ce.cos(lat) * ce.cos(interpolated_moon_dec) * ce.cos(lunar_local_hour_angle)))
+		deltaM = (moon_alt - h_zero) / (360 * ce.cos(interpolated_moon_dec) * ce.cos(lat) * ce.sin(lunar_local_hour_angle))
+
+		m2 += deltaM
+
+	moonset = (m2 * 24 - utc_diff) % 24
+
+	return moonset
 
 # Visibility calculations either:
-# Type 0: from HMNAO TN No. 69
-# Type 1: 
+# Type 0: Odeh, 2006
+# Type 1: HMNAO TN No. 69
 def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi, type = 0):
-	
-	# print(sun_az, sun_alt, moon_az, moon_alt, moon_pi)
-
 	arcl = ce.calculate_angle_diff(sun_az, sun_alt, moon_az, moon_alt)
 	arcv = np.abs(sun_alt - moon_alt)
 	daz = sun_az - moon_az
@@ -731,39 +727,42 @@ def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi, type = 0):
 
 	w_prime = semi_diameter_prime * (1 - ce.cos(arcl)) / 60
 
-	if type != 0:
-		q_value = (arcv - (11.8371 - 6.3226 * w_prime + 0.7319 * w_prime ** 2 - 0.1018 * w_prime ** 3)) / 10
-	else:
+	if type == 0:
 		q_value = (arcv - (-0.1018 * w_prime ** 3 + 0.7319 * w_prime ** 2 - 6.3226 * w_prime + 7.1651))
+	else:
+		q_value = (arcv - (11.8371 - 6.3226 * w_prime + 0.7319 * w_prime ** 2 - 0.1018 * w_prime ** 3)) / 10
 
 	#print(ce.decimal_to_dms(arcl), ce.decimal_to_dms(arcv), ce.decimal_to_dms(daz))#, ce.cos(arcl) - ce.cos(arcv) * ce.cos(daz))
 	#print(ce.decimal_to_dms(moon_pi / 60), ce.decimal_to_dms(w_prime), ce.decimal_to_dms(semi_diameter / 60), ce.decimal_to_dms(semi_diameter_prime / 60))
 
 	return q_value
 
-# Classification according to HMNAO TN No.69
+# Classification according to HMNAO TN No.69 or Odeh, 2006
 def classify_visibility(q, type = 0):
-	if type == 0:
-		if q >= 5.65:
-			return "Crescent is visible by naked eyes."
-		elif 5.65 > q >= 2:
-			return "Crescent is visible by optical aid, and it could be seen by naked eyes."
-		elif 2 > q >= -0.96:
-			return "Crescent is visible by optical aid only."
-		elif -0.96 > q:
-			return "Crescent is not visible even by optical aid."
+	if q > -np.inf:
+		if type == 0:
+			if q >= 5.65:
+				return "Crescent is visible by naked eyes."
+			elif 5.65 > q >= 2:
+				return "Crescent is visible by optical aid, and it could be seen by naked eyes."
+			elif 2 > q >= -0.96:
+				return "Crescent is visible by optical aid only."
+			elif -0.96 > q:
+				return "Crescent is not visible even by optical aid."
+			else:
+				return "Invalid Input"
 		else:
-			return "Invalid Input"
+			if q > 0.216:
+				return "Easily visible."
+			elif 0.216 >= q > -0.014:
+				return "Visible under perfect conditions."
+			elif -0.014 >= q > -0.160:
+				return "May need optical aid."
+			elif -0.160 >= q > -0.232:
+				return "Will need optical aid."
+			elif -0.232 >= q:
+				return "Not visible."
+			else:
+				return "Invalid Input"
 	else:
-		if q > 0.216:
-			return "Easily visible"
-		elif 0.216 >= q > -0.014:
-			return "Visible under perfect conditions"
-		elif -0.014 >= q > -0.160:
-			return "May need optical aid"
-		elif -0.160 >= q > -0.232:
-			return "Will need optical aid"
-		elif -0.232 >= q:
-			return "Not visible"
-		else:
-			return "Invalid Input"
+		return "Moon sets before the new moon."
