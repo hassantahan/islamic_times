@@ -14,7 +14,7 @@ The IslamicTimes is a Python library dedicated to providing comprehensive soluti
 
 - **Moon Phases**: Provides the dates and times of the upcoming moon phases: New Moon, First Quarter, Full Moon, and Last Quarter.
 
-- **New Moon Visibility**: Calculates the visibility of the new moon, which is crucial for determining the beginning of Islamic months.
+- **New Moon Visibility**: Calculates the visibility of an upcoming new moon according to Odeh, 2006.
 
 - **Direction to Mecca (Qibla)**: Provides the direction and distance to Mecca from any location worldwide.
 
@@ -26,26 +26,30 @@ Below is a simple usage example:
 from islamic_times import islamic_times as it
 from datetime import datetime
 
-# Definitions
-TO_LAT 	= 43.745
-TO_LONG = -79.309
-TO_ELEV = 150
+##### Calculation #####
+local = it.ITLocation(43.74506, -79.30947, 170.5, datetime.now())
 
-# Calculation
-local = it.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime(2023, 6, 27, 11, 10, 52))
-
-# Outputs
-print("Time & Date\n\tGregorian Date:\t\t{}".format(local.datetime()["gregorian"]))
-print(f"\tIslamic Date:\t\t{local.datetime()['hijri']}")
+##### Outputs #####
+# Date & Time
+temp = local.datetime()
+print("Time & Date")
+print(f"\tGregorian Date:\t\t{temp['gregorian']}")
+print(f"\tIslamic Date:\t\t{temp['hijri']}")
+print(f"\t24h-Time:\t\t{temp['time']}\n\tTime Zone:\t\t{temp['timezone']} {temp['utc_offset']}")
+print(f"\tLocal JD:\t\t{temp['jd']}")
+print(f"\tEquation of time:\t{temp['eq_of_time']} minutes")
+print(f"\tEstimated ΔT:\t\t{temp['deltaT']}s")
 
 # Prayer Times
-print("Prayer Times\n\tFajr:\t\t\t{}".format(local.prayertimes()["fajr"]))
-print("\tẒuhr:\t\t\t {}".format(local.prayertimes()["noon"]))
+temp = local.prayertimes()
+print("Local Prayer Times")
+print(f"\tFajr:\t\t\t{temp['fajr']}")
+print(f"\tSunrise:\t\t{temp['sunrise']}")
 
 # More Outputs as required...
 ```
 
-In the above script, the `ITLocation` class is initialized with the latitude, longitude, and elevation of the location, as well as the date for which calculations are to be performed. The `datetime` and `prayertimes` methods are then called to retrieve the date and prayer times respectively.
+In the above script, the `ITLocation` class is initialized with the latitude, longitude, and elevation of the location, as well as the date for which calculations are to be performed. The `datetime()` and `prayertimes()` methods are then called to retrieve the date and prayer times respectively.
 
 A more comprehensive example of usage can be seen in `test.py`.
 
