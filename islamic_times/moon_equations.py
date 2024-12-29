@@ -477,11 +477,13 @@ def moonpos(julian_day, deltaT, local_latitude, local_longitude, deltaPsi, eclip
 	refraction = 1.02 / (math.tan(math.radians(altitude) + 10.3 / (altitude + 5.11))) + 0.0019279 - 0.000034 * elev
 	altitude += refraction
 
-	azimuth = np.rad2deg(np.arccos((ce.sin(declination) * ce.cos(local_latitude) - ce.cos(declination) * ce.sin(local_latitude) * ce.cos(local_hour_angle)) / ce.cos(altitude)))
+	azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(declination) * ce.sin(local_hour_angle), ce.sin(declination) * ce.cos(local_latitude) - ce.cos(declination) * ce.sin(local_latitude) * ce.cos(local_hour_angle)))
+	
+	#azimuth = np.rad2deg(np.arccos((ce.sin(declination) * ce.cos(local_latitude) - ce.cos(declination) * ce.sin(local_latitude) * ce.cos(local_hour_angle)) / ce.cos(altitude)))
 
-	# Possibly useless
-	if local_hour_angle >= 0:
-		azimuth = 360 - azimuth
+	# # Possibly useless
+	# if np.sin(local_hour_angle) > 0:
+	# 	azimuth = 360 - azimuth
 
 	return [
 		longitude, 						# 0:  deg. decimal (lambda)

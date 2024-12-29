@@ -3,7 +3,7 @@ from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
 import numpy as np
 
-##### Functions #####
+# Used to calculate islamic midnight
 def find_tomorrow_fajr(jd, deltaT, utc_change, lat, long, eq_of_time_minutes, angle):
     jd_tomorrow = jd + 1
 
@@ -14,6 +14,8 @@ def find_tomorrow_fajr(jd, deltaT, utc_change, lat, long, eq_of_time_minutes, an
 
     return tomorrow_standard_fajr
 
+# ʿAṣr time according to the vast majority
+# TODO: Possibly allow the Ḥanafī version as an option  
 def asr_time(lat, dec, t = 1):
     temp_num = ce.sin(np.rad2deg(np.arctan2(1, t + ce.tan(lat - dec)))) - ce.sin(lat) * ce.sin(dec)
     temp_denom = ce.cos(lat) * ce.cos(dec)

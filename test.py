@@ -1,5 +1,6 @@
 from islamic_times import islamic_times as it
-from datetime import datetime, timedelta
+import datetime
+import pytz
 import numpy as np
 
 def decimal_to_dms(decimal_string):
@@ -36,7 +37,7 @@ longitude = TO_LONG
 elev = TO_ELEV
 
 ##### Calculation #####
-local = it.ITLocation(TO_LAT, TO_LONG, TO_ELEV, datetime.now() + timedelta(days=90))
+local = it.ITLocation(51.47663, 0, 76, datetime.datetime(2024, 12, 29, 2, 49, tzinfo=pytz.timezone("Europe/London")))
 
 ##### Outputs #####
 # Date & Time
@@ -55,10 +56,10 @@ print("Local Prayer Times")
 print(f"\tFajr:\t\t\t{temp['fajr']}")
 print(f"\tSunrise:\t\t{temp['sunrise']}")
 print(f"\tẒuhr:\t\t\t {temp['noon']}")
-print(f"\tʿAsr:\t\t\t{temp['asr']}")
+print(f"\tʿAṣr:\t\t\t{temp['asr']}")
 print(f"\tSunset:\t\t\t{temp['sunset']}")
 print(f"\tMaghrib:\t\t{temp['maghrib']}")
-print(f"\tʿIsha:\t\t\t{temp['isha']}")
+print(f"\tʿIshaʾ:\t\t\t{temp['isha']}")
 print(f"\tMidnight:\t\t{temp['midnight']}")
 
 # Mecca
@@ -71,7 +72,7 @@ print(f"\tDirection:\t\t{temp['cardinal']} ({temp['angle']}°)")
 temp = local.sun()
 print("The Sun")
 print(f"\tApp. Declination:\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
-print(f"\tApp. Right Ascenscion:\t{temp['right_ascension']}".format())
+print(f"\tApp. Right Ascenscion:\t{temp['right_ascension']}")
 print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")
 print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
 

@@ -245,12 +245,13 @@ def sunpos(julian_day, deltaT, local_latitude, local_longitude):
 
     # Altitude & Azimuth calculations
     altitude = np.rad2deg(math.asin(ce.sin(local_latitude) * ce.sin(delta) + ce.cos(local_latitude) * ce.cos(delta) * ce.cos(local_hour_angle))) 
-    azimuth = np.rad2deg(np.arccos((ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle)) / ce.cos(altitude)))
-    azimuth = ce.bound_angle_deg(azimuth)
+    azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(delta) * ce.sin(local_hour_angle), ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle)))
+    # azimuth = np.rad2deg(np.arccos((ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle)) / ce.cos(altitude)))
+    # azimuth = ce.bound_angle_deg(azimuth)
 
-    # Might be redundant
-    if local_hour_angle >= 0:
-        azimuth = 360 - azimuth
+    # # Might be redundant
+    # if local_hour_angle >= 0:
+    #     azimuth = 360 - azimuth
 
     return [
         L0,                 # 0; mean longitude

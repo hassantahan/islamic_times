@@ -5,3 +5,4 @@ dist/
 islamic_times.egg-info/
 distances.py
 tester.py
+setup.py

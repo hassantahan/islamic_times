@@ -14,7 +14,7 @@ TROPICAL_YEAR     	= 365.24219878
 EARTH_RADIUS_KM     = 6378.14
 
 def fraction_of_day(date):
-    return (date - datetime.datetime.combine(date.date(), datetime.time(0))).total_seconds() / (3600 * 24)
+    return (date - datetime.datetime.combine(date.date(), datetime.time(0, tzinfo=date.tzinfo))).total_seconds() / (3600 * 24)
 
 def leap_gregorian(year):
     if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
@@ -86,6 +86,7 @@ def jd_to_gregorian(jd, adjust_for_tz_diff = 0):
     return datetime.datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(microsec))
 
 # Look to Jean Meeus' "Astronomical Algorithms"
+# TODO: In the Islamic calendar, new days start after sunset not at midnight, so maybe a fix for this?
 def gregorian_to_hijri(year, month, day, zone = 0):
     x = year
     m = month
@@ -238,6 +239,7 @@ def delta_t_approx(year, month):
         u = (year - 1820) / 100
         return -20 + 32 * u**2
 
+# Turns a mod 24 float to a regular hh:mm time
 def float_to_24time(_hour_):
     # Convert the float to integer hours and minutes
     _inthour_ = int(_hour_)
@@ -246,12 +248,15 @@ def float_to_24time(_hour_):
     time_24hr = "{:02d}:{:02d}".format(_inthour_, _minutes_)
     return time_24hr
 
+# Converts a solar time to a standard time (i.e. UTC standardized)
 def solar2standard(solar_time, utc_diff, longitude, eq_of_time):
     local_standard_meridian = utc_diff * 15
     error_in_minutes = 4 * (local_standard_meridian + longitude) + eq_of_time
     standard_time = solar_time - error_in_minutes / 60
     return standard_time
 
+# The most computationally expensive function
+# Finds the UTC offset given a date and coordinates
 def find_utc_offset(lat, long, day):
     # Create a TimezoneFinder object
     tf = TimezoneFinder()
@@ -271,6 +276,7 @@ def find_utc_offset(lat, long, day):
     # Calculate the UTC offset in hours
     return timezone_str, utc_offset.total_seconds() / 3600
 
+# Finds the middle time between two floating times. Used to find islamic midnight (usually either between sunset & sunrise, or ʿisha & fajr).
 def time_midpoint(time1, time2):
     # Convert hours to datetime objects
     time1 = datetime.datetime.strptime(f'{int(time1):02}:{int((time1*60) % 60):02}', "%H:%M")
@@ -292,6 +298,7 @@ def time_midpoint(time1, time2):
 
     return middle_time_in_hours
 
+# Simple way to make the offset look nice
 def format_utc_offset(utc_offset):
     hours = int(utc_offset)
     minutes = int((utc_offset - hours) * 60)

@@ -34,6 +34,7 @@ def hms_to_decimal(hour_angle):
     degree *= 15
     return degree
 
+# Find the angle difference in a radial coordinate system
 def calculate_angle_diff(azimuth1, altitude1, azimuth2, altitude2):
     # Convert degrees to radians
     azimuth1, altitude1, azimuth2, altitude2 = map(math.radians, [azimuth1, altitude1, azimuth2, altitude2])
@@ -69,6 +70,7 @@ def haversine(lat1, lon1, lat2, lon2):
 
     return distance, course_angle
 
+# Used for finding direction to Mecca 
 def get_cardinal_direction(degree):
     cardinals = [
         'N', 'NNE', 'NE', 'ENE',
@@ -79,6 +81,7 @@ def get_cardinal_direction(degree):
     idx = int(((degree + 11.25) % 360) / 22.5)
     return cardinals[idx]
 
+# As found in Chapter 3 of AA
 def interpolation(n, y1, y2, y3):
     a = y2 - y1
     b = y3 - y2
