@@ -19,7 +19,7 @@ def decimal_to_dms(decimal_string):
 
 ##### Calculation #####
 # New York
-local = it.ITLocation(latitude=40.712776, longitude=-74.005974, today = datetime.datetime.now(), method='ISNA', asr_type=1)
+local = it.ITLocation()
 
 ##### Outputs #####
 # Date & Time

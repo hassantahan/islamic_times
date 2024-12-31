@@ -728,37 +728,37 @@ def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi, type = 0):
 	else:
 		q_value = (arcv - (11.8371 - 6.3226 * w_prime + 0.7319 * w_prime ** 2 - 0.1018 * w_prime ** 3)) / 10
 
-	#print(ce.decimal_to_dms(arcl), ce.decimal_to_dms(arcv), ce.decimal_to_dms(daz))#, ce.cos(arcl) - ce.cos(arcv) * ce.cos(daz))
-	#print(ce.decimal_to_dms(moon_pi / 60), ce.decimal_to_dms(w_prime), ce.decimal_to_dms(semi_diameter / 60), ce.decimal_to_dms(semi_diameter_prime / 60))
-
 	return q_value
 
-# Classification according to HMNAO TN No.69 or Odeh, 2006
+# Classification according to Odeh, 2006 or HMNAO TN No.69
 def classify_visibility(q, type = 0):
-	if q > -np.inf:
-		if type == 0:
-			if q >= 5.65:
-				return "Crescent is visible by naked eyes."
-			elif 5.65 > q >= 2:
-				return "Crescent is visible by optical aid, and it could be seen by naked eyes."
-			elif 2 > q >= -0.96:
-				return "Crescent is visible by optical aid only."
-			elif -0.96 > q:
-				return "Crescent is not visible even by optical aid."
-			else:
-				return "Invalid Input"
+	if q == -999: return "Moonset before the new moon."
+	if q == -998: return "Moonset before sunset."
+
+	if type == 0:
+		if q >= 5.65:
+			return "A: Crescent is visible by naked eyes."
+		elif 5.65 > q >= 2:
+			return "B: Crescent is visible by optical aid, and it could be seen by naked eyes."
+		elif 2 > q >= -0.96:
+			return "C: Crescent is visible by optical aid only."
+		elif -0.96 > q:
+			return "D: Crescent is not visible even by optical aid."
 		else:
-			if q > 0.216:
-				return "Easily visible."
-			elif 0.216 >= q > -0.014:
-				return "Visible under perfect conditions."
-			elif -0.014 >= q > -0.160:
-				return "May need optical aid."
-			elif -0.160 >= q > -0.232:
-				return "Will need optical aid."
-			elif -0.232 >= q:
-				return "Not visible."
-			else:
-				return "Invalid Input"
+			return "Invalid Input"
 	else:
-		return "Moon sets before the new moon."
+		if q > 0.216:
+			return "A: Easily visible."
+		elif 0.216 >= q > -0.014:
+			return "B: Visible under perfect conditions."
+		elif -0.014 >= q > -0.160:
+			return "C: May need optical aid to find crescent."
+		elif -0.160 >= q > -0.232:
+			return "D: Will need optical aid to find crescent."
+		elif -0.232 >= q > -0.293:
+			return "E: Not visible with a [conventional] telescope."
+		elif -0.293 >= q:
+			return "F: Not visible; below the Danjon limit."
+		else:
+			return "Invalid Input"
+		

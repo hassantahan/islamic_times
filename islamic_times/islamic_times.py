@@ -309,7 +309,7 @@ class ITLocation:
         return moon_phases
 
     # Calculate Next New Moon Visibilities
-    def visibilities(self, days = 3):
+    def visibilities(self, days = 3, type = 0):
         # Get New Moon Date from moon_phases list
         moon_phases = self.moonphases()
         for item in moon_phases:
@@ -341,42 +341,47 @@ class ITLocation:
             from math import modf
             minute, hour = modf(nm_moonset)
             if i != 0 or datetime.time(int(hour), 60 * int(minute)) > ymd_new_moon.time():
-                # Set the day parameters
-                test_jd_new_moon = jd_new_moon + i
-                test_ymd_new_moon = te.jd_to_gregorian(test_jd_new_moon)
-                test_deltaT_new_moon = te.delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month)
-                test_jde_new_moon = test_jd_new_moon + test_deltaT_new_moon / 86400
+                    # Set the day parameters
+                    test_jd_new_moon = jd_new_moon + i
+                    test_ymd_new_moon = te.jd_to_gregorian(test_jd_new_moon)
+                    test_deltaT_new_moon = te.delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month)
+                    test_jde_new_moon = test_jd_new_moon + test_deltaT_new_moon / 86400
 
-                # Set sun parameters
-                nm_sun_factors = se.sunpos(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude)
+                    # Set sun parameters
+                    nm_sun_factors = se.sunpos(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude)
 
-                # Sunset & moonset calculations
-                test_nm_moonset = me.calculate_moonset(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude, self.elevation, self.utc_diff)
-                test_nm_sunset = te.solar2standard(se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, nm_sun_factors[11])), self.utc_diff, self.longitude, 
-                                      se.equation_of_time(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude))
-                
-                # Find the best time which is four ninths the moonset-sunset lag after sunset 
-                lag = test_nm_moonset - test_nm_sunset
-                best_time = test_nm_sunset + 4 / 9 * lag
-                best_time_jd = te.gregorian_to_jd(test_ymd_new_moon.year, test_ymd_new_moon.month, test_ymd_new_moon.day + best_time / 24, -1 * self.utc_diff)
-                best_time_jde = best_time_jd + test_deltaT_new_moon / 86400
+                    # Sunset & moonset calculations
+                    test_nm_moonset = me.calculate_moonset(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude, self.elevation, self.utc_diff)
+                    test_nm_sunset = te.solar2standard(se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, nm_sun_factors[11])), self.utc_diff, self.longitude, 
+                                        se.equation_of_time(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude))
+                    
+                    # If moonset is before sunset, continue
+                    if test_nm_moonset < test_nm_sunset:
+                        v = -998
+                        continue
 
-                # Recalculate sun & calculate moon parameters
-                nm_sun_factors = se.sunpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude)
-                delPsi, delEps = se.sun_nutation(best_time_jde)
-                nm_moon_factors = me.moonpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude, delPsi, nm_sun_factors[13], self.elevation)
+                    # Find the best time which is four ninths the moonset-sunset lag after sunset 
+                    lag = test_nm_moonset - test_nm_sunset
+                    best_time = test_nm_sunset + 4 / 9 * lag
+                    best_time_jd = te.gregorian_to_jd(test_ymd_new_moon.year, test_ymd_new_moon.month, test_ymd_new_moon.day + best_time / 24, -1 * self.utc_diff)
+                    best_time_jde = best_time_jd + test_deltaT_new_moon / 86400
 
-                # Visibility is now calculated
-                v = me.calculate_visibility(nm_sun_factors[16], nm_sun_factors[15], nm_moon_factors[10], nm_moon_factors[9], np.deg2rad(nm_moon_factors[8]))
+                    # Recalculate sun & calculate moon parameters
+                    nm_sun_factors = se.sunpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude)
+                    delPsi, delEps = se.sun_nutation(best_time_jde)
+                    nm_moon_factors = me.moonpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude, delPsi, nm_sun_factors[13], self.elevation)
+
+                    # Visibility is now calculated
+                    v = me.calculate_visibility(nm_sun_factors[16], nm_sun_factors[15], nm_moon_factors[10], nm_moon_factors[9], np.deg2rad(nm_moon_factors[8]), type)
             else:
                 # Moon is not visibile before the new moon
-                v = -np.inf
+                v = -999
 
             visibilities.append(v)
 
         # Arrange and classify visibilties
         q_values = [
-            [visibility, me.classify_visibility(visibility)] 
+            [visibility, me.classify_visibility(visibility, type)] 
             for visibility in visibilities
         ]
 
