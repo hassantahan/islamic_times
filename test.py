@@ -1,7 +1,6 @@
-from islamic_times import islamic_times as it
 import datetime
-import pytz
 import numpy as np
+from islamic_times import islamic_times as it
 
 def decimal_to_dms(decimal_string):
     # Remove the degree symbol (°) if it's present
@@ -18,26 +17,9 @@ def decimal_to_dms(decimal_string):
     dms_string = f"{degrees}° {np.abs(minutes)}' {np.abs(seconds):.2f}\""
     return dms_string
 
-##### Definitions #####
-TO_LAT 	= 43.74506
-TO_LONG = -79.30947
-TO_ELEV = 170.5
-
-HAM_LAT = 43.232737
-HAM_LONG = -79.857990
-HAM_ELEV = 80
-
-MON_LAT = 45.53932
-MON_LONG = -73.58525
-MON_ELEV = 50
-
-##### Inputs #####
-latitude = TO_LAT
-longitude = TO_LONG
-elev = TO_ELEV
-
 ##### Calculation #####
-local = it.ITLocation(51.47663, 0, 76, datetime.datetime(2024, 12, 29, 2, 49, tzinfo=pytz.timezone("Europe/London")))
+# New York
+local = it.ITLocation(latitude=40.712776, longitude=-74.005974, today = datetime.datetime.now(), method='ISNA', asr_type=1)
 
 ##### Outputs #####
 # Date & Time
@@ -53,6 +35,7 @@ print(f"\tEstimated ΔT:\t\t{temp['deltaT']}s")
 # Prayer Times
 temp = local.prayertimes()
 print("Local Prayer Times")
+print(f"\tMethod:\t\t\t{temp['method']}")
 print(f"\tFajr:\t\t\t{temp['fajr']}")
 print(f"\tSunrise:\t\t{temp['sunrise']}")
 print(f"\tẒuhr:\t\t\t {temp['noon']}")

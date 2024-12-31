@@ -149,8 +149,8 @@ sun_nutation_coefficients = [
 ]
 
 # Chapter 22
-def oblique_eq(julian_day):
-    u = ((julian_day - te.J2000) / te.JULIAN_CENTURY) / 100
+def oblique_eq(jde):
+    u = ((jde - te.J2000) / te.JULIAN_CENTURY) / 100
 
     eps = 23 + 26 / 60 + (21.448 / 3600)
 
@@ -159,8 +159,9 @@ def oblique_eq(julian_day):
 
     return eps
 
-def sun_nutation(julian_day):
-    t = (julian_day - te.J2000) / te.JULIAN_CENTURY
+# Chapter 22
+def sun_nutation(jde):
+    t = (jde - te.J2000) / te.JULIAN_CENTURY
     t2 = t ** 2
     t3 = t ** 3
 
@@ -188,8 +189,8 @@ def sun_nutation(julian_day):
     return deltaPsi, deltaEpsilon
 
 # Chapter 25
-def sunpos(julian_day, deltaT, local_latitude, local_longitude):
-    T = (julian_day - te.J2000) / te.JULIAN_MILLENNIUM
+def sunpos(jde, deltaT, local_latitude, local_longitude, temperature = 10, pressure = 101):
+    T = (jde - te.J2000) / te.JULIAN_MILLENNIUM
     T2 = T ** 2
     T3 = T ** 3
     T4 = T ** 4
@@ -215,9 +216,9 @@ def sunpos(julian_day, deltaT, local_latitude, local_longitude):
     omega = 125.04452 - 19341.36261 * T + 0.020708 * T2 + T3 / 45000
     Lambda = sunLong - 0.00569 - 0.00478 * ce.sin(omega)
 
-    nut = sun_nutation(julian_day)
+    nut = sun_nutation(jde)
     delta_epsilon = nut[1]
-    epsilon0 = oblique_eq(julian_day)
+    epsilon0 = oblique_eq(jde)
     epsilon = epsilon0 + delta_epsilon
     
 
@@ -231,7 +232,7 @@ def sunpos(julian_day, deltaT, local_latitude, local_longitude):
 
     # Local Hour Angle calculation
     # Start by calculating Mean Greenwich Sidereal Time
-    greenwich_hour_angle = ce.bound_angle_deg(te.greenwich_mean_sidereal_time(julian_day - deltaT / 86400))
+    greenwich_hour_angle = ce.bound_angle_deg(te.greenwich_mean_sidereal_time(jde - deltaT / 86400))
 
     # Attain the sun's nutation in the longitude in DMS
     nut_long_dms = ce.decimal_to_dms(nut[0])
@@ -245,13 +246,13 @@ def sunpos(julian_day, deltaT, local_latitude, local_longitude):
 
     # Altitude & Azimuth calculations
     altitude = np.rad2deg(math.asin(ce.sin(local_latitude) * ce.sin(delta) + ce.cos(local_latitude) * ce.cos(delta) * ce.cos(local_hour_angle))) 
-    azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(delta) * ce.sin(local_hour_angle), ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle)))
-    # azimuth = np.rad2deg(np.arccos((ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle)) / ce.cos(altitude)))
-    # azimuth = ce.bound_angle_deg(azimuth)
 
-    # # Might be redundant
-    # if local_hour_angle >= 0:
-    #     azimuth = 360 - azimuth
+    # Correct for atmospheric refraction (taken from https://en.wikipedia.org/wiki/Atmospheric_refraction)
+    # Disabled for the moment as I work out issues.
+    refraction = 1.02 / ce.tan(altitude + 10.3 / (altitude + 5.11)) * pressure / 101 * 283 / (273 + temperature)
+    altitude += 0 * refraction
+
+    azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(delta) * ce.sin(local_hour_angle), ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle)))
 
     return [
         L0,                 # 0; mean longitude
@@ -274,11 +275,11 @@ def sunpos(julian_day, deltaT, local_latitude, local_longitude):
         local_hour_angle    # 17
     ]
 
-def equation_of_time(julian_day, deltaT, local_latitude, local_longitude):
-    sun_factors = sunpos(julian_day, deltaT, local_latitude, local_longitude)
+def equation_of_time(jde, deltaT, local_latitude, local_longitude):
+    sun_factors = sunpos(jde, deltaT, local_latitude, local_longitude)
     L0 = sun_factors[0]
-    nut = sun_nutation(julian_day)
-    epsilon = oblique_eq(julian_day) + nut[1]
+    nut = sun_nutation(jde)
+    epsilon = oblique_eq(jde) + nut[1]
     alpha = sun_factors[10]
     deltaPsi = nut[0]
     

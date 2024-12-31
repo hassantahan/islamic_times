@@ -377,8 +377,8 @@ a_coeffs = [
 ]
 
 # Chapter 47
-def moon_nutation(julian_day):
-	t = (julian_day - te.J2000) / te.JULIAN_CENTURY
+def moon_nutation(jde):
+	t = (jde - te.J2000) / te.JULIAN_CENTURY
 	t2 = t ** 2
 	t3 = t ** 3
 	t4 = t ** 4
@@ -447,11 +447,11 @@ def moon_nutation(julian_day):
 
 	return [fundamental_arguments, sum_l, sum_b, sum_r]
 
-def moonpos(julian_day, deltaT, local_latitude, local_longitude, deltaPsi, ecliptic, elev):
-	t = (julian_day - te.J2000) / te.JULIAN_CENTURY
+def moonpos(jde, deltaT, local_latitude, local_longitude, deltaPsi, ecliptic, elev):
+	t = (jde - te.J2000) / te.JULIAN_CENTURY
 
 	# Calculation nutations
-	nut = moon_nutation(julian_day)
+	nut = moon_nutation(jde)
 
 	# Rect Coordinates + Distance
 	longitude = nut[0][4] + nut[1] / 10 ** 6 + deltaPsi
@@ -464,7 +464,7 @@ def moonpos(julian_day, deltaT, local_latitude, local_longitude, deltaPsi, eclip
 	eh_parallax = np.rad2deg(np.arcsin(te.EARTH_RADIUS_KM / distance))
 
 	# Local Hour Angle Calculations (pg. 88 & 92)
-	mean_greenwich_sidereal_time = te.greenwich_mean_sidereal_time(julian_day - deltaT / 86400)
+	mean_greenwich_sidereal_time = te.greenwich_mean_sidereal_time(jde - deltaT / 86400)
 	st_correction = ce.decimal_to_dms(deltaPsi)[2] * ce.cos(ecliptic) / 15
 	app_greenwich_sidereal_time = mean_greenwich_sidereal_time + (st_correction / 3600)
 	local_hour_angle = ce.bound_angle_deg(app_greenwich_sidereal_time - -1 * local_longitude - ascension)
@@ -478,12 +478,6 @@ def moonpos(julian_day, deltaT, local_latitude, local_longitude, deltaPsi, eclip
 	altitude += refraction
 
 	azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(declination) * ce.sin(local_hour_angle), ce.sin(declination) * ce.cos(local_latitude) - ce.cos(declination) * ce.sin(local_latitude) * ce.cos(local_hour_angle)))
-	
-	#azimuth = np.rad2deg(np.arccos((ce.sin(declination) * ce.cos(local_latitude) - ce.cos(declination) * ce.sin(local_latitude) * ce.cos(local_hour_angle)) / ce.cos(altitude)))
-
-	# # Possibly useless
-	# if np.sin(local_hour_angle) > 0:
-	# 	azimuth = 360 - azimuth
 
 	return [
 		longitude, 						# 0:  deg. decimal (lambda)
@@ -647,7 +641,7 @@ def next_phases_of_moon_utc(date):
 		# Convert from TD to UT in this approximation.
 		moon_phases[p] -= te.delta_t_approx(date.year, date.month) / 86400
 		
-		# Convert from JD to Gregorian
+		# Convert from JDE to Gregorian
 		moon_phases[p] = te.jd_to_gregorian(moon_phases[p])
 
 	return moon_phases
@@ -668,10 +662,10 @@ def moon_illumination(sun_dec, sun_ra, moon_dec, moon_ra, sun_earth_distance, mo
 	return fraction_illuminated
 
 # Refer to Chapter 15 of AA
-def calculate_moonset(jd, delT, lat, long, elev, utc_diff):	
-	# First find the Year Month Day at UT 0h from JD
-	ymd = te.jd_to_gregorian(jd, utc_diff)
-	delT = te.delta_t_approx(ymd.year, ymd.month)
+def calculate_moonset(jde, deltaT, lat, long, elev, utc_diff):	
+	# First find the Year Month Day at UT 0h from JDE
+	ymd = te.jd_to_gregorian(jde, utc_diff)
+	deltaT = te.delta_t_approx(ymd.year, ymd.month)
 	new_jd = te.gregorian_to_jd(ymd.year, ymd.month, ymd.day)
 	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
 
@@ -701,7 +695,7 @@ def calculate_moonset(jd, delT, lat, long, elev, utc_diff):
 	for _ in range(3):
 		little_theta_zero = (sidereal_time + 360.985647 * m2) % 360
 
-		n = m2 + delT / 86400
+		n = m2 + deltaT / 86400
 		interpolated_moon_dec = ce.interpolation(n, moon_params[0][5], moon_params[1][5], moon_params[2][5])
 		interpolated_moon_ra = ce.interpolation(n, moon_params[0][4], moon_params[1][4], moon_params[2][4])
 
