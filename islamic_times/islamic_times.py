@@ -12,6 +12,7 @@ class ITLocation:
     MECCA_LONG = 39.822330044
 
     ##### Prayer Method Names #####
+    # http://praytimes.org/wiki/Calculation_Methods
     mwl = ['mwl', 'muslim world league']
     isna = ['isna', 'islamic society of north america']
     egypt = ['egypt', 'egyptian', 'egyptian general authority of survey', 'egas']
@@ -29,22 +30,25 @@ class ITLocation:
     tehran_vals = (17.7, 14, 4.5, 1)
     jafari_vals = (16, 14, 4, 1)
 
-    def __init__(self, latitude = 51.477928, longitude = -0.001545, elevation = 76, temperature = 10, pressure = 101, today = datetime.datetime.now(datetime.timezone.utc), method = 'jafari', asr_type = 0):
+    def __init__(self, latitude = 51.477928, longitude = -0.001545, elevation = 76, temperature = 10, pressure = 101, today = datetime.datetime.now(datetime.timezone.utc), method = 'jafari', asr_type = 0, find_local_tz = True):
         self.latitude = latitude
         self.longitude = longitude
         self.elevation = elevation
         self.temperature = temperature
         self.pressure = pressure
         self.today = today
-
-        ### Find UTC Offset According to Lat/Long & adjust datetime
-        # This is very computationally expensive
-        if self.today.tzinfo == None: 
-            self.tz_name, self.utc_diff = te.find_utc_offset(self.latitude, self.longitude, self.today)
+        
+        if self.today.tzinfo == None:
+            ### Find UTC Offset According to Lat/Long & adjust datetime
+            # This is very computationally expensive
+            if find_local_tz: 
+                self.tz_name, self.utc_diff = te.find_utc_offset(self.latitude, self.longitude, self.today)
+            else:
+                self.tz_name, self.utc_diff = datetime.timezone.utc, 0
         else:  
             self.tz_name, self.utc_diff = self.today.tzinfo, self.today.utcoffset().total_seconds() / 3600
+            #self.today += datetime.timedelta(hours=self.utc_diff)
 
-        self.today += datetime.timedelta(hours=self.utc_diff)
         self.utc_diff *= -1
 
         # Calculate the astronomical parameters
@@ -335,6 +339,7 @@ class ITLocation:
 
         # Find visibilities for the three days
         visibilities = []
+        best_jds = []
         for i in range(days):
             # First, check if the moonset is before the new moon for the first day
             nm_moonset = me.calculate_moonset(jd_new_moon, deltaT_new_moon, self.latitude, self.longitude, self.elevation, self.utc_diff)
@@ -356,8 +361,10 @@ class ITLocation:
                                         se.equation_of_time(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude))
                     
                     # If moonset is before sunset, continue
-                    if test_nm_moonset < test_nm_sunset:
+                    if test_nm_moonset < test_nm_sunset and test_nm_moonset > 12:
                         v = -998
+                        visibilities.append(v)
+                        best_jds.append(te.gregorian_to_jd(test_ymd_new_moon.year, test_ymd_new_moon.month, test_ymd_new_moon.day + test_nm_moonset / 24))
                         continue
 
                     # Find the best time which is four ninths the moonset-sunset lag after sunset 
@@ -365,6 +372,7 @@ class ITLocation:
                     best_time = test_nm_sunset + 4 / 9 * lag
                     best_time_jd = te.gregorian_to_jd(test_ymd_new_moon.year, test_ymd_new_moon.month, test_ymd_new_moon.day + best_time / 24, -1 * self.utc_diff)
                     best_time_jde = best_time_jd + test_deltaT_new_moon / 86400
+                    best_jds.append(best_time_jd)
 
                     # Recalculate sun & calculate moon parameters
                     nm_sun_factors = se.sunpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude)
@@ -385,4 +393,16 @@ class ITLocation:
             for visibility in visibilities
         ]
 
-        return {"0" : q_values[0], "1" : q_values[1], "2" : q_values[2]}
+        # Convert best times from JD to datetime
+        best_dates = [
+            te.jd_to_gregorian(jd)
+            for jd in best_jds
+        ]
+
+        # Label each q_value to its associated date 
+        visibility_dictionary = {
+            dt.strftime('%H:%M:%S %d-%m-%Y'): q_values[i]
+            for i, dt in enumerate(best_dates)
+        }
+
+        return visibility_dictionary

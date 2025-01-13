@@ -18,7 +18,6 @@ def decimal_to_dms(decimal_string):
     return dms_string
 
 ##### Calculation #####
-# New York
 local = it.ITLocation()
 
 ##### Outputs #####
@@ -42,7 +41,7 @@ print(f"\tẒuhr:\t\t\t {temp['noon']}")
 print(f"\tʿAṣr:\t\t\t{temp['asr']}")
 print(f"\tSunset:\t\t\t{temp['sunset']}")
 print(f"\tMaghrib:\t\t{temp['maghrib']}")
-print(f"\tʿIshaʾ:\t\t\t{temp['isha']}")
+print(f"\tʿIshāʾ:\t\t\t{temp['isha']}")
 print(f"\tMidnight:\t\t{temp['midnight']}")
 
 # Mecca
@@ -54,32 +53,29 @@ print(f"\tDirection:\t\t{temp['cardinal']} ({temp['angle']}°)")
 # The Sun
 temp = local.sun()
 print("The Sun")
-print(f"\tApp. Declination:\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
+print(f"\tApp. Declination:\t{temp['declination']} \t{decimal_to_dms(temp['declination'])}")
 print(f"\tApp. Right Ascenscion:\t{temp['right_ascension']}")
-print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")
+print(f"\tAltitude:\t\t{temp['altitude']} \t\t{decimal_to_dms(temp['altitude'])}")
 print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
 
 # The Moon
 temp = local.moon()
 print("The Moon")
 print(f"\tMoonset:\t\t{temp['moonset']}")
-print(f"\tDeclination:\t\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
+print(f"\tDeclination:\t\t{temp['declination']} \t{decimal_to_dms(temp['declination'])}")
 print(f"\tRight Ascenscion:\t{temp['right_ascension']}")
-print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")
-print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
+print(f"\tAltitude:\t\t{temp['altitude']} \t\t{decimal_to_dms(temp['altitude'])}")
+print(f"\tAzimuth:\t\t{temp['azimuth']} \t\t{decimal_to_dms(temp['azimuth'])}")
 print(f"\tIllumination:\t\t{temp['illumination']}")
 
 # Moon Phases
 temp = local.moonphases()
 print("Moon Phases")
-print(f"\t{temp[0]['phase']}:\t\t{temp[0]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
-print(f"\t{temp[1]['phase']}:\t\t{temp[1]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
-print(f"\t{temp[2]['phase']}:\t\t{temp[2]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
-print(f"\t{temp[3]['phase']}:\t\t{temp[3]['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
+for item in temp:
+    print(f"\t{item['phase']}:\t\t{item['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
 
 # New Moon Visibility
 temp = local.visibilities()
-print("Visibility Values of New Moon after...")
-print(f"\t0 days:\t\t\t{temp['0'][0]:.3f} ({temp['0'][1]})")
-print(f"\t1 day:\t\t\t{temp['1'][0]:.3f} ({temp['1'][1]})")
-print(f"\t2 days:\t\t\t{temp['2'][0]:.3f} ({temp['2'][1]})")
+print("Visibility Values of New Moon at 'Best Time' on...")
+for date_label, values in temp.items():
+    print(f"\t{date_label}:\t{values[0]:.3f} ({values[1]})")

@@ -472,13 +472,18 @@ def moonpos(jde, deltaT, local_latitude, local_longitude, deltaPsi, ecliptic, el
 	# Modify RA and Declination to their topocentric equivalents
 	top_ascension, top_declination = correct_ra_dec(ascension, declination, local_hour_angle, eh_parallax, local_latitude, elev / 1000)
 
-	# Final calculations
-	altitude = np.rad2deg(math.asin(ce.sin(local_latitude) * ce.sin(declination) + ce.cos(local_latitude) * ce.cos(declination)* ce.cos(local_hour_angle)))
-	refraction = 1.02 / (math.tan(math.radians(altitude) + 10.3 / (altitude + 5.11))) + 0.0019279 - 0.000034 * elev
-	altitude += refraction
+	# Altitude & Azimuth calculations
+	altitude = np.rad2deg(np.asin(ce.sin(local_latitude) * ce.sin(declination) + ce.cos(local_latitude) * ce.cos(declination)* ce.cos(local_hour_angle)))
+	azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(declination) * ce.sin(local_hour_angle), ce.sin(declination) * ce.cos(local_latitude) - ce.cos(declination) * ce.sin(local_latitude) * ce.cos(local_hour_angle))) % 360
 
-	azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(declination) * ce.sin(local_hour_angle), ce.sin(declination) * ce.cos(local_latitude) - ce.cos(declination) * ce.sin(local_latitude) * ce.cos(local_hour_angle)))
+	# Correct for atmospheric refraction (taken from https://en.wikipedia.org/wiki/Atmospheric_refraction)
+	refraction = 1.02 / (ce.tan(altitude + 10.3 / (altitude + 5.11))) #+ 0.0019279 - 0.000034 * elev
+	altitude += refraction / 60
 
+	# Correct for parallax
+	parallax_correction = -np.rad2deg(np.deg2rad(eh_parallax) * ce.cos(altitude))
+	altitude += parallax_correction
+	
 	return [
 		longitude, 						# 0:  deg. decimal (lambda)
 		latitude, 						# 1:  deg. decimal (beta)
@@ -489,8 +494,8 @@ def moonpos(jde, deltaT, local_latitude, local_longitude, deltaPsi, ecliptic, el
 		top_ascension,					# 6:  deg. decimal
 		top_declination,				# 7:  deg. decimal
 		eh_parallax,					# 8:  deg. decimal
-		altitude,						# 9:  deg. decimal
-		azimuth,						# 10: deg. decimal
+		altitude,						# 9:  deg. decimal (apparent)
+		azimuth,						# 10: deg. decimal (apparent)
 		mean_greenwich_sidereal_time,	# 11: deg. decimal
 		local_hour_angle				# 12: deg. decimal
 	]
@@ -721,7 +726,7 @@ def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi, type = 0):
 	semi_diameter = 0.27245 * moon_pi
 	semi_diameter_prime = semi_diameter * (1 + ce.sin(moon_alt) * ce.sin(moon_pi / 60))
 
-	w_prime = semi_diameter_prime * (1 - ce.cos(arcl)) / 60
+	w_prime = semi_diameter_prime * (1 - ce.cos(arcl))
 
 	if type == 0:
 		q_value = (arcv - (-0.1018 * w_prime ** 3 + 0.7319 * w_prime ** 2 - 6.3226 * w_prime + 7.1651))

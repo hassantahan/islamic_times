@@ -246,13 +246,17 @@ def sunpos(jde, deltaT, local_latitude, local_longitude, temperature = 10, press
 
     # Altitude & Azimuth calculations
     altitude = np.rad2deg(math.asin(ce.sin(local_latitude) * ce.sin(delta) + ce.cos(local_latitude) * ce.cos(delta) * ce.cos(local_hour_angle))) 
+    azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(delta) * ce.sin(local_hour_angle), ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle))) % 360
 
     # Correct for atmospheric refraction (taken from https://en.wikipedia.org/wiki/Atmospheric_refraction)
-    # Disabled for the moment as I work out issues.
     refraction = 1.02 / ce.tan(altitude + 10.3 / (altitude + 5.11)) * pressure / 101 * 283 / (273 + temperature)
-    altitude += 0 * refraction
+    altitude += refraction / 60
 
-    azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(delta) * ce.sin(local_hour_angle), ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle)))
+    # Correct for parallax 
+    eh_parallax = np.rad2deg(np.arcsin(te.EARTH_RADIUS_KM / (sunR * te.ASTRONOMICAL_UNIT) ))
+    parallax_correction = -np.rad2deg(np.deg2rad(eh_parallax) * ce.cos(altitude))
+    altitude += parallax_correction
+
 
     return [
         L0,                 # 0; mean longitude
@@ -270,8 +274,8 @@ def sunpos(jde, deltaT, local_latitude, local_longitude, temperature = 10, press
         epsilon0,           # 12; mean obliquity of the ecliptic
         epsilon,            # 13; true obliquity of the ecliptic
         omega,              # 14; Longitude of the ascending node of the Moon’s mean orbit on the ecliptic
-        altitude,           # 15
-        azimuth,            # 16
+        altitude,           # 15; apparent
+        azimuth,            # 16; apparent
         local_hour_angle    # 17
     ]
 

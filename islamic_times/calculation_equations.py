@@ -2,7 +2,7 @@ import math
 import numpy as np
 
 def bound_angle_deg(a):
-    return a - 360.0 * (math.floor(a / 360.0))
+    return a % 360
 
 def bound_angle_rad(a):
     return a - (2 * math.pi) * (math.floor(a / (2 * math.pi)))
