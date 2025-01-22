@@ -1,41 +1,42 @@
 import math
 import numpy as np
+from typing import Tuple
 
-def bound_angle_deg(a):
+def bound_angle_deg(a: float) -> float:
     return a % 360
 
-def bound_angle_rad(a):
-    return a - (2 * math.pi) * (math.floor(a / (2 * math.pi)))
+def bound_angle_rad(a: float) -> float:
+    return a % (2 * math.pi)
 
-def sin(a):
+def sin(a: float) -> float:
     return math.sin(np.deg2rad(a))
 
-def cos(a):
+def cos(a: float) -> float:
     return math.cos(np.deg2rad(a))
 
-def tan(a):
+def tan(a: float) -> float:
     return math.tan(np.deg2rad(a))
 
-def decimal_to_dms(decimal_deg):
+def decimal_to_dms(decimal_deg: float) -> Tuple[int, int, float]:
     degrees = int(decimal_deg)
     minutes = int((decimal_deg - degrees) * 60)
     seconds = np.round((decimal_deg - degrees - minutes / 60) * 3600, 2)
 
-    return [degrees, minutes, seconds]
+    return (degrees, minutes, seconds)
 
-def decimal_to_hms(decimal_degrees):
+def decimal_to_hms(decimal_degrees: float) -> Tuple[int, int, float]:
     hours = int(decimal_degrees / 15)
     minutes = int((decimal_degrees / 15 - hours) * 60)
     seconds = (decimal_degrees / 15 - hours - minutes / 60) * 3600
-    return [hours , round(minutes), seconds]
+    return (hours , round(minutes), seconds)
 
-def hms_to_decimal(hour_angle):
+def hms_to_decimal(hour_angle: Tuple[int, int, float]) -> float:
     degree = hour_angle[0] + hour_angle[1] / 60 + hour_angle[2] / 3600
     degree *= 15
     return degree
 
 # Find the angle difference in a radial coordinate system
-def calculate_angle_diff(azimuth1, altitude1, azimuth2, altitude2):
+def calculate_angle_diff(azimuth1: float, altitude1: float, azimuth2: float, altitude2: float) -> float:
     # Convert degrees to radians
     azimuth1, altitude1, azimuth2, altitude2 = map(math.radians, [azimuth1, altitude1, azimuth2, altitude2])
 
@@ -52,7 +53,7 @@ def calculate_angle_diff(azimuth1, altitude1, azimuth2, altitude2):
     return angle_diff
 
 # Modified calculate_angle_diff for finding course angle
-def haversine(lat1, lon1, lat2, lon2):
+def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float | float:
     # Convert latitude and longitude to radians
     lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
 
@@ -71,7 +72,7 @@ def haversine(lat1, lon1, lat2, lon2):
     return distance, course_angle
 
 # Used for finding direction to Mecca 
-def get_cardinal_direction(degree):
+def get_cardinal_direction(degree: float) -> str:
     cardinals = [
         'N', 'NNE', 'NE', 'ENE',
         'E', 'ESE', 'SE', 'SSE',
@@ -81,12 +82,20 @@ def get_cardinal_direction(degree):
     idx = int(((degree + 11.25) % 360) / 22.5)
     return cardinals[idx]
 
+# Returns the signed difference (b - a) in the range (-180, +180].
+def angle_diff(a: float, b: float) -> float:
+    d = (b - a) % 360.0      # now d is in [0, 360)
+    if d > 180.0:
+        d -= 360.0           # shift to (-180, +180]
+    return d
+
 # As found in Chapter 3 of AA
-def interpolation(n, y1, y2, y3):
-    a = y2 - y1
-    b = y3 - y2
+# Only for angles
+def interpolation(n: float, y1: float, y2: float, y3: float) -> float:
+    a = angle_diff(y1, y2)
+    b = angle_diff(y2, y3)
     c = b - a
 
     value = y2 + n / 2 * (a + b + n * c)
 
-    return value
+    return (value + 360) % 360

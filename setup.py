@@ -2,14 +2,14 @@ from setuptools import setup, find_packages
 
 setup(
     name='islamic_times',
-    version='1.3.0',
+    version='1.4.0',
     description='Various calculations for Islamic purposes',
     author='Hassan Tahan',
     author_email='contact@hassantahan.com',
     url='https://github.com/hassantahan/islamic_times',
     packages=find_packages(),
     install_requires=[
-        'numpy', 'timezonefinder', 'pytz', 'datetime'
+        'numpy', 'timezonefinder', 'pytz', 'datetime', 'matplotlib', 'typing', 'shapely', 'geopandas'
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',

@@ -1,6 +1,8 @@
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
+from datetime import datetime, timedelta
+from typing import List
 import numpy as np
 import math
 
@@ -377,7 +379,7 @@ a_coeffs = [
 ]
 
 # Chapter 47
-def moon_nutation(jde):
+def moon_nutation(jde: float) -> List[float]:
 	t = (jde - te.J2000) / te.JULIAN_CENTURY
 	t2 = t ** 2
 	t3 = t ** 3
@@ -447,7 +449,7 @@ def moon_nutation(jde):
 
 	return [fundamental_arguments, sum_l, sum_b, sum_r]
 
-def moonpos(jde, deltaT, local_latitude, local_longitude, deltaPsi, ecliptic, elev):
+def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, deltaPsi: float, ecliptic: float, elev: float) -> List[float]:
 	t = (jde - te.J2000) / te.JULIAN_CENTURY
 
 	# Calculation nutations
@@ -501,7 +503,7 @@ def moonpos(jde, deltaT, local_latitude, local_longitude, deltaPsi, ecliptic, el
 	]
 
 # Fixing RA and Dec for apparency pg. 279
-def correct_ra_dec(ra, dec, lha, parallax, lat, elev, dist = te.EARTH_RADIUS_KM):
+def correct_ra_dec(ra: float, dec: float, lha: float, parallax: float, lat: float, elev: float, dist: float = te.EARTH_RADIUS_KM) -> float | float:
 	#
 	a = dist
 	f = 1 / 298.257
@@ -524,7 +526,7 @@ def correct_ra_dec(ra, dec, lha, parallax, lat, elev, dist = te.EARTH_RADIUS_KM)
 
 # TODO: Properly get the next phases instead of all the phases after the next new moon ==> Using round (temp fix)
 # Chapter 49
-def next_phases_of_moon_utc(date):
+def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 	# Find the day of the year
 	day_of_year = date.timetuple().tm_yday
 
@@ -646,13 +648,13 @@ def next_phases_of_moon_utc(date):
 		# Convert from TD to UT in this approximation.
 		moon_phases[p] -= te.delta_t_approx(date.year, date.month) / 86400
 		
-		# Convert from JDE to Gregorian
+		# Convert from JD to Gregorian
 		moon_phases[p] = te.jd_to_gregorian(moon_phases[p])
 
 	return moon_phases
 
 # Refer to Chapter 48 of AA
-def moon_illumination(sun_dec, sun_ra, moon_dec, moon_ra, sun_earth_distance, moon_earth_distance):
+def moon_illumination(sun_dec: float, sun_ra: float, moon_dec: float, moon_ra: float, sun_earth_distance: float, moon_earth_distance: float) -> float:
 	
 	# Eqs. 48.2
 	cos_psi = ce.sin(sun_dec) * ce.sin(moon_dec) + ce.cos(sun_dec) * ce.cos(moon_dec) * ce.cos(sun_ra - moon_ra)
@@ -667,40 +669,51 @@ def moon_illumination(sun_dec, sun_ra, moon_dec, moon_ra, sun_earth_distance, mo
 	return fraction_illuminated
 
 # Refer to Chapter 15 of AA
-def calculate_moonset(jde, deltaT, lat, long, elev, utc_diff):	
+def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_diff: float) -> datetime:
 	# First find the Year Month Day at UT 0h from JDE
-	ymd = te.jd_to_gregorian(jde, utc_diff)
-	deltaT = te.delta_t_approx(ymd.year, ymd.month)
-	new_jd = te.gregorian_to_jd(ymd.year, ymd.month, ymd.day)
-	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
+	ymd = datetime(date.year, date.month, date.day)
+	new_jd = te.gregorian_to_jd(date.year, date.month, date.day)
+	new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
+	new_jde = new_jd + new_deltaT / 86400
 
 	# Calculate new sun and moon params with the new_jd
 	moon_params = []
 	for i in range(3):
 		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_diff)
 		delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-		sun_params = se.sunpos(new_jd + delT_temp / 86400 + i - 1, delT_temp, lat, long)
-		delPsi, delEps = se.sun_nutation(new_jd + delT_temp / 86400 + i - 1)
-		moon_params.append(moonpos(new_jd + delT_temp / 86400 + i - 1, delT_temp, lat, long, delPsi, sun_params[13], elev))
+		sun_params = se.sunpos(new_jde + i - 1, delT_temp, lat, long)
+		delPsi, delEps = se.sun_nutation(new_jde + i - 1)
+		moon_params.append(moonpos(new_jde + i - 1, delT_temp, lat, long, delPsi, sun_params[13], elev))
 
-	# Calculate moonset
+	# Find H0
 	h_zero = 0.7275 * moon_params[1][8] - 0.566667
 	cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(moon_params[1][5])) / (ce.cos(lat) * ce.cos(moon_params[1][5]))
 	H_zero = np.rad2deg(np.arccos(cosH_zero))
 
-	m0 = (moon_params[1][4] + -1 * long - sidereal_time) / 360
-	if m0 < 0: m0 += 1
-	elif m0 > 1: m0 -= 1
+	# GMST
+	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
 
+	# Transit
+	m0 = (moon_params[1][4] + -1 * long - sidereal_time) / 360
+	#if True:
+	if m0 < 0: 
+		m0 += 1
+	elif m0 > 1: 
+		m0 -= 1
+
+	# Setting
 	m2 = m0 + H_zero / 360
-	if m2 < 0: m2 += 1
-	elif m2 > 1: m2 -= 1
+	#if True:
+	if m2 < 0: 
+		m2 += 1
+	elif m2 > 1: 
+		m2 -= 1
 
 	# Minor corrective steps
 	for _ in range(3):
 		little_theta_zero = (sidereal_time + 360.985647 * m2) % 360
 
-		n = m2 + deltaT / 86400
+		n = m2 + new_deltaT / 86400
 		interpolated_moon_dec = ce.interpolation(n, moon_params[0][5], moon_params[1][5], moon_params[2][5])
 		interpolated_moon_ra = ce.interpolation(n, moon_params[0][4], moon_params[1][4], moon_params[2][4])
 
@@ -710,14 +723,19 @@ def calculate_moonset(jde, deltaT, lat, long, elev, utc_diff):
 
 		m2 += deltaM
 
-	moonset = (m2 * 24 - utc_diff) % 24
+	# Offset days
+	local_hours = m2 * 24 - utc_diff
+	#day_offset = np.floor(np.abs(local_hours / 24.0))
 
-	return moonset
+	# Combine
+	moonset_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(hours=(local_hours))
+
+	return moonset_dt
 
 # Visibility calculations either:
 # Type 0: Odeh, 2006
-# Type 1: HMNAO TN No. 69
-def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi, type = 0):
+# Type 1: HMNAO TN No. 69, a.k.a. Yallop, 1997
+def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt: float, moon_pi: float, type: int = 0) -> float:
 	arcl = ce.calculate_angle_diff(sun_az, sun_alt, moon_az, moon_alt)
 	arcv = np.abs(sun_alt - moon_alt)
 	daz = sun_az - moon_az
@@ -736,9 +754,11 @@ def calculate_visibility(sun_az, sun_alt, moon_az, moon_alt, moon_pi, type = 0):
 	return q_value
 
 # Classification according to Odeh, 2006 or HMNAO TN No.69
-def classify_visibility(q, type = 0):
-	if q == -999: return "Moonset before the new moon."
-	if q == -998: return "Moonset before sunset."
+def classify_visibility(q: float, type: int = 0) -> str:
+	if q == -999: 
+		return "Moonset before the new moon."
+	if q == -998: 
+		return "Moonset before sunset."
 
 	if type == 0:
 		if q >= 5.65:

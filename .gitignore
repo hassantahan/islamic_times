@@ -6,3 +6,6 @@ islamic_times.egg-info/
 distances.py
 tester.py
 setup.py
+shp_files/
+places_output.txt
+quick.py

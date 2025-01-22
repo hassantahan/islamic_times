@@ -1,4 +1,5 @@
-import datetime
+from datetime import datetime, time, timedelta
+from typing import Dict, List, Union
 import pytz
 from timezonefinder import TimezoneFinder
 from islamic_times import calculation_equations as ce
@@ -13,18 +14,12 @@ ASTRONOMICAL_UNIT 	= 149597870.7
 TROPICAL_YEAR     	= 365.24219878
 EARTH_RADIUS_KM     = 6378.14
 
-def fraction_of_day(date):
-    return (date - datetime.datetime.combine(date.date(), datetime.time(0, tzinfo=date.tzinfo))).total_seconds() / (3600 * 24)
-
-def leap_gregorian(year):
-    if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
-        return True
-    else:
-        return False
+def fraction_of_day(date: datetime) -> float:
+    return (date - datetime.combine(date.date(), time(0, tzinfo=date.tzinfo))).total_seconds() / (3600 * 24)
 
 # Taken from pg. 88 of AA 
 # (DOES NOT TAKE JDE)
-def greenwich_mean_sidereal_time(julian_day):
+def greenwich_mean_sidereal_time(julian_day: float) -> float:
     t = (julian_day - J2000) / JULIAN_CENTURY
     t2 = t ** 2
     t3 = t ** 3
@@ -35,7 +30,7 @@ def greenwich_mean_sidereal_time(julian_day):
     return ce.bound_angle_deg(theta_zero)
 
 # Look to Jean Meeus' "Astronomical Algorithms"
-def gregorian_to_jd(year, month, day, zone = 0):
+def gregorian_to_jd(year: int, month: int, day: float, zone: float = 0) -> float:
     y = year
     m = month
 
@@ -49,15 +44,15 @@ def gregorian_to_jd(year, month, day, zone = 0):
     jd = int(np.floor(365.25 * (y + 4716))) + int(np.floor(30.6001 * (m + 1))) + day + b - 1524.5 - zone / 24
     return jd
 
-# Look to Jean Meeus' "Astronomical Algorithms"
-def jd_to_gregorian(jd, adjust_for_tz_diff = 0):
+# Look to Jean Meeus' "Astronomical Algorithms" pg. 
+def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
     jd = jd + 0.5 - adjust_for_tz_diff / 24
     z = int(np.floor(jd))
     f = jd - z
 
     if z < 2299161:
         a = z
-    else:
+    elif z >= 2291161:
         alpha = int(np.floor((z - 1867216.25) / 36524.25))
         a = z + 1 + alpha - int(np.floor(alpha / 4))
 
@@ -81,13 +76,13 @@ def jd_to_gregorian(jd, adjust_for_tz_diff = 0):
     hour = f_day * 24
     minute = (hour - int(np.floor(hour))) * 60
     second = (minute - int(np.floor(minute))) * 60
-    microsec = (second - int(np.floor(second))) * 1000
+    microsec = (second - int(np.floor(second))) * 1000000
 
-    return datetime.datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(microsec))
+    return datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(microsec))
 
 # Look to Jean Meeus' "Astronomical Algorithms"
 # TODO: In the Islamic calendar, new days start after sunset not at midnight, so maybe a fix for this?
-def gregorian_to_hijri(year, month, day, zone = 0):
+def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> List[int]:
     x = year
     m = month
 
@@ -161,7 +156,7 @@ def gregorian_to_hijri(year, month, day, zone = 0):
 
     return [i_year, i_month, i_day]
 
-def get_islamic_month(month):
+def get_islamic_month(month: int) -> Dict[int, str]:
     islamic_months = {
         1: 'Muḥarram',
         2: 'Ṣaffar',
@@ -178,7 +173,7 @@ def get_islamic_month(month):
     }
     return islamic_months.get(month, "Invalid month number")
 
-def get_islamic_day(day):
+def get_islamic_day(day: str) -> Dict[str, str]:
     islamic_days = {
         'Sunday': 'al-ʾAḥad',
         'Monday': 'al-Ithnayn',
@@ -191,7 +186,7 @@ def get_islamic_day(day):
     return islamic_days.get(day, "Invalid day")
 
 # Based off of https://eclipse.gsfc.nasa.gov/LEcat5/deltatpoly.html
-def delta_t_approx(year, month):
+def delta_t_approx(year: int, month: int) -> float:
     y = year + (month - 0.5) / 12
 
     if year < -500:
@@ -248,16 +243,21 @@ def float_to_24time(_hour_):
     time_24hr = "{:02d}:{:02d}".format(_inthour_, _minutes_)
     return time_24hr
 
+def time_to_mod24_float(t: datetime) -> float:
+    return t.hour + t.minute / 60 + t.second / 3600
+
 # Converts a solar time to a standard time (i.e. UTC standardized)
-def solar2standard(solar_time, utc_diff, longitude, eq_of_time):
+def solar2standard(jd: float, solar_time: float, utc_diff: float, longitude: float, eq_of_time: float) -> datetime:
+    jd = np.floor(jd - utc_diff / 24 - 0.5) + 0.5 + utc_diff / 24
     local_standard_meridian = utc_diff * 15
     error_in_minutes = 4 * (local_standard_meridian + longitude) + eq_of_time
     standard_time = solar_time - error_in_minutes / 60
-    return standard_time
+    day = jd_to_gregorian(jd + standard_time / 24, utc_diff)
+    return day
 
 # The most computationally expensive function
 # Finds the UTC offset given a date and coordinates
-def find_utc_offset(lat, long, day):
+def find_utc_offset(lat, long, day) -> str | float:
     # Create a TimezoneFinder object
     tf = TimezoneFinder()
 
@@ -268,7 +268,7 @@ def find_utc_offset(lat, long, day):
     timezone = pytz.timezone(timezone_str)
 
     # Localize the given date with the timezone
-    localized_datetime = timezone.localize(datetime.datetime.combine(day, datetime.datetime.min.time()))
+    localized_datetime = timezone.localize(datetime.combine(day, datetime.min.time()))
 
     # Get the UTC offset for the given timezone and date
     utc_offset = localized_datetime.utcoffset()
@@ -276,30 +276,18 @@ def find_utc_offset(lat, long, day):
     # Calculate the UTC offset in hours
     return timezone_str, utc_offset.total_seconds() / 3600
 
-# Finds the middle time between two floating times. Used to find islamic midnight (usually either between sunset & sunrise, or ʿisha & fajr).
-def time_midpoint(time1, time2):
-    # Convert hours to datetime objects
-    time1 = datetime.datetime.strptime(f'{int(time1):02}:{int((time1*60) % 60):02}', "%H:%M")
-    time2 = datetime.datetime.strptime(f'{int(time2):02}:{int((time2*60) % 60):02}', "%H:%M")
+# Finds the middle time between two datetimes. Used to find islamic midnight (usually either between sunset & sunrise, or sunrise & fajr).
+def time_midpoint(datetime1: datetime, datetime2: datetime) -> datetime:
+    # Calculate the difference
+    difference = datetime2 - datetime1
 
-    # If time2 is earlier than time1, assume it's from the next day
-    if time2 < time1:
-        time2 += datetime.timedelta(days=1)
+    # Calculate the midpoint
+    midpoint = datetime1 + difference / 2
 
-    # Calculate middle time
-    middle_time = time1 + (time2 - time1) / 2
-
-    # Convert the middle time back to hours as a float
-    middle_time_in_hours = middle_time.hour + middle_time.minute / 60.0
-
-    # If the middle time is on the next day, subtract 24 to keep the output in the range [0, 24)
-    if middle_time_in_hours >= 24:
-        middle_time_in_hours -= 24
-
-    return middle_time_in_hours
+    return midpoint
 
 # Simple way to make the offset look nice
-def format_utc_offset(utc_offset):
+def format_utc_offset(utc_offset) -> str:
     hours = int(utc_offset)
     minutes = int((utc_offset - hours) * 60)
 

@@ -1,7 +1,8 @@
 import math
+import numpy as np
+from typing import List
 from islamic_times import calculation_equations as ce
 from islamic_times import time_equations as te
-import numpy as np
 
 obliquity_terms = [
     -4680.93,
@@ -149,7 +150,7 @@ sun_nutation_coefficients = [
 ]
 
 # Chapter 22
-def oblique_eq(jde):
+def oblique_eq(jde: float) -> float:
     u = ((jde - te.J2000) / te.JULIAN_CENTURY) / 100
 
     eps = 23 + 26 / 60 + (21.448 / 3600)
@@ -160,7 +161,7 @@ def oblique_eq(jde):
     return eps
 
 # Chapter 22
-def sun_nutation(jde):
+def sun_nutation(jde: float) -> float:
     t = (jde - te.J2000) / te.JULIAN_CENTURY
     t2 = t ** 2
     t3 = t ** 3
@@ -189,7 +190,7 @@ def sun_nutation(jde):
     return deltaPsi, deltaEpsilon
 
 # Chapter 25
-def sunpos(jde, deltaT, local_latitude, local_longitude, temperature = 10, pressure = 101):
+def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, temperature: float = 10, pressure: float = 101) -> List[float]:
     T = (jde - te.J2000) / te.JULIAN_MILLENNIUM
     T2 = T ** 2
     T3 = T ** 3
@@ -250,7 +251,7 @@ def sunpos(jde, deltaT, local_latitude, local_longitude, temperature = 10, press
 
     # Correct for atmospheric refraction (taken from https://en.wikipedia.org/wiki/Atmospheric_refraction)
     refraction = 1.02 / ce.tan(altitude + 10.3 / (altitude + 5.11)) * pressure / 101 * 283 / (273 + temperature)
-    altitude += refraction / 60
+    #altitude += refraction / 60
 
     # Correct for parallax 
     eh_parallax = np.rad2deg(np.arcsin(te.EARTH_RADIUS_KM / (sunR * te.ASTRONOMICAL_UNIT) ))
@@ -279,7 +280,7 @@ def sunpos(jde, deltaT, local_latitude, local_longitude, temperature = 10, press
         local_hour_angle    # 17
     ]
 
-def equation_of_time(jde, deltaT, local_latitude, local_longitude):
+def equation_of_time(jde: float, deltaT: float, local_latitude: float, local_longitude: float) -> float:
     sun_factors = sunpos(jde, deltaT, local_latitude, local_longitude)
     L0 = sun_factors[0]
     nut = sun_nutation(jde)
@@ -292,7 +293,7 @@ def equation_of_time(jde, deltaT, local_latitude, local_longitude):
 
     return E
 
-def solar_hour_angle(latitude, declination, angle = 0.8333):
+def solar_hour_angle(latitude: float, declination: float, angle: float = 0.8333):
     dec = np.deg2rad(declination)
     lat = np.deg2rad(latitude)
 
@@ -304,7 +305,10 @@ def solar_hour_angle(latitude, declination, angle = 0.8333):
 
 # -1 for Sunrise
 # 1 for Sunset
-def sunrise_sunset(set_or_rise, hour_angle):
+def sunrise_sunset(set_or_rise: int, hour_angle: float) -> float:
+    if set_or_rise not in [1, -1]:
+        raise ValueError("set_or_rise from sun_equations.sunrise_sunset() accepts only -1 or 1 for sunset or sunrise respectively.")
+    
     hours_offset_from_noon = hour_angle / 15
 
     offset = 12 + set_or_rise * hours_offset_from_noon

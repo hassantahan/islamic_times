@@ -1,5 +1,6 @@
-import datetime
 import numpy as np
+from typing import Dict, List
+from datetime import datetime, timedelta, timezone
 from islamic_times import prayer_times as pt
 from islamic_times import sun_equations as se
 from islamic_times import moon_equations as me
@@ -8,35 +9,45 @@ from islamic_times import calculation_equations as ce
 
 class ITLocation:
     ##### Mecca Constants #####
-    MECCA_LAT = 21.420164986
-    MECCA_LONG = 39.822330044
+    __MECCA_LAT = 21.420164986
+    __MECCA_LONG = 39.822330044
 
     ##### Prayer Method Names #####
     # http://praytimes.org/wiki/Calculation_Methods
-    mwl = ['mwl', 'muslim world league']
-    isna = ['isna', 'islamic society of north america']
-    egypt = ['egypt', 'egyptian', 'egyptian general authority of survey', 'egas']
-    makkah = ['makkah', 'mecca', 'mekkah', 'umm al-qura university', 'umm al-qura', 'uqu']
-    karachi = ['karachi', 'university of islamic sciences', 'uis']
-    tehran = ['tehran', 'university of tehran', 'institute of geophysics', 'uot', 'iog', 'ioguot', 'uotiog', 'igut', 'utig']
-    jafari = ['jafari', 'jaafari', 'shia', 'shia ithna ashari', 'leva', 'leva research institute', 'qom', 'qum', 'lri', 'sia', 'sialri']
+    __mwl = ['mwl', 'muslim world league']
+    __isna = ['isna', 'islamic society of north america']
+    __egypt = ['egypt', 'egyptian', 'egyptian general authority of survey', 'egas']
+    __makkah = ['makkah', 'mecca', 'mekkah', 'umm al-qura university', 'umm al-qura', 'uqu']
+    __karachi = ['karachi', 'university of islamic sciences', 'uis']
+    __tehran = ['tehran', 'university of tehran', 'institute of geophysics', 'uot', 'iog', 'ioguot', 'uotiog', 'igut', 'utig']
+    __jafari = ['jafari', 'jaafari', 'shia', 'shia ithna ashari', 'leva', 'leva research institute', 'qom', 'qum', 'lri', 'sia', 'sialri']
 
     # fajr, isha, maghrib, midnight (0 --> sunset to sunrise, 1 --> sunset to fajr)
-    mwl_vals = (18, 17, 0, 0)
-    isna_vals = (15, 15, 0, 0)
-    egypt_vals = (19.5, 17.5, 0, 0)
-    makkah_vals = (18.5, np.inf, 0, 0)
-    karachi_vals = (18, 18, 0, 0)
-    tehran_vals = (17.7, 14, 4.5, 1)
-    jafari_vals = (16, 14, 4, 1)
+    __mwl_vals = (18, 17, 0, 0)
+    __isna_vals = (15, 15, 0, 0)
+    __egypt_vals = (19.5, 17.5, 0, 0)
+    __makkah_vals = (18.5, np.inf, 0, 0)
+    __karachi_vals = (18, 18, 0, 0)
+    __tehran_vals = (17.7, 14, 4.5, 1)
+    __jafari_vals = (16, 14, 4, 1)
 
-    def __init__(self, latitude = 51.477928, longitude = -0.001545, elevation = 76, temperature = 10, pressure = 101, today = datetime.datetime.now(datetime.timezone.utc), method = 'jafari', asr_type = 0, find_local_tz = True):
+    def __init__(self, latitude: float = 51.477928, 
+                 longitude: float = -0.001545, 
+                 elevation: float = 76, 
+                 temperature: float = 10, 
+                 pressure: float = 101.325, 
+                 today: datetime = datetime.now(timezone.utc), 
+                 method: str = 'jafari', 
+                 asr_type: int = 0, 
+                 find_local_tz: bool = True):
+        
         self.latitude = latitude
         self.longitude = longitude
         self.elevation = elevation
         self.temperature = temperature
         self.pressure = pressure
         self.today = today
+        self.find_local_tz = find_local_tz
         
         if self.today.tzinfo == None:
             ### Find UTC Offset According to Lat/Long & adjust datetime
@@ -44,29 +55,29 @@ class ITLocation:
             if find_local_tz: 
                 self.tz_name, self.utc_diff = te.find_utc_offset(self.latitude, self.longitude, self.today)
             else:
-                self.tz_name, self.utc_diff = datetime.timezone.utc, 0
+                self.tz_name, self.utc_diff = timezone.utc, 0
         else:  
             self.tz_name, self.utc_diff = self.today.tzinfo, self.today.utcoffset().total_seconds() / 3600
-            #self.today += datetime.timedelta(hours=self.utc_diff)
+            #self.today += timedelta(hours=self.utc_diff)
 
         self.utc_diff *= -1
 
         # Calculate the astronomical parameters
-        self.calculate()
+        self.calculate_astro()
         
         # Set the default prayer definitions
         self.asr_type = asr_type
         self.method = method
         self.set_prayer_method(method) # Prayer times are calculated in this method
 
-    def update_time(self, date_time = None):
+    def update_time(self, date_time: datetime = None):
         # Time is only updates to the latest if no argument is passed
         if date_time is None:
-            self.today = datetime.datetime.now(self.today.tzinfo)
+            self.today = datetime.now(self.today.tzinfo)
         else:
             self.today = date_time
 
-    def calculate(self):
+    def calculate_astro(self):
         ### Calculate Julian Date
         self.jd = te.gregorian_to_jd(self.today.year, self.today.month, self.today.day + te.fraction_of_day(self.today), -1 * self.utc_diff)
         self.deltaT = te.delta_t_approx(self.today.year, self.today.month)
@@ -97,9 +108,34 @@ class ITLocation:
         self.moon_az = self.moon_factors[10]
 
         # Moon calculations
-        self.moon_illumin = me.moon_illumination(self.sun_declination, self.sun_factors[10], self.moon_declination, 
-                                            self.moon_factors[4], self.sun_factors[6], self.moon_factors[2] / 149597870.7)
-        self.moonset = te.float_to_24time(me.calculate_moonset(self.jd, self.deltaT, self.latitude, self.longitude, self.elevation, self.utc_diff))
+        self.moonset = self.find_proper_moonset(self.today)
+        self.moon_illumin = me.moon_illumination(
+                                self.sun_declination, 
+                                self.sun_factors[10], 
+                                self.moon_declination, 
+                                self.moon_factors[4], 
+                                self.sun_factors[6], 
+                                self.moon_factors[2] / te.ASTRONOMICAL_UNIT
+                            )
+        
+    # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
+    def find_proper_moonset(self, date: datetime) -> datetime:
+        date_doy = date.timetuple().tm_yday
+        temp_moonset = me.calculate_moonset(date, self.latitude, self.longitude, self.elevation, self.utc_diff)
+
+        if not self.find_local_tz:
+            temp_utc_diff = np.floor(self.longitude / 15)
+            i = 1
+            while(True):
+                temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_diff)).timetuple().tm_yday
+                if (temp_moonset_doy < date_doy and temp_moonset.year == date.year) or ((temp_moonset + timedelta(hours=temp_utc_diff)).year < date.year):
+                    temp_moonset = me.calculate_moonset(date + timedelta(days=i), self.latitude, self.longitude, self.elevation, self.utc_diff)
+                    i += 1
+                else: 
+                    return temp_moonset
+        else:
+            return temp_moonset
+        
 
     # Prayer Time Calculations
     def calculate_prayer_times(self):
@@ -116,22 +152,22 @@ class ITLocation:
             solar_maghrib = se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, self.sun_declination, self.maghrib_angle))
 
         # Convert prayer times from solar to standard time
-        self.standard_fajr = te.solar2standard(solar_fajr, self.utc_diff, self.longitude, eq_of_time)
-        self.standard_sunrise = te.solar2standard(solar_sunrise, self.utc_diff, self.longitude, eq_of_time)
-        self.standard_noon = te.solar2standard(12.0, self.utc_diff, self.longitude, eq_of_time)
+        self.standard_fajr = te.solar2standard(self.jd, solar_fajr, self.utc_diff, self.longitude, eq_of_time)
+        self.standard_sunrise = te.solar2standard(self.jd, solar_sunrise, self.utc_diff, self.longitude, eq_of_time)
+        self.standard_noon = te.solar2standard(self.jd, 12.0, self.utc_diff, self.longitude, eq_of_time)
         
-        # Type 1 is Ḥanafī
-        if self.asr_type:
-            self.standard_asr = self.standard_noon + pt.asr_time(self.latitude, self.sun_declination, t = 2)
-        # Type 0 is for the rest
+        asr_hours = pt.asr_time(self.latitude, self.sun_declination, t=self.asr_type + 1)
+        
+        if asr_hours != np.inf:
+            self.standard_asr = self.standard_noon + timedelta(hours=pt.asr_time(self.latitude, self.sun_declination))
         else:
-            self.standard_asr = self.standard_noon + pt.asr_time(self.latitude, self.sun_declination)
+            self.standard_asr = "ʿAṣr time cannot be calculated because the sun's geometry at the given date and coordintes does not satisfy the shadow ratio."
 
-        self.standard_sunset = te.solar2standard(solar_sunset, self.utc_diff, self.longitude, eq_of_time)
+        self.standard_sunset = te.solar2standard(self.jd, solar_sunset, self.utc_diff, self.longitude, eq_of_time)
         
         # Only if maghrib is not at sunset
         if self.maghrib_angle > 0:
-            self.standard_maghrib = te.solar2standard(solar_maghrib, self.utc_diff, self.longitude, eq_of_time)
+            self.standard_maghrib = te.solar2standard(self.jd, solar_maghrib, self.utc_diff, self.longitude, eq_of_time)
         else:
             # Otherwise Maghrib is sunset
             self.standard_maghrib = self.standard_sunset
@@ -139,31 +175,31 @@ class ITLocation:
         # If NOT makkah method
         if self.isha_angle is not np.inf:
             solar_isha = se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, self.sun_declination, self.isha_angle))
-            self.standard_isha = te.solar2standard(solar_isha, self.utc_diff, self.longitude, eq_of_time)
+            self.standard_isha = te.solar2standard(self.jd, solar_isha, self.utc_diff, self.longitude, eq_of_time)
         # Makkah method is special
         else:
             # Ramadan has isha as two hours after maghrib
             if self.islamic_date[2] == 9:
-                self.standard_isha = self.standard_maghrib + 2
+                self.standard_isha = self.standard_maghrib + timedelta(hours=2)
             # Otherwise it is one hour
             else:
-                self.standard_isha = self.standard_maghrib + 1
+                self.standard_isha = self.standard_maghrib + timedelta(hours=2)
         
         if self.midnight_type:
             self.standard_midnight = te.time_midpoint(self.standard_sunset, pt.find_tomorrow_time(self.jde, self.deltaT, self.utc_diff, self.latitude, self.longitude, eq_of_time, self.fajr_angle))
         else:
             self.standard_midnight = te.time_midpoint(self.standard_sunset, pt.find_tomorrow_time(self.jde, self.deltaT, self.utc_diff, self.latitude, self.longitude, eq_of_time, 0))
 
-    def set_prayer_method(self, method = 'jafari'):
+    def set_prayer_method(self, method: str = 'jafari'):
         # Mapping methods to their respective values
         method_groups = {
-            "Muslim World League (MWL)": (self.mwl, self.mwl_vals),
-            "Islamic Society of North America (ISNA)": (self.isna, self.isna_vals),
-            "Egyptian General Authority of Survey (Egypt)": (self.egypt, self.egypt_vals),
-            "Umm al-Qura University (Makkah)": (self.makkah, self.makkah_vals),
-            "University of Islamic Sciences, (Karachi)": (self.karachi, self.karachi_vals),
-            "Institute of Geophysics, University of Tehran (Tehran)": (self.tehran, self.tehran_vals),
-            "Shia Ithna Ashari, Leva Research Institute, Qom (Jafari)": (self.jafari, self.jafari_vals),
+            "Muslim World League (MWL)": (self.__mwl, self.__mwl_vals),
+            "Islamic Society of North America (ISNA)": (self.__isna, self.__isna_vals),
+            "Egyptian General Authority of Survey (Egypt)": (self.__egypt, self.__egypt_vals),
+            "Umm al-Qura University (Makkah)": (self.__makkah, self.__makkah_vals),
+            "University of Islamic Sciences, (Karachi)": (self.__karachi, self.__karachi_vals),
+            "Institute of Geophysics, University of Tehran (Tehran)": (self.__tehran, self.__tehran_vals),
+            "Shia Ithna Ashari, Leva Research Institute, Qom (Jafari)": (self.__jafari, self.__jafari_vals),
         }
 
         # Find the matching group
@@ -177,9 +213,9 @@ class ITLocation:
             raise ValueError("Not a valid method. See documentation for a list of acceptable method names.")
         
         # Update prayer times
-        self.calculate_prayer_times()
+        # self.calculate_prayer_times()
     
-    def set_custom_prayer_angles(self, fajr_angle=None, maghrib_angle=None, isha_angle=None):
+    def set_custom_prayer_angles(self, fajr_angle: float = None, maghrib_angle: float = None, isha_angle: float = None):
         # Helper function to validate and set angle
         def validate_and_set(attribute_name, value):
             if value is not None:
@@ -201,9 +237,8 @@ class ITLocation:
 
         # Update prayer times
         self.calculate_prayer_times()
-
     
-    def set_asr_type(self, asr_type = 0):
+    def set_asr_type(self, asr_type: int = 0):
         # Helper function to validate and set type
         def validate_and_set(attribute_name, value):
             if value is not None:
@@ -218,7 +253,7 @@ class ITLocation:
         # Update prayer times
         self.calculate_prayer_times()
 
-    def set_midnight_type(self, midnight_type = 0):
+    def set_midnight_type(self, midnight_type: int = 0):
         # Helper function to validate and set type
         def validate_and_set(attribute_name, value):
             if value is not None:
@@ -236,8 +271,17 @@ class ITLocation:
         # Update prayer times
         self.calculate_prayer_times()
 
+    def observer(self) -> Dict[str, str]:
+        return {
+                "Latitude" : f"{self.latitude:.5f}°",
+                "Longitude" : f"{self.longitude:.5f}°",
+                "Elevation" : f"{self.elevation:.2f} m",
+                "Pressue" : f"{self.pressure:.2f} kPa",
+                "Temperature" : f"{self.temperature:.3f} °C"
+            }
+
     # Return date and time information
-    def datetime(self):
+    def dates_times(self) -> Dict[str, str | float]:
         return {
                 "gregorian" : self.today.strftime("%A, %d %B, %Y"), 
                 "hijri" : f"{te.get_islamic_day(self.today.strftime('%A'))}, {self.islamic_date[2]} {te.get_islamic_month(self.islamic_date[1])}, {self.islamic_date[0]}",
@@ -248,22 +292,28 @@ class ITLocation:
             }
 
     # Return prayer times
-    def prayertimes(self):
+    def prayer_times(self) -> Dict[str, datetime | str]:
+        def check_datetime(val: datetime | str) -> datetime | str:
+            if type(val) is datetime:
+                return val.strftime('%H:%M:%S %d-%m-%Y')
+            else:
+                return val
+        
         return {
                 "method": self.method,
-                "fajr" : te.float_to_24time(self.standard_fajr),
-                "sunrise" : te.float_to_24time(self.standard_sunrise),
-                "noon" : te.float_to_24time(self.standard_noon),
-                "asr" : te.float_to_24time(self.standard_asr),
-                "sunset" : te.float_to_24time(self.standard_sunset),
-                "maghrib" : te.float_to_24time(self.standard_maghrib),
-                "isha" : te.float_to_24time(self.standard_isha),
-                "midnight" : te.float_to_24time(self.standard_midnight)
+                "fajr" : check_datetime(self.standard_fajr),
+                "sunrise" : check_datetime(self.standard_sunrise),
+                "noon" : check_datetime(self.standard_noon),
+                "asr" : check_datetime(self.standard_asr),
+                "sunset" : check_datetime(self.standard_sunset),
+                "maghrib" : check_datetime(self.standard_maghrib),
+                "isha" : check_datetime(self.standard_isha),
+                "midnight" : check_datetime(self.standard_midnight)
         }
     
     # Return Mecca information
-    def mecca(self):
-        mecca_distance, mecca_direction = ce.haversine(self.latitude, self.longitude, self.MECCA_LAT, self.MECCA_LONG)
+    def mecca(self) -> Dict[str, float]:
+        mecca_distance, mecca_direction = ce.haversine(self.latitude, self.longitude, self.__MECCA_LAT, self.__MECCA_LONG)
         mecca_direction = ce.bound_angle_deg(mecca_direction)
         
         return {
@@ -273,7 +323,7 @@ class ITLocation:
             }
     
     # Return sun properties and position values
-    def sun(self):
+    def sun(self) -> Dict[str, str]:
         return {
                 "declination" : f"{self.sun_declination:.3f}°",
                 "right_ascension" : f"{self.sun_alpha[0]}h {self.sun_alpha[1]}m {self.sun_alpha[2]:.2f}s",
@@ -282,9 +332,9 @@ class ITLocation:
             }
     
     # Return moon properties and position values
-    def moon(self):
+    def moon(self) -> Dict[str, datetime | str]:
         return {
-                "moonset" : self.moonset,
+                "moonset" : self.moonset.strftime("%H:%M:%S %d-%m-%Y"),
                 "declination" : f"{self.moon_declination:.3f}°",
                 "right_ascension" : f"{self.moon_alpha[0]}h {self.moon_alpha[1]}m {self.moon_alpha[2]:.2f}s",
                 "altitude" : f"{self.moon_alt:.2f}°",
@@ -292,7 +342,7 @@ class ITLocation:
                 "illumination" : f"{self.moon_illumin * 100:.1f}%"
             }
     
-    def moonphases(self):
+    def moonphases(self) -> List[Dict[str, datetime]]:
         ### Find Next New Moon (and the rest of the phases)
         moon_phases = me.next_phases_of_moon_utc(self.today)
         for i, phase in enumerate(moon_phases):
@@ -306,14 +356,14 @@ class ITLocation:
             else:
                 phase_str = "Last Quarter"
             
-            moon_phases[i] = {"phase": phase_str, "datetime": phase - datetime.timedelta(hours=self.utc_diff)}
+            moon_phases[i] = {"phase": phase_str, "datetime": phase - timedelta(hours=self.utc_diff)}
 
         moon_phases = sorted(moon_phases, key = lambda item: item["datetime"])
 
         return moon_phases
 
     # Calculate Next New Moon Visibilities
-    def visibilities(self, days = 3, type = 0):
+    def visibilities(self, days = 3, type = 0) -> Dict [datetime, List[str | float]]:
         # Get New Moon Date from moon_phases list
         moon_phases = self.moonphases()
         for item in moon_phases:
@@ -329,9 +379,9 @@ class ITLocation:
         # Forgot what this does lol. Likely something to do with timezone differences
         if new_moon.day != ymd_new_moon.day:
             if new_moon.day < ymd_new_moon.day:
-                new_moon += datetime.timedelta(days=1)
+                new_moon += timedelta(days=1)
             else:
-                new_moon -= datetime.timedelta(days=1)
+                new_moon -= timedelta(days=1)
             jd_new_moon = te.gregorian_to_jd(new_moon.year, new_moon.month, new_moon.day, -1 * self.utc_diff)
 
         # Find local sunset as visibilities are calculated from then
@@ -342,48 +392,58 @@ class ITLocation:
         best_jds = []
         for i in range(days):
             # First, check if the moonset is before the new moon for the first day
-            nm_moonset = me.calculate_moonset(jd_new_moon, deltaT_new_moon, self.latitude, self.longitude, self.elevation, self.utc_diff)
-            from math import modf
-            minute, hour = modf(nm_moonset)
-            if i != 0 or datetime.time(int(hour), 60 * int(minute)) > ymd_new_moon.time():
-                    # Set the day parameters
-                    test_jd_new_moon = jd_new_moon + i
-                    test_ymd_new_moon = te.jd_to_gregorian(test_jd_new_moon)
-                    test_deltaT_new_moon = te.delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month)
-                    test_jde_new_moon = test_jd_new_moon + test_deltaT_new_moon / 86400
+            if i == 0:
+                nm_moonset = self.find_proper_moonset(ymd_new_moon)
+                if nm_moonset < ymd_new_moon:
+                    # Moon is not visibile before the new moon
+                    v = -999
+                    visibilities.append(v)
+                    best_jds.append(jd_new_moon)
+                    continue
 
-                    # Set sun parameters
-                    nm_sun_factors = se.sunpos(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude)
+            # Set the day parameters
+            test_jd_new_moon = jd_new_moon + i
+            test_ymd_new_moon = te.jd_to_gregorian(test_jd_new_moon)
+            test_deltaT_new_moon = te.delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month)
+            test_jde_new_moon = test_jd_new_moon + test_deltaT_new_moon / 86400
 
-                    # Sunset & moonset calculations
-                    test_nm_moonset = me.calculate_moonset(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude, self.elevation, self.utc_diff)
-                    test_nm_sunset = te.solar2standard(se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, nm_sun_factors[11])), self.utc_diff, self.longitude, 
-                                        se.equation_of_time(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude))
-                    
-                    # If moonset is before sunset, continue
-                    if test_nm_moonset < test_nm_sunset and test_nm_moonset > 12:
-                        v = -998
-                        visibilities.append(v)
-                        best_jds.append(te.gregorian_to_jd(test_ymd_new_moon.year, test_ymd_new_moon.month, test_ymd_new_moon.day + test_nm_moonset / 24))
-                        continue
+            # Set sun parameters
+            nm_sun_factors = se.sunpos(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude)
 
-                    # Find the best time which is four ninths the moonset-sunset lag after sunset 
-                    lag = test_nm_moonset - test_nm_sunset
-                    best_time = test_nm_sunset + 4 / 9 * lag
-                    best_time_jd = te.gregorian_to_jd(test_ymd_new_moon.year, test_ymd_new_moon.month, test_ymd_new_moon.day + best_time / 24, -1 * self.utc_diff)
-                    best_time_jde = best_time_jd + test_deltaT_new_moon / 86400
-                    best_jds.append(best_time_jd)
-
-                    # Recalculate sun & calculate moon parameters
-                    nm_sun_factors = se.sunpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude)
-                    delPsi, delEps = se.sun_nutation(best_time_jde)
-                    nm_moon_factors = me.moonpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude, delPsi, nm_sun_factors[13], self.elevation)
-
-                    # Visibility is now calculated
-                    v = me.calculate_visibility(nm_sun_factors[16], nm_sun_factors[15], nm_moon_factors[10], nm_moon_factors[9], np.deg2rad(nm_moon_factors[8]), type)
+            # Sunset & moonset calculations
+            test_nm_sunset = te.solar2standard(
+                                        test_jd_new_moon, 
+                                        se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, nm_sun_factors[11])), 
+                                        self.utc_diff, 
+                                        self.longitude,
+                                        se.equation_of_time(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude)
+                                    )
+            if i == 0:
+                test_nm_moonset = nm_moonset
             else:
-                # Moon is not visibile before the new moon
-                v = -999
+                test_nm_moonset = self.find_proper_moonset(test_ymd_new_moon)
+            
+            # If moonset is before sunset, continue
+            if test_nm_moonset < test_nm_sunset:
+                v = -998
+                visibilities.append(v)
+                best_jds.append(te.gregorian_to_jd(test_nm_moonset.year, test_nm_moonset.month, test_nm_moonset.day + te.fraction_of_day(test_nm_moonset)))
+                continue
+
+            # Find the best time which is four ninths the moonset-sunset lag after sunset 
+            lag = (test_nm_moonset - test_nm_sunset).total_seconds() / 3600
+            best_time = test_nm_sunset + timedelta(hours=4 / 9 * lag)
+            best_time_jd = te.gregorian_to_jd(best_time.year, best_time.month, best_time.day + te.fraction_of_day(best_time), -1 * self.utc_diff)
+            best_time_jde = best_time_jd + test_deltaT_new_moon / 86400
+            best_jds.append(best_time_jd)
+
+            # Recalculate sun & calculate moon parameters
+            nm_sun_factors = se.sunpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude)
+            delPsi, delEps = se.sun_nutation(best_time_jde)
+            nm_moon_factors = me.moonpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude, delPsi, nm_sun_factors[13], self.elevation)
+
+            # Visibility is now calculated
+            v = me.calculate_visibility(nm_sun_factors[16], nm_sun_factors[15], nm_moon_factors[10], nm_moon_factors[9], np.deg2rad(nm_moon_factors[8]), type)
 
             visibilities.append(v)
 
@@ -395,14 +455,17 @@ class ITLocation:
 
         # Convert best times from JD to datetime
         best_dates = [
-            te.jd_to_gregorian(jd)
+            te.jd_to_gregorian(jd, self.utc_diff)
             for jd in best_jds
         ]
 
         # Label each q_value to its associated date 
         visibility_dictionary = {
-            dt.strftime('%H:%M:%S %d-%m-%Y'): q_values[i]
+            dt.strftime('%H:%M:%S %Y-%m-%d'): q_values[i]
             for i, dt in enumerate(best_dates)
         }
 
+        # if not self.find_local_tz:
+        #     self.utc_diff = temp_utc_diff
+        
         return visibility_dictionary
