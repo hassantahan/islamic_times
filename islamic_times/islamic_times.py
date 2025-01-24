@@ -70,14 +70,37 @@ class ITLocation:
         self.method = method
         self.set_prayer_method(method) # Prayer times are calculated in this method
 
+    # Used to change observe date & time
+    # By default, updates to datetime.now() if argument is not specified
     def update_time(self, date_time: datetime = None):
+        '''
+        This method updates the observer time to either `datetime.now()` or to the specified datetime
+
+        Args:
+            `date_time (datetime)`: User specified datetime that the observer will be updated to.
+
+        Returns:
+            No return.
+        '''
+
         # Time is only updates to the latest if no argument is passed
         if date_time is None:
             self.today = datetime.now(self.today.tzinfo)
         else:
             self.today = date_time
 
+    # Calculates the astronomical variables for the moon and sun
     def calculate_astro(self):
+        '''
+        This method updates the parameters used in astronomical calculations such as the local Julian Date, Delta T, Sun & Moon position (including alt/az), and more.
+
+        Args:
+            No arguments.
+
+        Returns:
+            No return.
+        '''
+
         ### Calculate Julian Date
         self.jd = te.gregorian_to_jd(self.today.year, self.today.month, self.today.day + te.fraction_of_day(self.today), -1 * self.utc_diff)
         self.deltaT = te.delta_t_approx(self.today.year, self.today.month)
@@ -108,7 +131,7 @@ class ITLocation:
         self.moon_az = self.moon_factors[10]
 
         # Moon calculations
-        self.moonset = self.find_proper_moonset(self.today)
+        self.moonset = self.__find_proper_moonset(self.today)
         self.moon_illumin = me.moon_illumination(
                                 self.sun_declination, 
                                 self.sun_factors[10], 
@@ -119,11 +142,21 @@ class ITLocation:
                             )
         
     # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
-    def find_proper_moonset(self, date: datetime) -> datetime:
+    def __find_proper_moonset(self, date: datetime) -> datetime:
+        '''
+        Calculates the local moonset datetime for the observer.
+
+        Args:
+            `date (datetime)`: The observer's datetime.
+
+        Returns:
+            `datetime`: The datetime of moonset.
+        '''
+
         date_doy = date.timetuple().tm_yday
         temp_moonset = me.calculate_moonset(date, self.latitude, self.longitude, self.elevation, self.utc_diff)
 
-        if not self.find_local_tz:
+        if True:
             temp_utc_diff = np.floor(self.longitude / 15)
             i = 1
             while(True):
@@ -135,10 +168,21 @@ class ITLocation:
                     return temp_moonset
         else:
             return temp_moonset
-        
 
     # Prayer Time Calculations
     def calculate_prayer_times(self):
+        '''
+        This method actually calculates the prayer times.
+
+        This method must first be manually called by the user in order to use the `prayer_times()` method.
+
+        Args:
+            No arguments.
+
+        Returns:
+            No return.
+        '''
+
         # Equation of Time
         eq_of_time = se.equation_of_time(self.jde, self.deltaT, self.latitude, self.longitude)
 
@@ -190,7 +234,21 @@ class ITLocation:
         else:
             self.standard_midnight = te.time_midpoint(self.standard_sunset, pt.find_tomorrow_time(self.jde, self.deltaT, self.utc_diff, self.latitude, self.longitude, eq_of_time, 0))
 
+    # Set the method of calculating prayer times among the available default options
+    # The default option (from creation) is the 'Jaʿfarī' method.
     def set_prayer_method(self, method: str = 'jafari'):
+        '''
+        This method sets the method of calculation for the local prayer times.
+        By default, the method is the "Jaʿfarī" method, a.k.a. Shia Ithna Ashari, Leva Research Institute, Qom.
+        The methods are taken from http://praytimes.org/wiki/Calculation_Methods/ (archive: )
+
+        Args:
+            method (str): string specifying the method. See http://praytimes.org/wiki/Calculation_Methods/
+
+        Returns:
+            No return.
+        '''
+
         # Mapping methods to their respective values
         method_groups = {
             "Muslim World League (MWL)": (self.__mwl, self.__mwl_vals),
@@ -215,7 +273,28 @@ class ITLocation:
         # Update prayer times
         # self.calculate_prayer_times()
     
+    # Alows user to set their own solar hour angles for prayer time calculations.
     def set_custom_prayer_angles(self, fajr_angle: float = None, maghrib_angle: float = None, isha_angle: float = None):
+        '''
+        This method allows for complete customization of the solar hour angles which are used to calculate the prayer times for fajr, maghrib, and ʿishāʾ prayers.
+
+        If no argument is given for a parameter, the value stays the same.
+
+        This method automatically calls `calculate_prayer_times()`.
+
+        `self.method` is set to 'custom' after this function is called. 
+
+        `set_prayer_method()` must be called with one of the default methods passed as an argument to rest `self.method` to one of the defaults.
+
+        Args:
+            `fajr_angle (float)`: solar hour angle for the fajr prayer
+            `maghrib_angle (float)`: solar hour angle for the maghrib prayer
+            `isha_angle (float)`: solar hour angle for the ʿishāʾ prayer
+
+        Returns:
+            No return.
+        '''
+        
         # Helper function to validate and set angle
         def validate_and_set(attribute_name, value):
             if value is not None:
@@ -238,7 +317,26 @@ class ITLocation:
         # Update prayer times
         self.calculate_prayer_times()
     
+    # Separated from angles since it is defined by shadow ratio
     def set_asr_type(self, asr_type: int = 0):
+        '''
+        This method allows for customization of the type of ʿaṣr prayer time calculation to use.
+
+        Type 0: Shadow ratio is 1:1; this is the majority method.
+
+        Type 1: Shadow ratio is 2:1; this is the method used by the Ḥanafī school.
+
+        `self.method` is set to 'custom' after this function is called. 
+
+        `set_prayer_method()` must be called with one of the default methods passed as an argument to rest `self.method` to one of the defaults.
+
+        Args:
+            `asr_type (int)`: type of ʿaṣr prayer time calculation. 
+
+        Returns:
+            No return.
+        '''
+
         # Helper function to validate and set type
         def validate_and_set(attribute_name, value):
             if value is not None:
@@ -250,10 +348,36 @@ class ITLocation:
         # Validate and set asr type
         validate_and_set("asr_type", asr_type)
 
+        # Method is now custom
+        self.method = 'Custom'
+
         # Update prayer times
         self.calculate_prayer_times()
 
+    # Set to either 0 (sunset to sunrise; the majority method) or 1 (sunset to fajr, the 'Jaʿfarī' method)
     def set_midnight_type(self, midnight_type: int = 0):
+        '''
+        This method allows for customization of the Islamic midnight calculation.
+
+        `midnight_type = 0`: midnight as the midpoint between the observer's sunset at its current date, and sunrise of the next day; the majority method.
+
+        `midnight_type = 1`: midnight as the midpoint between the observer's sunset at its current date, and fajr of the next day; the Jaʿfarī method.
+
+        If no argument is given for a parameter, the value stays the same.
+
+        This method automatically calls `calculate_prayer_times()`.
+
+        `self.method` is set to 'Custom' after this function is called. 
+
+        `set_prayer_method()` must be called with one of the default methods passed as an argument to rest `self.method` to one of the defaults.
+
+        Args:
+            `midnight_type (int)`: type of Islamic midnight calculation
+
+        Returns:
+            No return.
+        '''
+
         # Helper function to validate and set type
         def validate_and_set(attribute_name, value):
             if value is not None:
@@ -271,31 +395,92 @@ class ITLocation:
         # Update prayer times
         self.calculate_prayer_times()
 
-    def observer(self) -> Dict[str, str]:
+    # Return Observer Parameters
+    def observer(self) -> Dict[str, float]:
+        '''
+        Returns a dictionary of the observer parameters. 
+
+        All returns (values in the dictionary) are the `float` type. 
+
+        Keys:
+            - 'latitude' (°)
+            - 'longitude' (°)
+            - 'elevation' (m)
+            - 'pressure' (kPa)
+            - 'temperature' (°C)
+
+        Args:
+            No arguments.
+        Returns:
+            `Dict[str, float]`
+        '''
         return {
-                "Latitude" : f"{self.latitude:.5f}°",
-                "Longitude" : f"{self.longitude:.5f}°",
-                "Elevation" : f"{self.elevation:.2f} m",
-                "Pressue" : f"{self.pressure:.2f} kPa",
-                "Temperature" : f"{self.temperature:.3f} °C"
+                "latitude" : np.round(self.latitude, 5),
+                "longitude" : np.round(self.longitude, 5),
+                "elevation" : np.round(self.elevation, 2),
+                "pressure" : np.round(self.pressure, 3),
+                "temperature" : np.round(self.temperature, 2)
             }
 
     # Return date and time information
     def dates_times(self) -> Dict[str, str | float]:
+        '''
+        Returns a dictionary of the observer dates and times. 
+
+        All returns (values in the dictionary) are the `str` or `float` type. 
+
+        Keys:
+            - 'gregorian' (Gregorian date; %A, %d %B, %Y)
+            - 'hijri' (Islamic (Hijrī) date; %A, %d %B, %Y)
+            - 'time' (24-Hour time at the observer's timezone; %X)
+            - 'timezone' (Observer timezone; `str`)
+            - 'utc_offset' (Hours offset from UTC; str %H:%M)
+            - 'jd' (Local Julian Day; `float`)
+            - 'eq_of_time' (Equation of time in minutes; `float`)
+            - 'deltaT' (Delta T (TT-UT) in seconds; `float`)
+
+        Args:
+            No arguments.
+        Returns:
+            `Dict[str, float]`
+        '''
+
         return {
                 "gregorian" : self.today.strftime("%A, %d %B, %Y"), 
                 "hijri" : f"{te.get_islamic_day(self.today.strftime('%A'))}, {self.islamic_date[2]} {te.get_islamic_month(self.islamic_date[1])}, {self.islamic_date[0]}",
                 "time" : self.today.strftime("%X"), "timezone" : self.tz_name, "utc_offset" : te.format_utc_offset(self.utc_diff * -1),
-                "jd" : self.jd,
+                "jd" : np.round(self.jd, 7),
                 "eq_of_time" : np.round(se.equation_of_time(self.jde, self.deltaT, self.latitude, self.longitude), 2),
-                "deltaT" : np.round(te.delta_t_approx(self.today.year, self.today.month), 2)
+                "deltaT" : np.round(self.deltaT, 2)
             }
 
     # Return prayer times
-    def prayer_times(self) -> Dict[str, datetime | str]:
+    def prayer_times(self) -> Dict[str, str]:
+        '''
+        Returns a dictionary of the prayer times at the observer timezone. 
+
+        All returns (values in the dictionary) are the `str` type. 
+
+        Keys:
+            - 'method' (The method of calculating prayers)
+            - 'fajr' (Time of fajr`)
+            - 'sunrise' (Time of fajr)
+            - 'noon' (Time of ẓuhr or "solar noon" or "culmination of the sun")
+            - 'asr' (Time of ʿaṣr)
+            - 'sunset' (Time of sunset)
+            - 'maghrib' (Time of maghrib)
+            - 'isha' (Time of isha)
+            - 'midnight' (Time of midnight)
+
+        Args:
+            No arguments.
+        Returns:
+            `Dict[str, str]`
+        '''
+
         def check_datetime(val: datetime | str) -> datetime | str:
             if type(val) is datetime:
-                return val.strftime('%H:%M:%S %d-%m-%Y')
+                return val.strftime('%X %d-%m-%Y')
             else:
                 return val
         
@@ -312,7 +497,23 @@ class ITLocation:
         }
     
     # Return Mecca information
-    def mecca(self) -> Dict[str, float]:
+    def mecca(self) -> Dict[str, float | str]:
+        '''
+        Returns a dictionary of the variables related to Mecca. 
+
+        All returns (values in the dictionary) are the `float` or `str` type. 
+
+        Keys:
+            - 'distance' (Distance from observer to the Kaʿbah in km; `float`)
+            - 'angle' (Angle corresponding to shortest path to the Kaʿbah in °; `float`)
+            - 'cardinal' (Cardinal Direction corresponding to the angle; `str`)
+
+        Args:
+            No arguments.
+        Returns:
+            `Dict[str, float | str]`
+        '''
+
         mecca_distance, mecca_direction = ce.haversine(self.latitude, self.longitude, self.__MECCA_LAT, self.__MECCA_LONG)
         mecca_direction = ce.bound_angle_deg(mecca_direction)
         
@@ -323,27 +524,80 @@ class ITLocation:
             }
     
     # Return sun properties and position values
-    def sun(self) -> Dict[str, str]:
+    def sun(self) -> Dict[str, float | str]:
+        '''
+        Returns a dictionary of the variables related to the position of the Sun. 
+
+        All returns (values in the dictionary) are the `float` or `str` type. 
+
+        Keys:
+            - 'declination' (Declination of the sun in °; `float`)
+            - 'right_ascension' (Right ascension of the sun in HMS; `str`)
+            - 'altitude' (Altitude of the sun in °; `float`)
+            - 'azimuth' (Azimuth of the sun in °; `float`)
+
+        Args:
+            No arguments.
+        Returns:
+            `Dict[str, float | str]`
+        '''
+
         return {
-                "declination" : f"{self.sun_declination:.3f}°",
+                "declination" : np.round(self.sun_declination, 3),
                 "right_ascension" : f"{self.sun_alpha[0]}h {self.sun_alpha[1]}m {self.sun_alpha[2]:.2f}s",
-                "altitude" : f"{self.sun_alt:.2f}°",
-                "azimuth" : f"{self.sun_az:.2f}°"
+                "altitude" : np.round(self.sun_alt, 2),
+                "azimuth" : np.round(self.sun_az, 2)
             }
     
     # Return moon properties and position values
-    def moon(self) -> Dict[str, datetime | str]:
+    def moon(self) -> Dict[str, str | float]:
+        '''
+        Returns a dictionary of the variables related to the position of the Moon. 
+
+        All returns (values in the dictionary) are the `float` or `str` type. 
+
+        Keys:
+            - 'moonset' (Time of moonset; `str`)
+            - 'declination' (Declination of the sun in °; `float`)
+            - 'right_ascension' (Right ascension of the sun in HMS; `str`)
+            - 'altitude' (Altitude of the sun in °; `float`)
+            - 'azimuth' (Azimuth of the sun in °; `float`)
+            - 'illumination' (Percentage of lunar illumination; `float` %)
+
+        Args:
+            No arguments.
+        Returns:
+            `Dict[str, str | float]`
+        '''
+
         return {
-                "moonset" : self.moonset.strftime("%H:%M:%S %d-%m-%Y"),
-                "declination" : f"{self.moon_declination:.3f}°",
+                "moonset" : self.moonset.strftime("%X %d-%m-%Y"),
+                "declination" : np.round(self.moon_declination, 3),
                 "right_ascension" : f"{self.moon_alpha[0]}h {self.moon_alpha[1]}m {self.moon_alpha[2]:.2f}s",
-                "altitude" : f"{self.moon_alt:.2f}°",
-                "azimuth" : f"{self.moon_az:.2f}°",
-                "illumination" : f"{self.moon_illumin * 100:.1f}%"
+                "altitude" : np.round(self.moon_alt, 2),
+                "azimuth" : np.round(self.moon_az, 2),
+                "illumination" : np.round(self.moon_illumin * 100, 2)
             }
     
     def moonphases(self) -> List[Dict[str, datetime]]:
-        ### Find Next New Moon (and the rest of the phases)
+        '''
+        Returns a list of dictionaries of the "nearest" phases of the moon (not always the next phases necessarily. 
+
+        The list is ordered in chronological order.
+
+        All values in each of the dictionaries are of the `datetime` type. 
+
+        Keys:
+            - 'phase' (Moon Phase; `str`)
+            - 'datetime' (Date & Time of the given moon phase; `datetime`)
+
+        Args:
+            No arguments.
+        Returns:
+            `List[Dict[str, str | float]]`
+        '''
+
+        # Find Next New Moon (and the rest of the phases)
         moon_phases = me.next_phases_of_moon_utc(self.today)
         for i, phase in enumerate(moon_phases):
             phase_str = ""
@@ -363,7 +617,27 @@ class ITLocation:
         return moon_phases
 
     # Calculate Next New Moon Visibilities
-    def visibilities(self, days = 3, type = 0) -> Dict [datetime, List[str | float]]:
+    def visibilities(self, days: int = 3, type: int = 0) -> Dict [datetime, List[str | float]]:
+        '''
+        Returns a dictionary describing the visibility of the [nearest in time] new moon for the observer.
+        
+        The size of the dictionary is controlled by `days` which specifies how many days from the new moon to look at visibilities.
+
+        The key of each item in the dictionary corresponds to the "Best Time" `datetime` at which to look for the new moon crescent.
+
+        The value of each item in the dictionary is a list in which the first element is the raw number output of the visibility. The second element is the classification of the first element.
+
+        The `type` argument specifies which new moon visibility classification method to use:
+        - Type 0: Odeh, 2006
+        - Type 1: Yallop, 1997; a.k.a. HMNAO TN No. 69
+
+        Args:
+            `days (int)`: How many days from the new moon to look at visibilities.
+            `type (int)`: Which method to classify visibilities.
+        Returns:
+            `List[Dict[str, str | float]]`
+        '''
+
         # Get New Moon Date from moon_phases list
         moon_phases = self.moonphases()
         for item in moon_phases:
@@ -393,7 +667,7 @@ class ITLocation:
         for i in range(days):
             # First, check if the moonset is before the new moon for the first day
             if i == 0:
-                nm_moonset = self.find_proper_moonset(ymd_new_moon)
+                nm_moonset = self.__find_proper_moonset(ymd_new_moon)
                 if nm_moonset < ymd_new_moon:
                     # Moon is not visibile before the new moon
                     v = -999
@@ -421,7 +695,7 @@ class ITLocation:
             if i == 0:
                 test_nm_moonset = nm_moonset
             else:
-                test_nm_moonset = self.find_proper_moonset(test_ymd_new_moon)
+                test_nm_moonset = self.__find_proper_moonset(test_ymd_new_moon)
             
             # If moonset is before sunset, continue
             if test_nm_moonset < test_nm_sunset:
@@ -461,11 +735,8 @@ class ITLocation:
 
         # Label each q_value to its associated date 
         visibility_dictionary = {
-            dt.strftime('%H:%M:%S %Y-%m-%d'): q_values[i]
+            dt.strftime('%X %d-%m-%Y'): q_values[i]
             for i, dt in enumerate(best_dates)
         }
 
-        # if not self.find_local_tz:
-        #     self.utc_diff = temp_utc_diff
-        
         return visibility_dictionary
