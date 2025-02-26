@@ -47,7 +47,7 @@ def gregorian_to_jd(year: int, month: int, day: float, zone: float = 0) -> float
 # Look to Jean Meeus' "Astronomical Algorithms" pg. 
 def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
     jd = jd + 0.5 - adjust_for_tz_diff / 24
-    z = int(np.floor(jd))
+    z = int(jd)
     f = jd - z
 
     if z < 2299161:

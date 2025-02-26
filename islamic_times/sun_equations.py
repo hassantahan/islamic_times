@@ -284,12 +284,17 @@ def equation_of_time(jde: float, deltaT: float, local_latitude: float, local_lon
     sun_factors = sunpos(jde, deltaT, local_latitude, local_longitude)
     L0 = sun_factors[0]
     nut = sun_nutation(jde)
-    epsilon = oblique_eq(jde) + nut[1]
-    alpha = sun_factors[10]
+    epsilon = sun_factors[13]
     deltaPsi = nut[0]
-    
-    E = L0 - 0.0057183 - alpha + deltaPsi * ce.cos(epsilon)
-    E *= 4
+    alpha = sun_factors[10]
+
+    # Only adjust alpha when it appears to have wrapped
+    if L0 > 300 and alpha < 50:
+        alpha += 360
+    elif L0 < 50 and alpha > 300:
+        alpha -= 360
+
+    E = (L0 - 0.0057183 - alpha + deltaPsi * ce.cos(epsilon)) * 4  # convert degrees to minutes
 
     return E
 
@@ -300,8 +305,13 @@ def solar_hour_angle(latitude: float, declination: float, angle: float = 0.8333)
     num = -1 * np.sin(np.deg2rad(angle)) - np.sin(lat) * np.sin(dec)
     denom = np.cos(lat) * np.cos(dec)
 
-    angle = np.arccos(num / denom)
-    return np.rad2deg(angle)
+    # At extreme latitudes at different times of the year, some angles are not possible to achieve
+    # TODO: Warnings
+    ratio = np.clip(num / denom, -1, 1)
+
+    solar_angle = np.arccos(ratio)
+
+    return np.rad2deg(solar_angle)
 
 # -1 for Sunrise
 # 1 for Sunset

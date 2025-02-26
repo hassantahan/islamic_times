@@ -74,12 +74,13 @@ class ITLocation:
     # By default, updates to datetime.now() if argument is not specified
     def update_time(self, date_time: datetime = None):
         '''
+        # Description:
         This method updates the observer time to either `datetime.now()` or to the specified datetime
 
-        Args:
+        # Args:
             `date_time (datetime)`: User specified datetime that the observer will be updated to.
 
-        Returns:
+        # Returns:
             No return.
         '''
 
@@ -92,12 +93,13 @@ class ITLocation:
     # Calculates the astronomical variables for the moon and sun
     def calculate_astro(self):
         '''
+        # Description:
         This method updates the parameters used in astronomical calculations such as the local Julian Date, Delta T, Sun & Moon position (including alt/az), and more.
 
-        Args:
+        # Args:
             No arguments.
 
-        Returns:
+        # Returns:
             No return.
         '''
 
@@ -144,42 +146,41 @@ class ITLocation:
     # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
     def __find_proper_moonset(self, date: datetime) -> datetime:
         '''
+        # Description:
         Calculates the local moonset datetime for the observer.
 
-        Args:
+        # Args:
             `date (datetime)`: The observer's datetime.
 
-        Returns:
+        # Returns:
             `datetime`: The datetime of moonset.
         '''
 
         date_doy = date.timetuple().tm_yday
         temp_moonset = me.calculate_moonset(date, self.latitude, self.longitude, self.elevation, self.utc_diff)
 
-        if True:
-            temp_utc_diff = np.floor(self.longitude / 15)
-            i = 1
-            while(True):
-                temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_diff)).timetuple().tm_yday
-                if (temp_moonset_doy < date_doy and temp_moonset.year == date.year) or ((temp_moonset + timedelta(hours=temp_utc_diff)).year < date.year):
-                    temp_moonset = me.calculate_moonset(date + timedelta(days=i), self.latitude, self.longitude, self.elevation, self.utc_diff)
-                    i += 1
-                else: 
-                    return temp_moonset
-        else:
-            return temp_moonset
+        temp_utc_diff = np.floor(self.longitude / 15)
+        i = 1
+        while(True):
+            temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_diff)).timetuple().tm_yday
+            if (temp_moonset_doy < date_doy and temp_moonset.year == date.year) or ((temp_moonset + timedelta(hours=temp_utc_diff)).year < date.year):
+                temp_moonset = me.calculate_moonset(date + timedelta(days=i), self.latitude, self.longitude, self.elevation, self.utc_diff)
+                i += 1
+            else: 
+                return temp_moonset
 
     # Prayer Time Calculations
     def calculate_prayer_times(self):
         '''
+        # Description:
         This method actually calculates the prayer times.
 
         This method must first be manually called by the user in order to use the `prayer_times()` method.
 
-        Args:
+        # Args:
             No arguments.
 
-        Returns:
+        # Returns:
             No return.
         '''
 
@@ -238,14 +239,17 @@ class ITLocation:
     # The default option (from creation) is the 'Jaʿfarī' method.
     def set_prayer_method(self, method: str = 'jafari'):
         '''
+        # Description:
         This method sets the method of calculation for the local prayer times.
+
         By default, the method is the "Jaʿfarī" method, a.k.a. Shia Ithna Ashari, Leva Research Institute, Qom.
-        The methods are taken from http://praytimes.org/wiki/Calculation_Methods/ (archive: )
 
-        Args:
-            method (str): string specifying the method. See http://praytimes.org/wiki/Calculation_Methods/
+        The methods are taken from http://praytimes.org/wiki/Calculation_Methods (archive: https://archive.ph/v98Pv)
 
-        Returns:
+        # Args:
+            method (str): string specifying the method. See http://praytimes.org/wiki/Calculation_Methods
+
+        # Returns:
             No return.
         '''
 
@@ -357,6 +361,7 @@ class ITLocation:
     # Set to either 0 (sunset to sunrise; the majority method) or 1 (sunset to fajr, the 'Jaʿfarī' method)
     def set_midnight_type(self, midnight_type: int = 0):
         '''
+        # Description:
         This method allows for customization of the Islamic midnight calculation.
 
         `midnight_type = 0`: midnight as the midpoint between the observer's sunset at its current date, and sunrise of the next day; the majority method.
@@ -371,10 +376,10 @@ class ITLocation:
 
         `set_prayer_method()` must be called with one of the default methods passed as an argument to rest `self.method` to one of the defaults.
 
-        Args:
+        # Args:
             `midnight_type (int)`: type of Islamic midnight calculation
 
-        Returns:
+        # Returns:
             No return.
         '''
 
@@ -398,20 +403,21 @@ class ITLocation:
     # Return Observer Parameters
     def observer(self) -> Dict[str, float]:
         '''
+        # Description:
         Returns a dictionary of the observer parameters. 
 
         All returns (values in the dictionary) are the `float` type. 
 
-        Keys:
+        # Keys:
             - 'latitude' (°)
             - 'longitude' (°)
             - 'elevation' (m)
             - 'pressure' (kPa)
             - 'temperature' (°C)
 
-        Args:
+        # Args:
             No arguments.
-        Returns:
+        # Returns:
             `Dict[str, float]`
         '''
         return {
@@ -425,11 +431,12 @@ class ITLocation:
     # Return date and time information
     def dates_times(self) -> Dict[str, str | float]:
         '''
+        # Description:
         Returns a dictionary of the observer dates and times. 
 
         All returns (values in the dictionary) are the `str` or `float` type. 
 
-        Keys:
+        # Keys:
             - 'gregorian' (Gregorian date; %A, %d %B, %Y)
             - 'hijri' (Islamic (Hijrī) date; %A, %d %B, %Y)
             - 'time' (24-Hour time at the observer's timezone; %X)
@@ -439,9 +446,9 @@ class ITLocation:
             - 'eq_of_time' (Equation of time in minutes; `float`)
             - 'deltaT' (Delta T (TT-UT) in seconds; `float`)
 
-        Args:
+        # Args:
             No arguments.
-        Returns:
+        # Returns:
             `Dict[str, float]`
         '''
 
@@ -457,24 +464,25 @@ class ITLocation:
     # Return prayer times
     def prayer_times(self) -> Dict[str, str]:
         '''
+        # Description:
         Returns a dictionary of the prayer times at the observer timezone. 
 
         All returns (values in the dictionary) are the `str` type. 
 
-        Keys:
+        # Keys:
             - 'method' (The method of calculating prayers)
             - 'fajr' (Time of fajr`)
-            - 'sunrise' (Time of fajr)
+            - 'sunrise' (Time of sunrise)
             - 'noon' (Time of ẓuhr or "solar noon" or "culmination of the sun")
             - 'asr' (Time of ʿaṣr)
             - 'sunset' (Time of sunset)
             - 'maghrib' (Time of maghrib)
-            - 'isha' (Time of isha)
+            - 'isha' (Time of ʿishāʾ)
             - 'midnight' (Time of midnight)
 
-        Args:
+        # Args:
             No arguments.
-        Returns:
+        # Returns:
             `Dict[str, str]`
         '''
 
@@ -499,18 +507,19 @@ class ITLocation:
     # Return Mecca information
     def mecca(self) -> Dict[str, float | str]:
         '''
+        # Description:
         Returns a dictionary of the variables related to Mecca. 
 
         All returns (values in the dictionary) are the `float` or `str` type. 
 
-        Keys:
+        # Keys:
             - 'distance' (Distance from observer to the Kaʿbah in km; `float`)
             - 'angle' (Angle corresponding to shortest path to the Kaʿbah in °; `float`)
             - 'cardinal' (Cardinal Direction corresponding to the angle; `str`)
 
-        Args:
+        # Args:
             No arguments.
-        Returns:
+        # Returns:
             `Dict[str, float | str]`
         '''
 
@@ -526,19 +535,20 @@ class ITLocation:
     # Return sun properties and position values
     def sun(self) -> Dict[str, float | str]:
         '''
+        # Description:
         Returns a dictionary of the variables related to the position of the Sun. 
 
         All returns (values in the dictionary) are the `float` or `str` type. 
 
-        Keys:
+        # Keys:
             - 'declination' (Declination of the sun in °; `float`)
             - 'right_ascension' (Right ascension of the sun in HMS; `str`)
             - 'altitude' (Altitude of the sun in °; `float`)
             - 'azimuth' (Azimuth of the sun in °; `float`)
 
-        Args:
+        # Args:
             No arguments.
-        Returns:
+        # Returns:
             `Dict[str, float | str]`
         '''
 
@@ -552,11 +562,12 @@ class ITLocation:
     # Return moon properties and position values
     def moon(self) -> Dict[str, str | float]:
         '''
+        # Description:
         Returns a dictionary of the variables related to the position of the Moon. 
 
         All returns (values in the dictionary) are the `float` or `str` type. 
 
-        Keys:
+        # Keys:
             - 'moonset' (Time of moonset; `str`)
             - 'declination' (Declination of the sun in °; `float`)
             - 'right_ascension' (Right ascension of the sun in HMS; `str`)
@@ -564,9 +575,9 @@ class ITLocation:
             - 'azimuth' (Azimuth of the sun in °; `float`)
             - 'illumination' (Percentage of lunar illumination; `float` %)
 
-        Args:
+        # Args:
             No arguments.
-        Returns:
+        # Returns:
             `Dict[str, str | float]`
         '''
 
@@ -581,19 +592,20 @@ class ITLocation:
     
     def moonphases(self) -> List[Dict[str, datetime]]:
         '''
+        # Description:
         Returns a list of dictionaries of the "nearest" phases of the moon (not always the next phases necessarily. 
 
         The list is ordered in chronological order.
 
         All values in each of the dictionaries are of the `datetime` type. 
 
-        Keys:
+        # Keys:
             - 'phase' (Moon Phase; `str`)
             - 'datetime' (Date & Time of the given moon phase; `datetime`)
 
-        Args:
+        # Args:
             No arguments.
-        Returns:
+        # Returns:
             `List[Dict[str, str | float]]`
         '''
 
@@ -619,6 +631,7 @@ class ITLocation:
     # Calculate Next New Moon Visibilities
     def visibilities(self, days: int = 3, type: int = 0) -> Dict [datetime, List[str | float]]:
         '''
+        # Description:
         Returns a dictionary describing the visibility of the [nearest in time] new moon for the observer.
         
         The size of the dictionary is controlled by `days` which specifies how many days from the new moon to look at visibilities.
@@ -631,10 +644,10 @@ class ITLocation:
         - Type 0: Odeh, 2006
         - Type 1: Yallop, 1997; a.k.a. HMNAO TN No. 69
 
-        Args:
+        # Args:
             `days (int)`: How many days from the new moon to look at visibilities.
             `type (int)`: Which method to classify visibilities.
-        Returns:
+        # Returns:
             `List[Dict[str, str | float]]`
         '''
 
@@ -672,7 +685,7 @@ class ITLocation:
                     # Moon is not visibile before the new moon
                     v = -999
                     visibilities.append(v)
-                    best_jds.append(jd_new_moon)
+                    best_jds.append(te.gregorian_to_jd(nm_moonset.year, nm_moonset.month, nm_moonset.day + te.fraction_of_day(nm_moonset)))
                     continue
 
             # Set the day parameters
@@ -735,7 +748,7 @@ class ITLocation:
 
         # Label each q_value to its associated date 
         visibility_dictionary = {
-            dt.strftime('%X %d-%m-%Y'): q_values[i]
+            dt.strftime('%Y-%m-%d %X'): q_values[i]
             for i, dt in enumerate(best_dates)
         }
 
