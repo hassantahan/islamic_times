@@ -1,10 +1,22 @@
+'''
+Module for Solar astronomical calculations.
+
+This module provides functions to:
+  - Calculate the Suns's position (declination, right ascension, altitude, azimuth, etc.).
+  - Calculate the Sun's nutation.
+  - Calculate the obliquity of the ecliptic.
+  - Calculate the equation of time offset.
+
+This module should not be used directly unless the user is familiar with the underlying calculations.
+'''
+
 import math
 import numpy as np
 from typing import List
 from islamic_times import calculation_equations as ce
 from islamic_times import time_equations as te
 
-obliquity_terms = [
+__obliquity_terms = [
     -4680.93,
     -1.55,
     1999.25,
@@ -17,7 +29,7 @@ obliquity_terms = [
     2.45
 ]
 
-sun_nutation_arguments = [
+__sun_nutation_arguments = [
      0,  0,  0,  0,  1,
     -2,  0,  0,  2,  2,
      0,  0,  0,  2,  2,
@@ -83,7 +95,7 @@ sun_nutation_arguments = [
      2, -1,  0,  2,  2
 ]
 
-sun_nutation_coefficients = [
+__sun_nutation_coefficients = [
     -171996,  -174.2,   92025,     8.9,          #  0,  0,  0,  0,  1 
      -13187,    -1.6,    5736,    -3.1,          # -2,  0,  0,  2,  2 
       -2274,     -.2,     977,     -.5,          #  0,  0,  0,  2,  2 
@@ -151,17 +163,23 @@ sun_nutation_coefficients = [
 
 # Chapter 22
 def oblique_eq(jde: float) -> float:
+    '''
+    Calculate the obliquity of the ecliptic for a given Julian Ephemeris Day. See Chapter 22 of the Astronomical Algorthims for more information.
+    '''
     u = ((jde - te.J2000) / te.JULIAN_CENTURY) / 100
 
     eps = 23 + 26 / 60 + (21.448 / 3600)
 
     for i in range(10):
-        eps += (obliquity_terms[i] / 3600) * (u ** (i + 1))
+        eps += (__obliquity_terms[i] / 3600) * (u ** (i + 1))
 
     return eps
 
 # Chapter 22
 def sun_nutation(jde: float) -> float:
+    '''
+    Calculate the sun's nutation for a given Julian Ephemeris Day. See Chapter 22 of the Astronomical Algorthims for more information.
+    '''
     t = (jde - te.J2000) / te.JULIAN_CENTURY
     t2 = t ** 2
     t3 = t ** 3
@@ -173,17 +191,17 @@ def sun_nutation(jde: float) -> float:
           np.deg2rad(125.04452 - 1934.136261 * t + 0.0020708 * t2 + t3 / 450000.0)]
 
     for i in range(5):
-        ta[i] = ce.bound_angle_rad(ta[i])
+        ta[i] %= (2 * np.pi)
 
     dp, de = 0, 0
 
     for i in range(63):
         ang = 0
         for j in range(5):
-            if sun_nutation_arguments[(i * 5) + j] != 0:
-                ang += sun_nutation_arguments[(i * 5) + j] * ta[j]
-        dp += (sun_nutation_coefficients[(i * 4) + 0] + sun_nutation_coefficients[(i * 4) + 1] * t) * math.sin(ang)
-        de += (sun_nutation_coefficients[(i * 4) + 2] + sun_nutation_coefficients[(i * 4) + 3] * t) * math.cos(ang)
+            if __sun_nutation_arguments[(i * 5) + j] != 0:
+                ang += __sun_nutation_arguments[(i * 5) + j] * ta[j]
+        dp += (__sun_nutation_coefficients[(i * 4) + 0] + __sun_nutation_coefficients[(i * 4) + 1] * t) * math.sin(ang)
+        de += (__sun_nutation_coefficients[(i * 4) + 2] + __sun_nutation_coefficients[(i * 4) + 3] * t) * math.cos(ang)
 
     deltaPsi, deltaEpsilon = dp / (3600.0 * 10000.0), de / (3600.0 * 10000.0)
 
@@ -191,6 +209,11 @@ def sun_nutation(jde: float) -> float:
 
 # Chapter 25
 def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, temperature: float = 10, pressure: float = 101) -> List[float]:
+    '''
+    Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 25 of the Astronomical Algorthims for more information.
+
+    Note: The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is disabled.
+    '''
     T = (jde - te.J2000) / te.JULIAN_MILLENNIUM
     T2 = T ** 2
     T3 = T ** 3
@@ -198,10 +221,10 @@ def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: fl
     T5 = T ** 5
 
     L0 = 280.4664567 + (360007.6982779 * T) + (0.03032028 * T2) + (T3 / 49931) - (T4 / 15300) - (T5 / 2000000)
-    L0 = ce.bound_angle_deg(L0)
+    L0 %= 360
 
     M = 357.52911 + 359990.50340 * T - 0.001603 * T2 - T3 / 30000
-    M = ce.bound_angle_deg(M)
+    M %= 360
 
     e = 0.016708634 - 0.00042037 * T - 0.000001267 * T2
 
@@ -224,16 +247,16 @@ def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: fl
     
 
     # Right ascension (RA) & declination calculations
-    alpha = ce.bound_angle_deg(np.rad2deg(math.atan2(ce.cos(epsilon0) * ce.sin(sunLong), ce.cos(sunLong))))
+    alpha = (np.rad2deg(math.atan2(ce.cos(epsilon0) * ce.sin(sunLong), ce.cos(sunLong)))) % 360
     delta = np.rad2deg(math.asin(ce.sin(epsilon0) * ce.sin(sunLong)))
 
     # Adjust RA and declination to find their apparents
-    alphaApp = ce.bound_angle_deg(np.rad2deg(math.atan2(ce.cos(epsilon) * ce.sin(Lambda), ce.cos(Lambda))))
+    alphaApp = (np.rad2deg(math.atan2(ce.cos(epsilon) * ce.sin(Lambda), ce.cos(Lambda)))) % 360
     deltaApp = np.rad2deg(math.asin(ce.sin(epsilon) * ce.sin(Lambda)))
 
     # Local Hour Angle calculation
     # Start by calculating Mean Greenwich Sidereal Time
-    greenwich_hour_angle = ce.bound_angle_deg(te.greenwich_mean_sidereal_time(jde - deltaT / 86400))
+    greenwich_hour_angle = (te.greenwich_mean_sidereal_time(jde - deltaT / 86400)) % 360
 
     # Attain the sun's nutation in the longitude in DMS
     nut_long_dms = ce.decimal_to_dms(nut[0])
@@ -243,14 +266,15 @@ def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: fl
     greenwich_hour_angle += (st_correction / 240)
 
     # Local Hour angle is then simply the GHA minus the apparent RA adjusted for the local longitude
-    local_hour_angle = ce.bound_angle_deg(greenwich_hour_angle + local_longitude - alphaApp)
+    local_hour_angle = (greenwich_hour_angle + local_longitude - alphaApp) % 360
 
     # Altitude & Azimuth calculations
     altitude = np.rad2deg(math.asin(ce.sin(local_latitude) * ce.sin(delta) + ce.cos(local_latitude) * ce.cos(delta) * ce.cos(local_hour_angle))) 
     azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(delta) * ce.sin(local_hour_angle), ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle))) % 360
 
     # Correct for atmospheric refraction (taken from https://en.wikipedia.org/wiki/Atmospheric_refraction)
-    refraction = 1.02 / ce.tan(altitude + 10.3 / (altitude + 5.11)) * pressure / 101 * 283 / (273 + temperature)
+    # Currently disabled
+    #refraction = 1.02 / ce.tan(altitude + 10.3 / (altitude + 5.11)) * pressure / 101 * 283 / (273 + temperature)
     #altitude += refraction / 60
 
     # Correct for parallax 
@@ -281,6 +305,10 @@ def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: fl
     ]
 
 def equation_of_time(jde: float, deltaT: float, local_latitude: float, local_longitude: float) -> float:
+    '''
+    Calculate the equation of time offset for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 28 of the Astronomical Algorthims for more information.
+    '''
+
     sun_factors = sunpos(jde, deltaT, local_latitude, local_longitude)
     L0 = sun_factors[0]
     nut = sun_nutation(jde)
@@ -316,8 +344,12 @@ def solar_hour_angle(latitude: float, declination: float, angle: float = 0.8333)
 # -1 for Sunrise
 # 1 for Sunset
 def sunrise_sunset(set_or_rise: int, hour_angle: float) -> float:
+    '''
+    Calculate the time of sunrise or sunset for a given hour angle. The hour angle is the angle between the observer's meridian and the sun's position. The hour angle is positive for sunset and negative for sunrise.
+    '''
+    
     if set_or_rise not in [1, -1]:
-        raise ValueError("set_or_rise from sun_equations.sunrise_sunset() accepts only -1 or 1 for sunset or sunrise respectively.")
+        raise ValueError("'set_or_rise' from sun_equations.sunrise_sunset() accepts only -1 or 1 for sunset or sunrise respectively.")
     
     hours_offset_from_noon = hour_angle / 15
 

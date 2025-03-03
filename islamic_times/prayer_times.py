@@ -1,3 +1,11 @@
+"""
+Special module for specific Islamic prayer times calculations.
+
+This module provides functions to compute specific prayer times such as:
+  - ʿAṣr time based on different methodologies.
+  - The prayer time for the next day needed to determine Islamic midnight.
+"""
+
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce

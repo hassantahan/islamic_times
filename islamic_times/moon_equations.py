@@ -1,3 +1,14 @@
+'''
+Module for Moon astronomical calculations.
+
+This module provides functions to:
+  - Calculate the Moon's position (declination, right ascension, altitude, azimuth, etc.).
+  - Compute the Moon's illumination percentage.
+  - Estimate the moonset time for a given observer and date.
+
+This module should not be used directly unless the user is familiar with the underlying calculations.
+'''
+
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
@@ -6,7 +17,7 @@ from typing import List
 import numpy as np
 import math
 
-moon_nutation_arguments_lr = [
+__moon_nutation_arguments_lr = [
 #	D		 M		 M'		 F
 	0,		 0,		 1,		 0,
 	2,		 0,		-1,		 0,
@@ -70,7 +81,7 @@ moon_nutation_arguments_lr = [
 	2,		 0,		-1,		-2
 ]
 
-moon_nutation_arguments_b = [
+__moon_nutation_arguments_b = [
 #	D		 M		 M'		 F
 	0,		 0,		 0,		 1,
 	0,		 0,		 1,		 1,
@@ -134,7 +145,7 @@ moon_nutation_arguments_b = [
 	2,		-2,		 0,		 1
 ]
 
-moon_nutation_coeff_lr = [
+__moon_nutation_coeff_lr = [
 	#	l		 	r
 	6288774,	-20905355,
 	1274027,	-3699111,
@@ -198,7 +209,7 @@ moon_nutation_coeff_lr = [
 	0,			8752
 ]
 
-moon_nutation_coeff_b = [
+__moon_nutation_coeff_b = [
 	5128122,
 	280602,
 	277693,
@@ -261,7 +272,7 @@ moon_nutation_coeff_b = [
 	107
 ]
 
-moon_phase_corrections_coeff = [
+__moon_phase_corrections_coeff = [
 	-0.40720,	-0.40614,	-0.62801,
 	 0.17241,	 0.17302,	 0.17172,
 	 0.01608,	 0.01614,	-0.01183,
@@ -289,7 +300,7 @@ moon_phase_corrections_coeff = [
 	 0.00002,	 0.00002,	-0.00002
 ]
 
-moon_phase_corrections_arg = [
+__moon_phase_corrections_arg = [
 	#New & Full Moon
 	[
 	#	E	 M	 M'	 F
@@ -353,7 +364,7 @@ moon_phase_corrections_arg = [
 	]
 ]
 
-a_sin_term_phases_coeff = [
+__a_sin_term_phases_coeff = [
 	[299.77,	0.1074080,	-0.009173],
 	[251.88,	0.0163210],
 	[251.83,	26.651886],
@@ -370,7 +381,7 @@ a_sin_term_phases_coeff = [
 	[331.55,	3.5925180]
 ]
 
-a_coeffs = [
+__a_coeffs = [
 	0.000325,	0.000165,	0.000164,
 	0.000126,	0.000110,	0.000062,
 	0.000060,	0.000056,	0.000047,
@@ -380,6 +391,10 @@ a_coeffs = [
 
 # Chapter 47
 def moon_nutation(jde: float) -> List[float]:
+	'''
+	Calculate the Moon's nutation in for a given Julian Ephemeris Day. See Chapter 22 of the Astronomical Almanac for more information.
+	'''
+
 	t = (jde - te.J2000) / te.JULIAN_CENTURY
 	t2 = t ** 2
 	t3 = t ** 3
@@ -400,10 +415,10 @@ def moon_nutation(jde: float) -> List[float]:
 	]
 
 	for i in range(len(fundamental_arguments)):
-		fundamental_arguments[i] = ce.bound_angle_deg(fundamental_arguments[i])
+		fundamental_arguments[i] %= 360
 	
 	for i in range(len(a)):
-		a[i] = ce.bound_angle_deg(a[i])
+		a[i] %= 360
 
 	sum_l = 0
 	sum_r = 0
@@ -411,34 +426,34 @@ def moon_nutation(jde: float) -> List[float]:
 
 	eccentricity = 1 - 0.002516 * t - 0.0000074 * t2
 
-	for i in np.arange(0, np.size(moon_nutation_arguments_lr), 4):
-		temp =  moon_nutation_arguments_lr[i] 		* 	fundamental_arguments[0] + \
-				moon_nutation_arguments_lr[i + 1] 	* 	fundamental_arguments[1] + \
-				moon_nutation_arguments_lr[i + 2] 	* 	fundamental_arguments[2] + \
-				moon_nutation_arguments_lr[i + 3] 	* 	fundamental_arguments[3]
+	for i in np.arange(0, np.size(__moon_nutation_arguments_lr), 4):
+		temp =  __moon_nutation_arguments_lr[i] 		* 	fundamental_arguments[0] + \
+				__moon_nutation_arguments_lr[i + 1] 	* 	fundamental_arguments[1] + \
+				__moon_nutation_arguments_lr[i + 2] 	* 	fundamental_arguments[2] + \
+				__moon_nutation_arguments_lr[i + 3] 	* 	fundamental_arguments[3]
 
-		if (moon_nutation_arguments_lr[i + 1] == 0):
+		if (__moon_nutation_arguments_lr[i + 1] == 0):
 			eccentricity_compensation = 1
 		else:
-			pow = np.abs(moon_nutation_arguments_lr[i + 1])
+			pow = np.abs(__moon_nutation_arguments_lr[i + 1])
 			eccentricity_compensation = eccentricity ** pow
 		
-		sum_l += eccentricity_compensation * moon_nutation_coeff_lr[int(i / 2)] * ce.sin(temp)
-		sum_r += eccentricity_compensation * moon_nutation_coeff_lr[int(i / 2) + 1] * ce.cos(temp)
+		sum_l += eccentricity_compensation * __moon_nutation_coeff_lr[int(i / 2)] * ce.sin(temp)
+		sum_r += eccentricity_compensation * __moon_nutation_coeff_lr[int(i / 2) + 1] * ce.cos(temp)
 	
-	for i in np.arange(0, np.size(moon_nutation_arguments_b), 4):
-		temp =  moon_nutation_arguments_b[i] * fundamental_arguments[0] + \
-				moon_nutation_arguments_b[i + 1] * fundamental_arguments[1] + \
-				moon_nutation_arguments_b[i + 2] * fundamental_arguments[2] + \
-				moon_nutation_arguments_b[i + 3] * fundamental_arguments[3]
+	for i in np.arange(0, np.size(__moon_nutation_arguments_b), 4):
+		temp =  __moon_nutation_arguments_b[i] * fundamental_arguments[0] + \
+				__moon_nutation_arguments_b[i + 1] * fundamental_arguments[1] + \
+				__moon_nutation_arguments_b[i + 2] * fundamental_arguments[2] + \
+				__moon_nutation_arguments_b[i + 3] * fundamental_arguments[3]
 
-		if (moon_nutation_arguments_b[i + 1] == 0):
+		if (__moon_nutation_arguments_b[i + 1] == 0):
 			eccentricity_compensation = 1
 		else:
-			pow = np.abs(moon_nutation_arguments_b[i + 1])
+			pow = np.abs(__moon_nutation_arguments_b[i + 1])
 			eccentricity_compensation = eccentricity ** pow
 
-		sum_b += eccentricity_compensation * moon_nutation_coeff_b[int(i / 4)] * ce.sin(temp)
+		sum_b += eccentricity_compensation * __moon_nutation_coeff_b[int(i / 4)] * ce.sin(temp)
 
 
 	sum_l += 3958 * ce.sin(a[0]) + 1962 * ce.sin(fundamental_arguments[4] - fundamental_arguments[3]) + 318 * ce.sin(a[1])
@@ -450,6 +465,12 @@ def moon_nutation(jde: float) -> List[float]:
 	return [fundamental_arguments, sum_l, sum_b, sum_r]
 
 def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, deltaPsi: float, ecliptic: float, elev: float) -> List[float]:
+	'''
+    Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 25 of the Astronomical Algorthims for more information.
+
+    Note: The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is disabled.
+    '''
+
 	t = (jde - te.J2000) / te.JULIAN_CENTURY
 
 	# Calculation nutations
@@ -461,7 +482,7 @@ def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: f
 	distance = 385000.56 + nut[3] / 10 ** 3
 
 	# Place in the sky (pg. 93)
-	ascension = ce.bound_angle_deg(np.rad2deg(math.atan2((ce.sin(longitude) * ce.cos(ecliptic) - ce.tan(latitude) * ce.sin(ecliptic)), ce.cos(longitude))))
+	ascension = (np.rad2deg(math.atan2((ce.sin(longitude) * ce.cos(ecliptic) - ce.tan(latitude) * ce.sin(ecliptic)), ce.cos(longitude)))) % 360
 	declination = np.rad2deg(math.asin(ce.sin(latitude) * ce.cos(ecliptic) + ce.cos(latitude) * ce.sin(ecliptic) * ce.sin(longitude)))
 	eh_parallax = np.rad2deg(np.arcsin(te.EARTH_RADIUS_KM / distance))
 
@@ -469,7 +490,7 @@ def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: f
 	mean_greenwich_sidereal_time = te.greenwich_mean_sidereal_time(jde - deltaT / 86400)
 	st_correction = ce.decimal_to_dms(deltaPsi)[2] * ce.cos(ecliptic) / 15
 	app_greenwich_sidereal_time = mean_greenwich_sidereal_time + (st_correction / 3600)
-	local_hour_angle = ce.bound_angle_deg(app_greenwich_sidereal_time - -1 * local_longitude - ascension)
+	local_hour_angle = (app_greenwich_sidereal_time - -1 * local_longitude - ascension) % 360
 
 	# Modify RA and Declination to their topocentric equivalents
 	top_ascension, top_declination = correct_ra_dec(ascension, declination, local_hour_angle, eh_parallax, local_latitude, elev / 1000)
@@ -570,11 +591,11 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 
 		# Bound the fundamental arguments
 		for i in range(5):
-			fundamental_arguments[i] = ce.bound_angle_deg(fundamental_arguments[i])
+			fundamental_arguments[i] %= 360
 		
 		# Construct the A terms
 		a_sin_args = []
-		for a_sin_coeff_arrays in a_sin_term_phases_coeff:
+		for a_sin_coeff_arrays in __a_sin_term_phases_coeff:
 			temp = 0
 			j = 0
 			for a_sin_coeff in a_sin_coeff_arrays:
@@ -585,7 +606,7 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 				else:
 					temp += a_sin_coeff * t2
 				j += 1
-			temp = ce.bound_angle_deg(temp)
+			temp %= 360
 			a_sin_args.append(temp)
 
 		# Calculate W for First & Last Quarter phases pg. 352
@@ -598,34 +619,34 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 		i = 0
 		j = 0
 		# Iterate over the first group by 3 and the other group by 4
-		# TODO: change the moon_phase_corrections_arg[0] to account for the different phases (p) ==> done
-		while i < np.size(moon_phase_corrections_coeff) and j < np.size(moon_phase_corrections_arg):
+		# TODO: change the __moon_phase_corrections_arg[0] to account for the different phases (p) ==> done
+		while i < np.size(__moon_phase_corrections_coeff) and j < np.size(__moon_phase_corrections_arg):
 			sin_coeff = 0
 			
-			# Shift for the moon_phase_corrections_coeff array
+			# Shift for the __moon_phase_corrections_coeff array
 			s = 0
 			if p == 1 or p == 3:
 				s = 2
 			elif p == 2:
 				s = 1
 
-			# Note: moon_phase_corrections_arg has its first [] set to p % 2 since 0 & 2
-			# are the new and full moons which use the first array set in moon_phase_corrections_arg
+			# Note: __moon_phase_corrections_arg has its first [] set to p % 2 since 0 & 2
+			# are the new and full moons which use the first array set in __moon_phase_corrections_arg
 			# Therefore, 1 & 3 are for the First and Last Quarters
 
 			# Check if Omega term
-			if moon_phase_corrections_arg[p % 2][j] != 9:
+			if __moon_phase_corrections_arg[p % 2][j] != 9:
 				# Go through the sine argument terms and add them up
 				sin_argument = 0
 				for l in np.arange(0, 3):
-					sin_argument += fundamental_arguments[l + 1] * moon_phase_corrections_arg[p % 2][j + l + 1]
+					sin_argument += fundamental_arguments[l + 1] * __moon_phase_corrections_arg[p % 2][j + l + 1]
 				# Take the sine of the sum of the arguments
 				sin_coeff = ce.sin(sin_argument)
 				# Add to the correction term the product of the phase coefficient, the eccentricity factor, and the sine coefficient
-				temp += moon_phase_corrections_coeff[i + s] * pow(fundamental_arguments[0], moon_phase_corrections_arg[p % 2][j]) * sin_coeff
+				temp += __moon_phase_corrections_coeff[i + s] * pow(fundamental_arguments[0], __moon_phase_corrections_arg[p % 2][j]) * sin_coeff
 			else:
 				# Omega term
-				temp += moon_phase_corrections_coeff[i + s] * pow(fundamental_arguments[0], 0) * ce.sin(fundamental_arguments[4])
+				temp += __moon_phase_corrections_coeff[i + s] * pow(fundamental_arguments[0], 0) * ce.sin(fundamental_arguments[4])
 
 			i += 3
 			j += 4
@@ -635,7 +656,7 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 		# Calculate the 14 additional corrections from the a terms
 		temp = 0
 		for i, a_sin_arg in enumerate(a_sin_args):
-			temp += a_coeffs[i] * ce.sin(a_sin_arg)
+			temp += __a_coeffs[i] * ce.sin(a_sin_arg)
 
 		moon_phases[p] += temp
 
@@ -672,7 +693,7 @@ def moon_illumination(sun_dec: float, sun_ra: float, moon_dec: float, moon_ra: f
 def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_diff: float) -> datetime:
 	# First find the Year Month Day at UT 0h from JDE
 	ymd = datetime(date.year, date.month, date.day)
-	new_jd = te.gregorian_to_jd(date.year, date.month, date.day)
+	new_jd = te.gregorian_to_jd(date) - te.fraction_of_day(date)
 	new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
 	new_jde = new_jd + new_deltaT / 86400
 
@@ -695,7 +716,6 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 
 	# Transit
 	m0 = (moon_params[1][4] + -1 * long - sidereal_time) / 360
-	#if True:
 	if m0 < 0: 
 		m0 += 1
 	elif m0 > 1: 
@@ -703,7 +723,6 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 
 	# Setting
 	m2 = m0 + H_zero / 360
-	#if True:
 	if m2 < 0: 
 		m2 += 1
 	elif m2 > 1: 
@@ -725,7 +744,6 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 
 	# Offset days
 	local_hours = m2 * 24 - utc_diff
-	#day_offset = np.floor(np.abs(local_hours / 24.0))
 
 	# Combine
 	moonset_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(hours=(local_hours))
@@ -738,7 +756,7 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt: float, moon_pi: float, type: int = 0) -> float:
 	arcl = ce.calculate_angle_diff(sun_az, sun_alt, moon_az, moon_alt)
 	arcv = np.abs(sun_alt - moon_alt)
-	daz = sun_az - moon_az
+	#daz = sun_az - moon_az
 	moon_pi *= 206265 / 60
 
 	semi_diameter = 0.27245 * moon_pi
