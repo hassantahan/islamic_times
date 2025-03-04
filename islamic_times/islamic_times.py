@@ -43,14 +43,14 @@ class ITLocation:
         "Shia Ithna Ashari, Leva Research Institute, Qom (Jafari)": (('JAFARI', 'JAAFARI', 'SHIA', 'SHIA ITHNA ASHARI', 'LEVA', 'LEVA RESEARCH INSTITUTE', 'QOM', 'QUM', 'LRI', 'SIA', 'SIALRI'), (16, 14, 4, 1))
     }
 
-    def __init__(self, latitude: float = 51.477928, 
-                 longitude: float = -0.001545, 
-                 elevation: float = 76, 
-                 temperature: float = 10, 
-                 pressure: float = 101.325, 
-                 today: datetime = datetime.now(timezone.utc), 
-                 method: str = 'JAFARI', 
-                 asr_type: int = 0, 
+    def __init__(self, latitude: float = 51.477928,
+                 longitude: float = -0.001545,
+                 elevation: float = 76,
+                 temperature: float = 10,
+                 pressure: float = 101.325,
+                 today: datetime = datetime.now(timezone.utc),
+                 method: str = 'JAFARI',
+                 asr_type: int = 0,
                  find_local_tz: bool = True):
         '''Instantiates and initalizes the `ITLocation` object. The default location values are for the Royal Greenwich Observatory (https://en.wikipedia.org/wiki/Royal_Observatory,_Greenwich).
         '''
@@ -207,6 +207,8 @@ class ITLocation:
 
         date_doy = date.timetuple().tm_yday
         temp_moonset = me.calculate_moonset(date, self.latitude, self.longitude, self.elevation, self.utc_diff)
+        if temp_moonset == np.inf:
+            return datetime.min
 
         temp_utc_diff = np.floor(self.longitude / 15)
         i = 1
@@ -222,57 +224,17 @@ class ITLocation:
     def calculate_prayer_times(self):
         '''This method calculates the prayer times.
         '''
-
-        # Equation of Time
-        eq_of_time = se.equation_of_time(self.jde, self.deltaT, self.latitude, self.longitude)
-
-        # Calculate prayer times in solar time
-        solar_fajr = se.sunrise_sunset(-1, se.solar_hour_angle(self.latitude, self.sun_declination, self.fajr_angle))
-        solar_sunrise = se.sunrise_sunset(-1, self.solar_angle)
-        solar_sunset = se.sunrise_sunset(1, self.solar_angle)
-
-        # Only if maghrib is not at sunset
-        if self.maghrib_angle > 0:
-            solar_maghrib = se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, self.sun_declination, self.maghrib_angle))
-
-        # Convert prayer times from solar to standard time
-        self.standard_fajr = te.solar2standard(self.jd, solar_fajr, self.utc_diff, self.longitude, eq_of_time)
-        self.standard_sunrise = te.solar2standard(self.jd, solar_sunrise, self.utc_diff, self.longitude, eq_of_time)
-        self.standard_noon = te.solar2standard(self.jd, 12.0, self.utc_diff, self.longitude, eq_of_time)
+        self.times_of_prayer = pt.calculate_prayer_times(self.jde, self.deltaT, self.latitude, self.longitude, self.utc_diff, (self.sun_declination, self.solar_angle),
+                                                        (self.fajr_angle, self.maghrib_angle, self.isha_angle, self.midnight_type, self.asr_type), 
+                                                        self.islamic_date[2] == 9)
         
-        asr_hours = pt.asr_time(self.latitude, self.sun_declination, t=self.asr_type + 1)
-        
-        if asr_hours != np.inf:
-            self.standard_asr = self.standard_noon + timedelta(hours=pt.asr_time(self.latitude, self.sun_declination))
-        else:
-            self.standard_asr = "ʿAṣr time cannot be calculated because the sun's geometry at the given date and coordintes does not satisfy the shadow ratio."
-
-        self.standard_sunset = te.solar2standard(self.jd, solar_sunset, self.utc_diff, self.longitude, eq_of_time)
-        
-        # Only if maghrib is not at sunset
-        if self.maghrib_angle > 0:
-            self.standard_maghrib = te.solar2standard(self.jd, solar_maghrib, self.utc_diff, self.longitude, eq_of_time)
-        else:
-            # Otherwise Maghrib is sunset
-            self.standard_maghrib = self.standard_sunset
-
-        # If NOT makkah method
-        if self.isha_angle is not np.inf:
-            solar_isha = se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, self.sun_declination, self.isha_angle))
-            self.standard_isha = te.solar2standard(self.jd, solar_isha, self.utc_diff, self.longitude, eq_of_time)
-        # Makkah method is special
-        else:
-            # Ramadan has isha as two hours after maghrib
-            if self.islamic_date[2] == 9:
-                self.standard_isha = self.standard_maghrib + timedelta(hours=2)
-            # Otherwise it is one hour
+        def check_datetime(val: datetime | str) -> datetime | str:
+            if type(val) is datetime:
+                return val.strftime('%X %d-%m-%Y')
             else:
-                self.standard_isha = self.standard_maghrib + timedelta(hours=2)
-        
-        if self.midnight_type:
-            self.standard_midnight = te.time_midpoint(self.standard_sunset, pt.find_tomorrow_time(self.jde, self.deltaT, self.utc_diff, self.latitude, self.longitude, eq_of_time, self.fajr_angle))
-        else:
-            self.standard_midnight = te.time_midpoint(self.standard_sunset, pt.find_tomorrow_time(self.jde, self.deltaT, self.utc_diff, self.latitude, self.longitude, eq_of_time, 0))
+                return val
+            
+        self.times_of_prayer = {key: check_datetime(value) for key, value in self.times_of_prayer.items()}
 
     # Set the method of calculating prayer times among the available default options
     # The default option (from creation) is the Jaʿfarī method.
@@ -310,7 +272,7 @@ class ITLocation:
 
             `self.method` is set to 'custom' after this function is called. 
 
-            `set_prayer_method()` must be called with one of the default methods passed as an argument to rest `self.method` to one of the defaults.
+            `set_prayer_method()` must be called with one of the default methods passed as an argument to reset `self.method` to one of the defaults.
 
         ### Args:
             `fajr_angle (float)`: solar hour angle for the fajr prayer
@@ -355,7 +317,7 @@ class ITLocation:
 
             `self.method` is set to 'custom' after this function is called. 
 
-            `set_prayer_method()` must be called with one of the default methods passed as an argument to rest `self.method` to one of the defaults.
+            `set_prayer_method()` must be called with one of the default methods passed as an argument to reset `self.method` to one of the defaults.
 
         ### Args:
             `asr_type (int)`: type of ʿaṣr prayer time calculation. 
@@ -391,7 +353,7 @@ class ITLocation:
 
             `self.method` is set to 'Custom' after this function is called. 
 
-            `set_prayer_method()` must be called with one of the default methods passed as an argument to rest `self.method` to one of the defaults.
+            `set_prayer_method()` must be called with one of the default methods passed as an argument to reset `self.method` to one of the defaults.
 
         ### Args:
             `midnight_type (int)`: type of Islamic midnight calculation
@@ -499,14 +461,14 @@ class ITLocation:
         
         return {
                 "method": self.method,
-                "fajr" : check_datetime(self.standard_fajr),
-                "sunrise" : check_datetime(self.standard_sunrise),
-                "noon" : check_datetime(self.standard_noon),
-                "asr" : check_datetime(self.standard_asr),
-                "sunset" : check_datetime(self.standard_sunset),
-                "maghrib" : check_datetime(self.standard_maghrib),
-                "isha" : check_datetime(self.standard_isha),
-                "midnight" : check_datetime(self.standard_midnight)
+                "fajr" : self.times_of_prayer["fajr"],
+                "sunrise" : self.times_of_prayer["sunrise"],
+                "noon" : self.times_of_prayer["noon"],
+                "asr" : self.times_of_prayer["asr"],
+                "sunset" : self.times_of_prayer["sunset"],
+                "maghrib" : self.times_of_prayer["maghrib"],
+                "isha" : self.times_of_prayer["isha"],
+                "midnight" : self.times_of_prayer["midnight"]
         }
     
     # Return Mecca information
@@ -695,7 +657,14 @@ class ITLocation:
             # First, check if the moonset is before the new moon for the first day
             if i == 0:
                 nm_moonset = self.__find_proper_moonset(ymd_new_moon)
-                if nm_moonset < ymd_new_moon:
+
+                if nm_moonset == datetime.min:
+                    # Moonset doesn't exist
+                    v = -997
+                    visibilities.append(v)
+                    best_jds.append(jd_new_moon)
+                    continue
+                elif nm_moonset < ymd_new_moon:
                     # Moon is not visibile before the new moon
                     v = -999
                     visibilities.append(v)
@@ -719,10 +688,32 @@ class ITLocation:
                                         self.longitude,
                                         se.equation_of_time(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude)
                                     )
+
             if i == 0:
                 test_nm_moonset = nm_moonset
             else:
                 test_nm_moonset = self.__find_proper_moonset(test_ymd_new_moon)
+
+            # For extreme latitudes where the moonset or sunset don't exist:
+            if np.abs(self.latitude) > 62:
+                if test_nm_sunset == datetime.min and test_nm_moonset == datetime.min:
+                    # Moonset and sunset don't exist
+                    v = -997
+                    visibilities.append(v)
+                    best_jds.append(test_jd_new_moon)
+                    continue
+                elif test_nm_sunset == datetime.min:
+                    # Only sunset doesn't exist
+                    v = -996
+                    visibilities.append(v)
+                    best_jds.append(te.gregorian_to_jd(test_nm_moonset))
+                    continue
+                elif test_nm_moonset == datetime.min:
+                    # Only moonset doesn't exist
+                    v = -995
+                    visibilities.append(v)
+                    best_jds.append(te.gregorian_to_jd(test_nm_sunset))
+                    continue
             
             # If moonset is before sunset, continue
             if test_nm_moonset < test_nm_sunset:

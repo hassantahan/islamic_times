@@ -12,7 +12,7 @@ This module should not be used directly unless the user is familiar with the und
 
 import math
 import numpy as np
-from typing import List
+from typing import List, Tuple
 from islamic_times import calculation_equations as ce
 from islamic_times import time_equations as te
 
@@ -326,7 +326,10 @@ def equation_of_time(jde: float, deltaT: float, local_latitude: float, local_lon
 
     return E
 
-def solar_hour_angle(latitude: float, declination: float, angle: float = 0.8333):
+def solar_hour_angle(latitude: float, declination: float, angle: float = 0.8333) -> float | str:
+    '''
+    Calculate the solar hour angle for a given latitude, solar declination, and angle. The angle is the zenith angle of the sun at the horizon. The default value is 0.8333° representing visible sunset.
+    '''
     dec = np.deg2rad(declination)
     lat = np.deg2rad(latitude)
 
@@ -337,7 +340,10 @@ def solar_hour_angle(latitude: float, declination: float, angle: float = 0.8333)
     # TODO: Warnings
     ratio = np.clip(num / denom, -1, 1)
 
-    solar_angle = np.arccos(ratio)
+    if ratio == 1 or ratio == -1:
+        return np.inf
+    else:
+        solar_angle = np.arccos(ratio)
 
     return np.rad2deg(solar_angle)
 
@@ -350,6 +356,9 @@ def sunrise_sunset(set_or_rise: int, hour_angle: float) -> float:
     
     if set_or_rise not in [1, -1]:
         raise ValueError("'set_or_rise' from sun_equations.sunrise_sunset() accepts only -1 or 1 for sunset or sunrise respectively.")
+    
+    if hour_angle == np.inf:
+        return np.inf
     
     hours_offset_from_noon = hour_angle / 15
 

@@ -74,13 +74,16 @@ def gregorian_to_jd(date: datetime, zone: float = 0) -> float:
 def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
     '''Convert a Julian Day to a Gregorian datetime.
     '''
+    if jd == -1:
+        return datetime.min
+
     jd = jd + 0.5 - adjust_for_tz_diff / 24
     z = int(jd)
     f = jd - z
 
     if z < 2299161:
         a = z
-    elif z >= 2291161:
+    else:
         alpha = int(np.floor((z - 1867216.25) / 36524.25))
         a = z + 1 + alpha - int(np.floor(alpha / 4))
 
@@ -279,11 +282,11 @@ def solar2standard(jd: float, solar_time: float, utc_diff: float, longitude: flo
     '''
     ### Description:
 
-        Convert solar time (in decimal hours) to standard local datetime.
+    Convert solar time (in decimal hours) to standard local datetime.
 
-        The conversion accounts for the difference between the solar time and the standard time
-        by adjusting for the longitude (which gives a local solar time correction) and the equation
-        of time correction.
+    The conversion accounts for the difference between the solar time and the standard time
+    by adjusting for the longitude (which gives a local solar time correction) and the equation
+    of time correction.
 
     ### Args:
         `jd (float)`: Julian Day corresponding to the local date (at midnight).
@@ -295,6 +298,9 @@ def solar2standard(jd: float, solar_time: float, utc_diff: float, longitude: flo
     ### Returns:
         `datetime`: Standard local datetime.
     '''
+
+    if solar_time == np.inf:
+        return datetime.min
 
     jd = np.floor(jd - utc_diff / 24 - 0.5) + 0.5 + utc_diff / 24
     local_standard_meridian = utc_diff * 15

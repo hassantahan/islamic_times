@@ -711,6 +711,10 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 	cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(moon_params[1][5])) / (ce.cos(lat) * ce.cos(moon_params[1][5]))
 	H_zero = np.rad2deg(np.arccos(cosH_zero))
 
+	# No moonset/rise
+	if math.isnan(H_zero):
+		return np.inf
+
 	# GMST
 	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
 
@@ -775,8 +779,15 @@ def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt
 def classify_visibility(q: float, type: int = 0) -> str:
 	if q == -999: 
 		return "Moonset before the new moon."
-	if q == -998: 
+	elif q == -998: 
 		return "Moonset before sunset."
+	# Only for extreme latitudes
+	elif q == -997:
+		return "Moonset & Sunset don't exist."
+	elif q == -996:
+		return "Sunset doesn't exist."
+	elif q == -995:
+		return "Moonset doesn't exist."
 
 	if type == 0:
 		if q >= 5.65:
