@@ -1,14 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
-from islamic_times import islamic_times as it
+from islamic_times.islamic_times import ITLocation
+from time import time
 
-def decimal_to_dms(decimal_string: str) -> str:
-    # Remove the degree symbol (°) if it's present
-    decimal_string = decimal_string.replace("°", "")
-
-    # Convert the input string to a float
-    decimal_value = float(decimal_string)
-
+def decimal_to_dms(decimal_value: float) -> str:
     degrees = int(decimal_value)
     decimal_minutes = (decimal_value - degrees) * 60
     minutes = int(decimal_minutes)
@@ -17,80 +12,199 @@ def decimal_to_dms(decimal_string: str) -> str:
     dms_string = f"{degrees}° {np.abs(minutes)}' {np.abs(seconds):.2f}\""
     return dms_string
 
+def timing(str_to_print, start_time):
+    print(f"{str_to_print}: {(time() - start_time)*1000000:.2f}μs")
+    return time()
+
 ##### Calculation #####
-local = it.ITLocation(
-                    latitude=34.05224, 
-                    longitude=-118.24334, 
-                    elevation=120, 
-                    temperature=10,
-                    pressure=101.325,
-                    today=datetime(2024, 12, 28), 
-                    find_local_tz=False
-                )
 
-##### Outputs #####
-# Observer
-temp = local.observer()
-print("Observer Parameters")
-for key, value in temp.items():
-    print(f"\t{key}:\t\t{value}")
+def output_observer(local: ITLocation):
+    start_time = time()
+    temp = local.observer()
+    timing("Time to fetch observer()", start_time)
 
-# Date & Time
-temp = local.dates_times()
-print("Time & Date")
-print(f"\tGregorian Date:\t\t{temp['gregorian']}")
-print(f"\tIslamic Date:\t\t{temp['hijri']}")
-print(f"\t24h-Time:\t\t{temp['time']}\n\tTime Zone:\t\t{temp['timezone']} {temp['utc_offset']}")
-print(f"\tLocal JD:\t\t{temp['jd']}")
-print(f"\tEquation of time:\t{temp['eq_of_time']} minutes")
-print(f"\tEstimated ΔT:\t\t{temp['deltaT']}s")
+    print("Observer Parameters")
+    for key, value in temp.items():
+        print(f"\t{key.title()}:\t\t{value}")
 
-# Prayer Times
-local.calculate_prayer_times()
-temp = local.prayer_times()
-print("Prayer Times at Observer Timezone")
-print(f"\tMethod:\t\t\t{temp['method']}")
-print(f"\tFajr:\t\t\t{temp['fajr']}")
-print(f"\tSunrise:\t\t{temp['sunrise']}")
-print(f"\tẒuhr:\t\t\t {temp['noon']}")
-print(f"\tʿAṣr:\t\t\t{temp['asr']}")
-print(f"\tSunset:\t\t\t{temp['sunset']}")
-print(f"\tMaghrib:\t\t{temp['maghrib']}")
-print(f"\tʿIshāʾ:\t\t\t{temp['isha']}")
-print(f"\tMidnight:\t\t{temp['midnight']}")
+def calculate_astro(local: ITLocation):
+    start_time = time()
+    local.calculate_astro()
+    timing("Time to calculate_astro()", start_time)
 
-# Mecca
-temp = local.mecca()
-print("Mecca")
-print(f"\tDistance:\t\t{temp['distance']} km")
-print(f"\tDirection:\t\t{temp['cardinal']} ({temp['angle']}°)")
+def output_dates_times(local: ITLocation):
+    start_time = time()
+    temp = local.dates_times()
+    timing("Time to fetch dates_times()", start_time)
 
-# The Sun
-temp = local.sun()
-print("The Sun")
-print(f"\tApp. Declination:\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
-print(f"\tApp. Right Ascenscion:\t{temp['right_ascension']}")
-print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")
-print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
+    print("Time & Date")
+    print(f"\tGregorian Date:\t\t{temp['gregorian']}")
+    print(f"\tIslamic Date:\t\t{temp['hijri']}")
+    print(f"\t24h-Time:\t\t{temp['time']}\n\tTime Zone:\t\t{temp['timezone']} {temp['utc_offset']}")
+    print(f"\tLocal JD:\t\t{temp['jd']}")
+    print(f"\tEquation of Time:\t{temp['eq_of_time']} minutes")
+    print(f"\tEstimated ΔT:\t\t{temp['deltaT']}s")
 
-# The Moon
-temp = local.moon()
-print("The Moon")
-print(f"\tMoonset:\t\t{temp['moonset']}")
-print(f"\tDeclination:\t\t{temp['declination']}\t{decimal_to_dms(temp['declination'])}")
-print(f"\tRight Ascenscion:\t{temp['right_ascension']}")
-print(f"\tAltitude:\t\t{temp['altitude']}\t\t{decimal_to_dms(temp['altitude'])}")
-print(f"\tAzimuth:\t\t{temp['azimuth']}\t\t{decimal_to_dms(temp['azimuth'])}")
-print(f"\tIllumination:\t\t{temp['illumination']}")
+def prayer_times(local: ITLocation):
+    # Calculate Prayer Times
+    start_time = time()
+    local.calculate_prayer_times()
+    timing("Time to calculate_prayer_times()", start_time)
 
-# Moon Phases
-temp = local.moonphases()
-print("Moon Phases at Observer Timezone")
-for item in temp:
-    print(f"\t{item['phase']}:\t\t{item['datetime'].strftime('%H:%M:%S %A, %d %B, %Y')}")
+    # Fetch Prayer Times
 
-# New Moon Visibility
-temp = local.visibilities(type=1)
-print("Visibility Values of New Moon at Observer TZ 'Best Time' on...")
-for date_label, values in temp.items():
-    print(f"\t{date_label}:\t{values[0]:.3f}\t({values[1]})")
+    start_time = time()
+    temp = local.prayer_times()
+    timing("Time to fetch prayer_times()", start_time)
+
+    print("Prayer Times at Observer Timezone")
+    print(f"\tMethod:\t\t\t{temp['method']}")
+    print(f"\tFajr:\t\t\t{temp['fajr']}")
+    print(f"\tSunrise:\t\t{temp['sunrise']}")
+    print(f"\tẒuhr:\t\t\t {temp['noon']}")
+    print(f"\tʿAṣr:\t\t\t{temp['asr']}")
+    print(f"\tSunset:\t\t\t{temp['sunset']}")
+    print(f"\tMaghrib:\t\t{temp['maghrib']}")
+    print(f"\tʿIshāʾ:\t\t\t{temp['isha']}")
+    print(f"\tMidnight:\t\t{temp['midnight']}")
+
+    # Change Prayer Times Method
+    start_time = time()
+    local.set_prayer_method('ISNA')
+    local.calculate_prayer_times()
+    temp = local.prayer_times()
+    timing("Time to set new method, recalculate & fetch prayer_times()", start_time)
+
+    print("Changing Prayer Times Method to ISNA")
+    print(f"\tMethod:\t\t\t{temp['method']}")
+    print(f"\tFajr:\t\t\t{temp['fajr']}")
+    print(f"\tMaghrib:\t\t{temp['maghrib']}")
+    print(f"\tʿIshāʾ:\t\t\t{temp['isha']}")
+    print(f"\tMidnight:\t\t{temp['midnight']}")
+
+    # Custom Prayer Angles
+    start_time = time()
+    local.set_custom_prayer_angles(fajr_angle=20, maghrib_angle=8, isha_angle=20)
+    local.calculate_prayer_times()
+    temp = local.prayer_times()
+    timing("Time to set custom angles, recalculate & fetch prayer_times()", start_time)
+
+    print("Custom Prayer Times Angles")
+    print(f"\tFajr:\t\t\t{temp['fajr']}")
+    print(f"\tMaghrib:\t\t{temp['maghrib']}")
+    print(f"\tʿIshāʾ:\t\t\t{temp['isha']}")
+
+    # Change ʿAṣr Calculation Method
+    start_time = time()
+    local.set_asr_type(1)
+    local.calculate_prayer_times()
+    temp = local.prayer_times()
+    timing("Time to change ʿaṣr type, recalculate & fetch prayer_times()", start_time)
+
+    print("Changing ʿAṣr Calculation Method to Ḥanafī")
+    print(f"\tʿAṣr:\t\t\t{temp['asr']}\n")
+
+def mecca(local: ITLocation):
+    start_time = time()
+    temp = local.mecca()
+    timing("Time to fetch mecca()", start_time)
+
+    print("Mecca")
+    print(f"\tDistance:\t\t{temp['distance']} km")
+    print(f"\tDirection:\t\t{temp['cardinal']} ({temp['angle']}°)")
+
+def update_time(local: ITLocation):
+    start_time = time()
+    local.update_time(datetime(2025, 2, 27, 21, 21, 54))
+    timing("Time to update_time()", start_time)
+    local.calculate_astro()
+
+def output_sun(local: ITLocation):
+    start_time = time()
+    temp = local.sun()
+    timing("Time to fetch sun()", start_time)
+
+    print("The Sun")
+    print(f"\tApp. Declination:\t{temp['declination']}°\t{decimal_to_dms(temp['declination'])}")
+    print(f"\tApp. Right Ascenscion:\t{temp['right_ascension']}")
+    print(f"\tAltitude:\t\t{temp['altitude']}°\t\t{decimal_to_dms(temp['altitude'])}")
+    print(f"\tAzimuth:\t\t{temp['azimuth']}°\t\t{decimal_to_dms(temp['azimuth'])}")
+
+def output_moon(local: ITLocation):
+    start_time = time()
+    temp = local.moon()
+    timing("Time to fetch moon()", start_time)
+
+    print("The Moon")
+    print(f"\tMoonset:\t\t{temp['moonset']}")
+    print(f"\tDeclination:\t\t{temp['declination']}°\t{decimal_to_dms(temp['declination'])}")
+    print(f"\tRight Ascenscion:\t{temp['right_ascension']}")
+    print(f"\tAltitude:\t\t{temp['altitude']}°\t\t{decimal_to_dms(temp['altitude'])}")
+    print(f"\tAzimuth:\t\t{temp['azimuth']}°\t\t{decimal_to_dms(temp['azimuth'])}")
+    print(f"\tIllumination:\t\t{temp['illumination']}%")
+
+def output_moonphases(local: ITLocation):
+    start_time = time()
+    temp = local.moonphases()
+    timing("Time to calculate moonphases and fetch moonphases()", start_time)
+
+    print("Moon Phases at Observer Timezone")
+    for item in temp:
+        print(f"\t{item['phase']}:\t\t{item['datetime'].strftime('%X %A, %d %B, %Y')}")
+
+def output_visibilities(local: ITLocation):
+    start_time = time()
+    temp = local.visibilities(days=3, type=0)
+    timing("Time to calculate new moon visibilities and fetch visibilities()", start_time)
+
+    print("Visibility Values of New Moon at Observer TZ 'Best Time' on...")
+    for date_label, values in temp.items():
+        print(f"\t{date_label}:\t{values[0]:.3f}\t({values[1]})")
+
+def main(local: ITLocation):
+    # Observer
+    output_observer(local)
+
+    # Astro
+    calculate_astro(local)
+
+    # Date & Time
+    output_dates_times(local)
+
+    # Prayer Times
+    prayer_times(local)
+
+    # Mecca
+    mecca(local)
+
+    # Update Time
+    update_time(local)
+
+    # The Sun
+    output_sun(local)
+
+    # The Moon
+    output_moon(local)
+
+    # Moon Phases
+    output_moonphases(local)
+
+    # New Moon Visibility
+    output_visibilities(local)
+
+
+if __name__ == '__main__':
+    start_time = time()
+    local = ITLocation(
+                        latitude=43.70011, 
+                        longitude=-79.4163, 
+                        elevation=150, 
+                        temperature=10,
+                        pressure=101.325,
+                        today=datetime(2025, 2, 27, 21, 21, 54),# + timedelta(days=15), 
+                        find_local_tz=False,
+                        auto_calculate=True
+                    )
+    timing("Time to initialize", start_time)
+
+    main(local)

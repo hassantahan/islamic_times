@@ -8,6 +8,9 @@ This module provides functions to:
   - Calculate the equation of time offset.
 
 This module should not be used directly unless the user is familiar with the underlying calculations.
+
+References:
+  - Jean Meeus, *Astronomical Algorithms*, 2nd Edition, Willmann-Bell, Inc., 1998.
 '''
 
 import math
@@ -164,55 +167,81 @@ __sun_nutation_coefficients = [
 # Chapter 22
 def oblique_eq(jde: float) -> float:
     '''
-    Calculate the obliquity of the ecliptic for a given Julian Ephemeris Day. See Chapter 22 of the Astronomical Algorthims for more information.
+    Calculate the obliquity of the ecliptic for a given Julian Ephemeris Day. See Chapter 22 of *Astronomical Algorthims* for more information.
+
+    Parameters:
+        jde (float): The Julian Ephemeris Day.
+
+    Returns:
+        float: The obliquity of the ecliptic in degrees.
     '''
     u = ((jde - te.J2000) / te.JULIAN_CENTURY) / 100
 
     eps = 23 + 26 / 60 + (21.448 / 3600)
 
-    for i in range(10):
-        eps += (__obliquity_terms[i] / 3600) * (u ** (i + 1))
+    powers = np.power(u, np.arange(1, len(__obliquity_terms) + 1))
+    eps += np.dot(__obliquity_terms, powers) / 3600
 
     return eps
 
 # Chapter 22
-def sun_nutation(jde: float) -> float:
+def sun_nutation(jde: float) -> Tuple[float, float]:
     '''
-    Calculate the sun's nutation for a given Julian Ephemeris Day. See Chapter 22 of the Astronomical Algorthims for more information.
+    Calculate the sun's nutation for a given Julian Ephemeris Day. See Chapter 22 of *Astronomical Algorthims* for more information.
+
+    Parameters:
+        jde (float): The Julian Ephemeris Day.
+
+    Returns:
+        tuple (Tuple[float, float]): The nutation in longitude and obliquity.
     '''
+
+    # Precompute time variables
     t = (jde - te.J2000) / te.JULIAN_CENTURY
-    t2 = t ** 2
-    t3 = t ** 3
+    t2 = t * t
+    t3 = t * t2
 
-    ta = [np.deg2rad(297.850363 + 445267.11148 * t - 0.0019142 * t2 + t3 / 189474.0),
-          np.deg2rad(357.52772 + 35999.05034 * t - 0.0001603 * t2 - t3 / 300000.0),
-          np.deg2rad(134.96298 + 477198.867398 * t + 0.0086972 * t2 + t3 / 56250.0),
-          np.deg2rad(93.27191 + 483202.017538 * t - 0.0036825 * t2 + t3 / 327270),
-          np.deg2rad(125.04452 - 1934.136261 * t + 0.0020708 * t2 + t3 / 450000.0)]
+    ta = np.array([
+        297.850363 + 445267.11148 * t - 0.0019142 * t2 + t3 / 189474.0,
+        357.52772 + 35999.05034 * t - 0.0001603 * t2 - t3 / 300000.0,
+        134.96298 + 477198.867398 * t + 0.0086972 * t2 + t3 / 56250.0,
+        93.27191 + 483202.017538 * t - 0.0036825 * t2 + t3 / 327270,
+        125.04452 - 1934.136261 * t + 0.0020708 * t2 + t3 / 450000.0
+    ]) % 360  
 
-    for i in range(5):
-        ta[i] %= (2 * np.pi)
+    ta = np.radians(ta)
 
-    dp, de = 0, 0
+    sun_args = np.array(__sun_nutation_arguments).reshape(-1, 5)
+    sun_coeff = np.array(__sun_nutation_coefficients).reshape(-1, 4)
 
-    for i in range(63):
-        ang = 0
-        for j in range(5):
-            if __sun_nutation_arguments[(i * 5) + j] != 0:
-                ang += __sun_nutation_arguments[(i * 5) + j] * ta[j]
-        dp += (__sun_nutation_coefficients[(i * 4) + 0] + __sun_nutation_coefficients[(i * 4) + 1] * t) * math.sin(ang)
-        de += (__sun_nutation_coefficients[(i * 4) + 2] + __sun_nutation_coefficients[(i * 4) + 3] * t) * math.cos(ang)
+    ang = np.dot(sun_args, ta)
 
-    deltaPsi, deltaEpsilon = dp / (3600.0 * 10000.0), de / (3600.0 * 10000.0)
+    dp = np.sum((sun_coeff[:, 0] + sun_coeff[:, 1] * t) * np.sin(ang))
+    de = np.sum((sun_coeff[:, 2] + sun_coeff[:, 3] * t) * np.cos(ang))
 
-    return deltaPsi, deltaEpsilon
+    deltaPsi = dp / (3600.0 * 10000.0)
+    deltaEpsilon = de / (3600.0 * 10000.0)
+
+    return (deltaPsi, deltaEpsilon)
 
 # Chapter 25
 def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, temperature: float = 10, pressure: float = 101) -> List[float]:
     '''
     Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 25 of the Astronomical Algorthims for more information.
 
-    Note: The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is disabled.
+    Parameters:
+        jde (float): The Julian Ephemeris Day.
+        deltaT (float): The difference between Terrestrial Dynamical Time and Universal Time (ΔT = TT - UT1) in seconds.
+        local_latitude (float): The observer's latitude in degrees.
+        local_longitude (float): The observer's longitude in degrees.
+        temperature (float): The observer's temperature in degrees Celsius.
+        pressure (float): The observer's pressure in kPa.
+
+    Returns:
+        list: It's complicated. To be fixed later.
+
+    Notes: 
+    - The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is disabled.
     '''
     T = (jde - te.J2000) / te.JULIAN_MILLENNIUM
     T2 = T ** 2
@@ -284,8 +313,8 @@ def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: fl
 
 
     return [
-        L0,                 # 0; mean longitude
-        M,                  # 1; mean anomaly
+        nut,                # 0; sun nutation
+        L0,                 # 1; sun mean longitude
         e,                  # 2; eccentricity
         C,                  # 3; sun's centre
         sunLong,            # 4; true longitude
@@ -304,17 +333,19 @@ def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: fl
         local_hour_angle    # 17
     ]
 
-def equation_of_time(jde: float, deltaT: float, local_latitude: float, local_longitude: float) -> float:
+def equation_of_time(deltaPsi: float, L0: float, epsilon: float, alpha: float) -> float:
     '''
-    Calculate the equation of time offset for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 28 of the Astronomical Algorthims for more information.
-    '''
+    Calculate the equation of time offset for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 28 of _Astronomical Algorthims_ for more information.
 
-    sun_factors = sunpos(jde, deltaT, local_latitude, local_longitude)
-    L0 = sun_factors[0]
-    nut = sun_nutation(jde)
-    epsilon = sun_factors[13]
-    deltaPsi = nut[0]
-    alpha = sun_factors[10]
+    Parameters:
+        deltaPsi (float): The sun's nutation in longitude.
+        L0 (float): The sun's mean longitude.
+        epsilon (float): The obliquity of the ecliptic.
+        alpha (float): The sun's right ascension.
+
+    Returns:
+        float: The equation of time offset in minutes.
+    '''
 
     # Only adjust alpha when it appears to have wrapped
     if L0 > 300 and alpha < 50:
@@ -326,9 +357,17 @@ def equation_of_time(jde: float, deltaT: float, local_latitude: float, local_lon
 
     return E
 
-def solar_hour_angle(latitude: float, declination: float, angle: float = 0.8333) -> float | str:
+def solar_hour_angle(latitude: float, declination: float, angle: float = 0.8333) -> float:
     '''
     Calculate the solar hour angle for a given latitude, solar declination, and angle. The angle is the zenith angle of the sun at the horizon. The default value is 0.8333° representing visible sunset.
+
+    Parameters:
+        latitude (float): The observer's latitude in degrees.
+        declination (float): The solar declination in degrees.
+        angle (float): The zenith angle of the sun at the horizon. Default is 0.8333° representing visible sunset.
+
+    Returns:
+        float: The solar hour angle in degrees, but 'np.inf' if the angle is not possible to achieve.
     '''
     dec = np.deg2rad(declination)
     lat = np.deg2rad(latitude)
@@ -352,6 +391,16 @@ def solar_hour_angle(latitude: float, declination: float, angle: float = 0.8333)
 def sunrise_sunset(set_or_rise: int, hour_angle: float) -> float:
     '''
     Calculate the time of sunrise or sunset for a given hour angle. The hour angle is the angle between the observer's meridian and the sun's position. The hour angle is positive for sunset and negative for sunrise.
+
+    Parameters:
+        set_or_rise (int): The value -1 for sunset and 1 for sunrise.
+        hour_angle (float): The hour angle in degrees.
+
+    Raises:
+        ValueError: If the 'set_or_rise' is not -1 or 1.
+
+    Returns:
+        float: The time of sunrise or sunset in hours from noon. Returns 'np.inf' if the angle is not possible to achieve
     '''
     
     if set_or_rise not in [1, -1]:

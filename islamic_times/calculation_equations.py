@@ -1,5 +1,5 @@
 """
-Module for basic astronomical and trigonometric calculations.
+Module for various calculations used in the Islamic Times package.
 
 This module provides functions for angle normalization, trigonometric operations in degrees,
 and conversions between different angle representations.
@@ -10,22 +10,46 @@ import numpy as np
 from typing import Tuple
 from islamic_times.time_equations import EARTH_RADIUS_KM
 
-def sin(a: float) -> float:
-    '''sin(x) function that auto-converts the argument from degrees to radians before evaluating.'''
-    return math.sin(np.deg2rad(a))
+def sin(angle: float) -> float:
+    '''sin(x) function that auto-converts the argument from degrees to radians before evaluating.
+    Parameters:
+        angle (float): The angle in degrees.
 
-def cos(a: float) -> float:
-    '''cos(x) function that auto-converts the argument from degrees to radians before evaluating.'''
-    return math.cos(np.deg2rad(a))
+    Returns:
+        float: The tangent of the angle.
+    '''
+    return math.sin(np.deg2rad(angle))
 
-def tan(a: float) -> float:
-    '''tan(x) function that auto-converts the argument from degrees to radians before evaluating.'''
-    return math.tan(np.deg2rad(a))
+def cos(angle: float) -> float:
+    '''cos(x) function that auto-converts the argument from degrees to radians before evaluating.
+
+    Parameters:
+        angle (float): The angle in degrees.
+
+    Returns:
+        float: The cosine of the angle.
+    '''
+    return math.cos(np.deg2rad(angle))
+
+def tan(angle: float) -> float:
+    '''tan(x) function that auto-converts the argument from degrees to radians before evaluating.
+    
+    Parameters:
+        angle (float): The angle in degrees.
+
+    Returns:
+        float: The tangent of the angle.
+    '''
+    return math.tan(np.deg2rad(angle))
 
 def decimal_to_dms(decimal_deg: float) -> Tuple[int, int, float]:
     '''Convert a degree value from degrees decimal to degrees-minutes-seconds.
     
-    Returns a tuple in the form (degrees, minutes, seconds).
+    Parameters:
+        decimal_deg (float): The angle in degrees.
+
+    Returns:
+        tuple (Tuple[int, int, float]): The angle in degrees-minutes-seconds.
     '''
     degrees = int(decimal_deg)
     minutes = int((decimal_deg - degrees) * 60)
@@ -36,7 +60,11 @@ def decimal_to_dms(decimal_deg: float) -> Tuple[int, int, float]:
 def decimal_to_hms(decimal_degrees: float) -> Tuple[int, int, float]:
     '''Convert a degree value from degrees decimal to hours-minutes-seconds.
     
-    Returns a tuple in the form (hours, minutes, seconds).
+    Parameters:
+        decimal_degrees (float): The angle in degrees.
+
+    Returns:
+        tuple (Tuple[int, int, float]): The angle in hours-minutes-seconds.
     '''
     hours = int(decimal_degrees / 15)
     minutes = int((decimal_degrees / 15 - hours) * 60)
@@ -45,6 +73,12 @@ def decimal_to_hms(decimal_degrees: float) -> Tuple[int, int, float]:
 
 def hms_to_decimal(hour_angle: Tuple[int, int, float]) -> float:
     '''Convert a degree value from hours-minutes-seconds to degrees decimal.
+
+    Parameters:
+        hour_angle (Tuple[int, int, float]): The angle in hours-minutes-seconds.
+
+    Returns:
+        float: The angle in degrees.
     '''
     degree = hour_angle[0] + hour_angle[1] / 60 + hour_angle[2] / 3600
     degree *= 15
@@ -53,7 +87,14 @@ def hms_to_decimal(hour_angle: Tuple[int, int, float]) -> float:
 def calculate_angle_diff(azimuth1: float, altitude1: float, azimuth2: float, altitude2: float) -> float:
     '''Difference between two angles in a radial coordinate system using the haversine formula. 
 
-    Inputs and return are in degrees.
+    Parameters:
+        azimuth1 (float): The azimuth angle of the first point (°).
+        altitude1 (float): The altitude angle of the first point (°).
+        azimuth2 (float): The azimuth angle of the second point (°).
+        altitude2 (float): The altitude angle of the second point (°).
+
+    Returns:
+        float: The angle difference between the two points (°).
     '''
     # Convert degrees to radians
     azimuth1, altitude1, azimuth2, altitude2 = map(math.radians, [azimuth1, altitude1, azimuth2, altitude2])
@@ -71,19 +112,18 @@ def calculate_angle_diff(azimuth1: float, altitude1: float, azimuth2: float, alt
     return angle_diff
 
 # Modified calculate_angle_diff for finding course angle
-def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float | float:
+def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> Tuple[float, float]:
     '''
-    ### Description
-        Calculate the great-circle distance and initial bearing between two points using the haversine formula.
+    Calculate the great-circle distance and initial bearing between two points using the haversine formula.
     
-    ### Args:
-        `lat1 (float)`: Latitude of point 1 (°).
-        `lon1 (float)`: Longitude of point 1 (°).
-        `lat2 (float)`: Latitude of point 2 (°).
-        `lon2 (float)`: Longitude of point 2 (°).
+    Parameters:
+        lat1 (float): Latitude of point 1 (°).
+        lon1 (float): Longitude of point 1 (°).
+        lat2 (float): Latitude of point 2 (°).
+        lon2 (float): Longitude of point 2 (°).
 
-    ### Returns:
-        `Tuple[float, float]`: (distance in km, course angle in degrees)
+    Returns:
+        tuple (Tuple[float, float]): The great-circle distance (km) and initial bearing (°).
     '''
     c = np.deg2rad(calculate_angle_diff(lon1, lat1, lon2, lat2))
     distance = EARTH_RADIUS_KM * c  # Earth radius in km
@@ -99,6 +139,12 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float | flo
 # Used for finding direction to Mecca 
 def get_cardinal_direction(degree: float) -> str:
     '''Determine the cardinal direction corresponding to an angle. Input is in degrees and 0 corresponds to North.
+
+    Parameters:
+        degree (float): The angle in degrees.
+
+    Returns:
+        str: The cardinal direction corresponding to the
     '''
     cardinals = [
         'N', 'NNE', 'NE', 'ENE',
@@ -112,6 +158,13 @@ def get_cardinal_direction(degree: float) -> str:
 # Returns the signed difference (b - a) in the range (-180, +180].
 def angle_diff(a: float, b: float) -> float:
     '''Compute the signed difference between two angles, normalized to (-180°, 180°].
+
+    Parameters:
+        a (float): The first angle in degrees.
+        b (float): The second angle in degrees.
+    
+    Returns:
+        float: The signed difference between the two angles
     '''
     d = (b - a) % 360.0      # now d is in [0, 360)
     if d > 180.0:
@@ -121,9 +174,19 @@ def angle_diff(a: float, b: float) -> float:
 # As found in Chapter 3 of AA
 # Only for angles
 def interpolation(n: float, y1: float, y2: float, y3: float) -> float:
-    '''Interpolate between angles with the method described in Jean Meeus' "Astronomical Algorithms", Chapter 3.
+    '''Interpolate between angles with the method described in Jean Meeus' *Astronomical Algorithms*, Chapter 3.
 
-    Modified so that it works for angles in degrees and proper wrapping occurs.
+    Parameters:
+        n (float): The fraction of the interpolation.
+        y1 (float): The angle at the first point.
+        y2 (float): The angle at the second point.
+        y3 (float): The angle at the third point.
+    
+    Returns:
+        float: The interpolated angle.
+
+    Notes:
+    - The function has been modified so that it works for angles in degrees and proper wrapping occurs.
     '''
     a = angle_diff(y1, y2)
     b = angle_diff(y2, y3)
