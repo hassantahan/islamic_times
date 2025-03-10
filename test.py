@@ -45,14 +45,14 @@ def output_dates_times(local: ITLocation):
     print(f"\tEquation of Time:\t{temp['eq_of_time']} minutes")
     print(f"\tEstimated ΔT:\t\t{temp['deltaT']}s")
 
-def prayer_times(local: ITLocation):
+def update_prayer_times(local: ITLocation):
     # Calculate Prayer Times
     start_time = time()
     local.calculate_prayer_times()
     timing("Time to calculate_prayer_times()", start_time)
 
+def prayer_times(local: ITLocation):
     # Fetch Prayer Times
-
     start_time = time()
     temp = local.prayer_times()
     timing("Time to fetch prayer_times()", start_time)
@@ -166,12 +166,13 @@ def main(local: ITLocation):
     output_observer(local)
 
     # Astro
-    calculate_astro(local)
+    #calculate_astro(local)
 
     # Date & Time
     output_dates_times(local)
 
     # Prayer Times
+    #update_prayer_times(local)
     prayer_times(local)
 
     # Mecca
@@ -196,15 +197,12 @@ def main(local: ITLocation):
 if __name__ == '__main__':
     start_time = time()
     local = ITLocation(
-                        latitude=43.70011, 
-                        longitude=-79.4163, 
-                        elevation=150, 
-                        temperature=10,
-                        pressure=101.325,
-                        today=datetime(2025, 2, 27, 21, 21, 54),# + timedelta(days=15), 
-                        find_local_tz=False,
+                        latitude=43.70011,
+                        longitude=-79.4163,
+                        elevation=150,
+                        today=datetime.now(),
+                        find_local_tz=True,
                         auto_calculate=True
                     )
     timing("Time to initialize", start_time)
-
     main(local)

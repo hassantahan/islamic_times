@@ -79,6 +79,15 @@ class ITLocation:
     - Prayer times calculation methods: [PrayTimes Wiki](http://praytimes.org/wiki/Calculation_Methods)
     """
 
+    # TODO
+    __slots__ = (
+        "latitude", "longitude", "elevation", "temperature", "pressure", "today", "find_local_tz", "auto_calculate", "datetime_modified", "prayers_modified", "tz_name", "utc_diff", 
+        "asr_type", "fajr_angle", "isha_angle", "maghrib_angle", "midnight_type", "method", "times_of_prayer", "islamic_date", 
+        "jd", "deltaT", "jde", 
+        "sun_factors", "delPsi", "sun_declination", "sun_alpha", "solar_angle", "sun_alt", "sun_az", 
+        "moon_factors", "moon_declination", "moon_alpha", "moon_pi", "moon_alt", "moon_az", "moonset", "moon_illumin"
+    )
+
     ##### Prayer Methods #####
     # http://praytimes.org/wiki/Calculation_Methods
     # fajr, isha, maghrib, midnight (0 --> sunset to sunrise, 1 --> sunset to fajr)
@@ -124,6 +133,11 @@ class ITLocation:
         http://praytimes.org/wiki/Calculation_Methods
     """
 
+    def __setattr__(self, key, value):
+        if key in self.__slots__:
+            raise AttributeError(f"'{key}' is immutable. Modify attributes using class methods.")
+        else:
+            raise AttributeError(f"Cannot add new attribute '{key}' to immutable class.")
 
     def __init__(self, latitude: float = 51.477928,
                  longitude: float = -0.001545,
@@ -186,16 +200,17 @@ class ITLocation:
             elif name == "longitude":
                 if val > 180 or val < -180:
                     raise ValueError(f"Input for '{name}' is out of range. Longitudes must be between -180° and 180°.")
-        self.latitude: float = latitude
-        self.longitude: float = longitude
-        self.elevation: float = elevation
-        self.temperature: float = temperature
-        self.pressure: float = pressure
+                
+        super().__setattr__('latitude', latitude)
+        super().__setattr__('longitude', longitude)
+        super().__setattr__('elevation', elevation)
+        super().__setattr__('temperature', temperature)
+        super().__setattr__('pressure', pressure)
 
         # Check the date if it is valid
         if not isinstance(today, datetime):
             raise TypeError(f"'{today}' must be of type `datetime`, but got `{type(today).__name__}`.")
-        self.today: datetime = today
+        super().__setattr__('today', today)
 
         # Check if find_local_tz is either 0, 1, or a bool value
         if not isinstance(find_local_tz, bool):
@@ -203,34 +218,37 @@ class ITLocation:
                 raise ValueError(f"'find_local_tz' is out of range; it must be of type `bool` or either the numerical value of 0 or 1.")
             else:
                 raise TypeError(f"'find_local_tz' must be of type `bool` or either the numerical value of 0 or 1, but got `{type(find_local_tz).__name__}`.")  
-        self.find_local_tz: float = find_local_tz
+        super().__setattr__('find_local_tz', find_local_tz)
         
         # Determine UTC Offset
         self.__calculate_utc_offset(find_local_tz)
-        self.utc_diff *= -1
+        super().__setattr__('utc_diff',  self.utc_diff* -1)
 
-        self.auto_calculate: bool = auto_calculate
+        super().__setattr__('auto_calculate', auto_calculate)
 
         # Calculate the astronomical parameters
         if self.auto_calculate:
             self.calculate_astro()
-            self.datetime_modified: bool = False
-            self.prayers_modified: bool = False
+            super().__setattr__('datetime_modified', False)
+            super().__setattr__('prayers_modified', False)
         else:
-            self.datetime_modified: bool = True
-            self.prayers_modified: bool = True
+            super().__setattr__('datetime_modified', True)
+            super().__setattr__('prayers_modified', True)
         
         # Check both asr and prayer method input values
         if asr_type in (0, 1):
-            setattr(self, "asr_type", asr_type)
+            super().__setattr__('asr_type', asr_type)
         else:
             raise ValueError(f"'asr_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {asr_type}.")
-        self.asr_type: int = asr_type
 
         for group_name, (group, values) in self.__PRAYER_METHODS.items():
             if method.upper() in group:
-                self.fajr_angle, self.isha_angle, self.maghrib_angle, self.midnight_type = map(lambda x: x[0](x[1]), zip([float, float, float, int], values))
-                self.method: str = group_name.upper()
+                fajr_angle, isha_angle, maghrib_angle, midnight_type = map(lambda x: x[0](x[1]), zip([float, float, float, int], values))
+                super().__setattr__('fajr_angle', fajr_angle)
+                super().__setattr__('isha_angle', isha_angle)
+                super().__setattr__('maghrib_angle', maghrib_angle)
+                super().__setattr__('midnight_type', midnight_type)
+                super().__setattr__('method', group_name.upper())
                 break
         else:
             # Raise an error if no match is found
@@ -240,20 +258,25 @@ class ITLocation:
         # Set the default prayer definitions
         self.set_prayer_method(method) # This also calculates the prayer times if auto_calculate is True
 
-    def __calculate_utc_offset(self, find_local_tz: bool) -> float:
+    def __calculate_utc_offset(self, find_local_tz: bool):
         """ Determine UTC offset in hours based on location if needed.
+
+        Parameters:
+            find_local_tz (bool): Controls whether or not to use the timezonefinder library to fine the timezone of the observer
         """
         if self.today.tzinfo == None:
             ### Find UTC Offset According to Lat/Long & adjust datetime
             # This is very computationally expensive
             if find_local_tz: 
-                self.tz_name, self.utc_diff = te.find_utc_offset(self.latitude, self.longitude, self.today)
+                tz_name, utc_diff = te.find_utc_offset(self.latitude, self.longitude, self.today)
+                super().__setattr__('tz_name', tz_name)
+                super().__setattr__('utc_diff', utc_diff)
             else:
-                self.tz_name: timezone = timezone.utc
-                self.utc_diff: float = 0
+                super().__setattr__('tz_name', timezone)
+                super().__setattr__('utc_diff', 0)
         else:  
-            self.tz_name: timezone = self.today.tzinfo, 
-            self.utc_diff: float = self.today.utcoffset().total_seconds() / 3600
+            super().__setattr__('tz_name', self.today.tzinfo)
+            super().__setattr__('utc_diff', self.today.utcoffset().total_seconds() / 3600)
 
     # Used to change observe date & time
     # By default, updates to datetime.now() if argument is not specified
@@ -277,14 +300,14 @@ class ITLocation:
 
         # Time is only updates to the latest if no argument is passed
         if date_time is None:
-            self.today = datetime.now(self.today.tzinfo)
+            super().__setattr__('today', datetime.now(self.today.tzinfo))
         else:
-            self.today = date_time
+            super().__setattr__('today', date_time)
         
         # Set bools for astro_calculation stuff
         if not self.auto_calculate:
-            self.datetime_modified = True
-            self.prayers_modified = True
+            super().__setattr__('datetime_modified', True)
+            super().__setattr__('prayers_modified', True)
         else:
             self.calculate_astro()
 
@@ -308,47 +331,48 @@ class ITLocation:
         """
 
         ### Calculate Julian Date
-        self.jd: float = te.gregorian_to_jd(self.today, -1 * self.utc_diff)
-        self.deltaT: float = te.delta_t_approx(self.today.year, self.today.month)
-        self.jde: float = self.jd + self.deltaT / 86400
+        super().__setattr__('jd', te.gregorian_to_jd(self.today, -1 * self.utc_diff))
+        super().__setattr__('deltaT', te.delta_t_approx(self.today.year, self.today.month))
+        super().__setattr__('jde', self.jd + self.deltaT / 86400)
 
         ### Calculate Current Islamic Date (estimate)
         # TODO: Look into newer versions of this, see if it can be corrected. See function for more info.
-        self.islamic_date: List[int] = te.gregorian_to_hijri(self.today.year, self.today.month, self.today.day)
+        super().__setattr__('islamic_date', te.gregorian_to_hijri(self.today.year, self.today.month, self.today.day))
 
         ### Sun & Moon Properties Calculations
         # Get factors arrays
-        self.sun_factors: List[float] = se.sunpos(self.jde, self.deltaT, self.latitude, self.longitude, self.temperature, self.pressure)
-        self.delPsi, self.delEps = map(float, self.sun_factors[0][:2])
-        self.moon_factors: List[float] = me.moonpos(self.jde, self.deltaT ,self.latitude, self.longitude, self.delPsi, self.sun_factors[13], self.elevation)
+        super().__setattr__('sun_factors', se.sunpos(self.jde, self.deltaT, self.latitude, self.longitude, self.temperature, self.pressure))
+        delPsi = self.sun_factors[0][0]
+        super().__setattr__('delPsi', delPsi)
+        super().__setattr__('moon_factors', me.moonpos(self.jde, self.deltaT ,self.latitude, self.longitude, self.delPsi, self.sun_factors[13], self.elevation))
 
         # Important Sun Factors placed into local variables
-        self.sun_declination: float = self.sun_factors[11]
-        self.sun_alpha: float = ce.decimal_to_hms(self.sun_factors[10])
-        self.solar_angle: float = se.solar_hour_angle(self.latitude, self.sun_declination)
-        self.sun_alt: float = self.sun_factors[15]
-        self.sun_az: float = self.sun_factors[16]
+        super().__setattr__('sun_declination', self.sun_factors[11])
+        super().__setattr__('sun_alpha', ce.decimal_to_hms(self.sun_factors[10]))
+        super().__setattr__('solar_angle', se.solar_hour_angle(self.latitude, self.sun_declination))
+        super().__setattr__('sun_alt', self.sun_factors[15])
+        super().__setattr__('sun_az', self.sun_factors[16])
 
         # Important Moon Factors placed into local variables
-        self.moon_declination: float = self.moon_factors[5]
-        self.moon_alpha: float = ce.decimal_to_hms(self.moon_factors[4])
-        self.moon_pi: float = self.moon_factors[8]
-        self.moon_alt: float = self.moon_factors[9]
-        self.moon_az: float = self.moon_factors[10]
+        super().__setattr__('moon_declination', self.moon_factors[5])
+        super().__setattr__('moon_alpha', ce.decimal_to_hms(self.moon_factors[4]))
+        super().__setattr__('moon_pi', self.moon_factors[8])
+        super().__setattr__('moon_alt', self.moon_factors[9])
+        super().__setattr__('moon_az', self.moon_factors[10])
 
         # Moon calculations
-        self.moonset: datetime = self.__find_proper_moonset(self.today)
-        self.moon_illumin: float = me.moon_illumination(
+        super().__setattr__('moonset', self.__find_proper_moonset(self.today))
+        super().__setattr__('moon_illumin', me.moon_illumination(
                                 self.sun_declination, 
                                 self.sun_factors[10], 
                                 self.moon_declination, 
                                 self.moon_factors[4], 
                                 self.sun_factors[6], 
                                 self.moon_factors[2] / te.ASTRONOMICAL_UNIT
-                            )
+                            ))
         
         # Astronomical parameters have been calculated so the flag is set to False
-        self.datetime_modified = False
+        super().__setattr__('datetime_modified', False)
         
     # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
     def __find_proper_moonset(self, date: datetime) -> datetime:
@@ -402,10 +426,10 @@ class ITLocation:
         if not can_calculate:
             raise ValueError("Since auto_calculate has been set to false, prayer times cannot be calculated since astronomical parameters have not been calculated. Call 'calculate_astro()' first.")
 
-        self.times_of_prayer = pt.calculate_prayer_times(self.jde, self.deltaT, self.latitude, self.longitude, self.utc_diff, 
+        super().__setattr__('times_of_prayer', pt.calculate_prayer_times(self.jde, self.deltaT, self.latitude, self.longitude, self.utc_diff, 
                                                          (self.sun_declination, self.solar_angle, self.delPsi, self.sun_factors[1], self.sun_factors[13], self.sun_factors[10]),
                                                         (self.fajr_angle, self.maghrib_angle, self.isha_angle, self.midnight_type, self.asr_type), 
-                                                        self.islamic_date[2] == 9)
+                                                        self.islamic_date[2] == 9))
         
         def check_datetime(val: datetime | str) -> datetime | str:
             if type(val) is datetime:
@@ -413,10 +437,10 @@ class ITLocation:
             else:
                 return val
             
-        self.times_of_prayer = {key: check_datetime(value) for key, value in self.times_of_prayer.items()}
+        super().__setattr__('times_of_prayer', {key: check_datetime(value) for key, value in self.times_of_prayer.items()})
 
         # Prayers have been calculated so the flag is set to False
-        self.prayers_modified = False
+        super().__setattr__('prayers_modified', False)
 
     # Set the method of calculating prayer times among the available default options
     # The default option (from creation) is the Jaʿfarī method.
@@ -441,8 +465,12 @@ class ITLocation:
         # Find the matching group
         for group_name, (group, values) in self.__PRAYER_METHODS.items():
             if method.upper() in group:
-                self.fajr_angle, self.isha_angle, self.maghrib_angle, self.midnight_type = values
-                self.method = group_name
+                f, i, m, d = values
+                super().__setattr__('fajr_angle', f)
+                super().__setattr__('isha_angle', i)
+                super().__setattr__('maghrib_angle', m) 
+                super().__setattr__('midnight_type', d)
+                super().__setattr__('method', group_name)
                 break
         else:
             # Raise an error if no match is found
@@ -453,8 +481,19 @@ class ITLocation:
         if self.auto_calculate:
             self.calculate_prayer_times()
         else:
-            self.prayers_modified = True
+            super().__setattr__('prayers_modified', True)
     
+    # Helper function to validate and set angle
+    def __validate_and_set(self, attribute_name: str, value: float | int) -> None:
+        if value is not None:
+            if isinstance(value, (int, float)):  # Check if it's a number
+                if value > 0:
+                    super().__setattr__(f"{attribute_name}", value)
+                else:
+                    ValueError(f"{attribute_name} must be greater than 0. Invalid value: {value}")
+            else:
+                raise ValueError(f"{attribute_name} must be a number. Invalid value: {value}")
+
     # Alows user to set their own solar hour angles for prayer time calculations.
     def set_custom_prayer_angles(self, fajr_angle: float = None, maghrib_angle: float = None, isha_angle: float = None) -> None:
         """
@@ -475,31 +514,20 @@ class ITLocation:
             - `self.method` is set to 'Custom' after calling this method.
             - Call `set_prayer_method()` to reset to a predefined method.
         """
-        
-        # Helper function to validate and set angle
-        def validate_and_set(attribute_name, value):
-            if value is not None:
-                if isinstance(value, (int, float)):  # Check if it's a number
-                    if value > 0:
-                        setattr(self, attribute_name, value)
-                    else:
-                        ValueError(f"{attribute_name} must be greater than 0. Invalid value: {value}")
-                else:
-                    raise ValueError(f"{attribute_name} must be a number. Invalid value: {value}")
 
         # Validate and set each angle
-        validate_and_set("fajr_angle", fajr_angle)
-        validate_and_set("maghrib_angle", maghrib_angle)
-        validate_and_set("isha_angle", isha_angle)
+        self.__validate_and_set('fajr_angle', fajr_angle)
+        self.__validate_and_set('maghrib_angle', maghrib_angle)
+        self.__validate_and_set('isha_angle', isha_angle)
 
         # Method is now custom
-        self.method = 'Custom'
+        super().__setattr__('method', 'Custom')
 
         # Update prayer times
         if self.auto_calculate:
             self.calculate_prayer_times()
         else:
-            self.prayers_modified = True
+            super().__setattr__('prayers_modified', True)
     
     # Separated from angles since it is defined by shadow ratio
     def set_asr_type(self, asr_type: int = 0) -> None:
@@ -523,18 +551,18 @@ class ITLocation:
         """
 
         if asr_type in (0, 1):
-            setattr(self, "asr_type", asr_type)
+            super().__setattr__("asr_type", asr_type)
         else:
             raise ValueError(f"'asr_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {asr_type}")
 
         # Method is now custom
-        self.method = 'Custom'
+        super().__setattr__('method', 'Custom')
 
         # Update prayer times
         if self.auto_calculate:
             self.calculate_prayer_times()
         else:
-            self.prayers_modified = True
+            super().__setattr__('prayers_modified', True)
 
     # Set to either 0 (sunset to sunrise; the majority method) or 1 (sunset to fajr, the 'Jaʿfarī' method)
     def set_midnight_type(self, midnight_type: int = 0) -> None:
@@ -558,18 +586,18 @@ class ITLocation:
         """
 
         if midnight_type in (0, 1):
-            setattr(self, "midnight_type", midnight_type)
+           super().__setattr__("midnight_type", midnight_type)
         else:
             raise ValueError(f"'midnight_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {midnight_type}")
 
         # Method is now custom
-        self.method = 'Custom'
+        super().__setattr__('method', 'Custom')
 
         # Update prayer times
         if self.auto_calculate:
             self.calculate_prayer_times()
         else:
-            self.prayers_modified = True
+            super().__setattr__('prayers_modified', True)
 
     # Return Observer Parameters
     def observer(self) -> Dict[str, float]:
@@ -782,8 +810,8 @@ class ITLocation:
         - Type 1: Yallop, 1997; a.k.a. HMNAO TN No. 69
 
         Parameters:
-            days (int): How many days from the new moon to look at visibilities.
-            type (int): Which method to classify visibilities.
+            days (int, optional): How many days from the new moon to look at visibilities. Defaults to 3 days.
+            type (int, optional): Which method to classify visibilities. Either 0 (referring to Odeh, 2006) or 1 (referring to Yallop, 1997). Defaults 0.
 
         Returns:
             list (List[Dict[str, str | float]]): A list of dictionaries containing:
