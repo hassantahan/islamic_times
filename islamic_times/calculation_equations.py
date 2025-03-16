@@ -5,7 +5,6 @@ This module provides functions for angle normalization, trigonometric operations
 and conversions between different angle representations.
 """
 
-import math
 import numpy as np
 from typing import Tuple
 from islamic_times.time_equations import EARTH_RADIUS_KM
@@ -18,7 +17,7 @@ def sin(angle: float) -> float:
     Returns:
         float: The tangent of the angle.
     '''
-    return math.sin(np.deg2rad(angle))
+    return np.sin(np.deg2rad(angle))
 
 def cos(angle: float) -> float:
     '''cos(x) function that auto-converts the argument from degrees to radians before evaluating.
@@ -29,7 +28,7 @@ def cos(angle: float) -> float:
     Returns:
         float: The cosine of the angle.
     '''
-    return math.cos(np.deg2rad(angle))
+    return np.cos(np.deg2rad(angle))
 
 def tan(angle: float) -> float:
     '''tan(x) function that auto-converts the argument from degrees to radians before evaluating.
@@ -40,7 +39,7 @@ def tan(angle: float) -> float:
     Returns:
         float: The tangent of the angle.
     '''
-    return math.tan(np.deg2rad(angle))
+    return np.tan(np.deg2rad(angle))
 
 def decimal_to_dms(decimal_deg: float) -> Tuple[int, int, float]:
     '''Convert a degree value from degrees decimal to degrees-minutes-seconds.
@@ -97,17 +96,17 @@ def calculate_angle_diff(azimuth1: float, altitude1: float, azimuth2: float, alt
         float: The angle difference between the two points (°).
     '''
     # Convert degrees to radians
-    azimuth1, altitude1, azimuth2, altitude2 = map(math.radians, [azimuth1, altitude1, azimuth2, altitude2])
+    azimuth1, altitude1, azimuth2, altitude2 = map(np.radians, [azimuth1, altitude1, azimuth2, altitude2])
 
     # Apply the haversine formula
     delta_azimuth = azimuth2 - azimuth1
     delta_altitude = altitude2 - altitude1
 
-    a = math.sin(delta_altitude / 2)**2 + math.cos(altitude1) * math.cos(altitude2) * math.sin(delta_azimuth / 2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    a = np.sin(delta_altitude / 2)**2 + np.cos(altitude1) * np.cos(altitude2) * np.sin(delta_azimuth / 2)**2
+    c = 2 * np.atan2(np.sqrt(a), np.sqrt(1 - a))
 
     # Convert the angle difference from radians to degrees
-    angle_diff = math.degrees(c)
+    angle_diff = np.degrees(c)
     
     return angle_diff
 
@@ -129,10 +128,10 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> Tuple[float
     distance = EARTH_RADIUS_KM * c  # Earth radius in km
 
     # Calculate course angle
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    y = math.sin(lon2 - lon1) * math.cos(lat2)
-    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(lon2 - lon1)
-    course_angle = math.degrees(math.atan2(y, x))
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    y = np.sin(lon2 - lon1) * np.cos(lat2)
+    x = np.cos(lat1) * np.sin(lat2) - np.sin(lat1) * np.cos(lat2) * np.cos(lon2 - lon1)
+    course_angle = np.degrees(np.atan2(y, x))
 
     return distance, course_angle
 
@@ -195,3 +194,41 @@ def interpolation(n: float, y1: float, y2: float, y3: float) -> float:
     value = y2 + n / 2 * (a + b + n * c)
 
     return (value + 360) % 360
+
+# Fixing RA and Dec for apparency pg. 279
+def correct_ra_dec(ra: float, dec: float, lha: float, parallax: float, lat: float, elev: float, dist: float = EARTH_RADIUS_KM) -> Tuple[float, float]:
+	'''
+	Correct the Moon's Right Ascension and Declination for apparent position. See Chapter 40 of *Astronomical Algorthims* for more information.
+
+	Parameters:
+		ra (float): The Moon's Right Ascension (°).
+		dec (float): The Moon's Declination (°).
+		lha (float): The Local Hour Angle (°).
+		parallax (float): The Moon's parallax (°).
+		lat (float): The observer's latitude (°).
+		elev (float): The observer's elevation above sea level (m).
+		dist (float): The observer's distance from the celestial body, usually the Moon or the Sun (km).
+
+	Returns:
+		tuple (Tuple[float, float]): The topocentric Right Ascension and Declination (°).
+	'''
+	a: float = dist
+	f: float = 1 / 298.257
+	b: float = a * (1 - f)
+
+	elev /= 1000
+
+	u: float = np.rad2deg(np.arctan2(b / a * tan(lat), 1))
+	p_sin_psi_prime: float = b / a * sin(u) + elev / dist * sin(lat)
+	p_cos_psi_prime: float = cos(u) + elev / dist * cos(lat)
+
+	temp_num: float = -1 * p_cos_psi_prime * sin(parallax) * sin(lha)
+	temp_denom: float = cos(dec) - p_cos_psi_prime * sin(parallax) * sin(lha)
+	deltaA: float = np.rad2deg(np.arctan2(temp_num, temp_denom))
+
+	temp_num: float = (sin(dec) - p_sin_psi_prime * sin(parallax)) * cos(deltaA)
+
+	ascension_prime: float = ra + deltaA
+	declination_prime: float = np.rad2deg(np.arctan2(temp_num, temp_denom))
+
+	return (ascension_prime, declination_prime)

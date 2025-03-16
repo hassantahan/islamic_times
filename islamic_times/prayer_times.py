@@ -6,7 +6,7 @@ It accounts for differences in ʿAṣr calculations, Islamic midnight determinat
 adjustments for extreme latitudes.
 
 ### Features:
-- Computes **all major prayer times**: Fajr, Sunrise, Noon (Dhuhr), ʿAṣr, Sunset, Maghrib, ʿIshāʾ, and Midnight.
+- Computes **all major prayer times**: Fajr, Sunrise, Solar Noon (Ẓuhr), ʿAṣr, Sunset, Maghrib, ʿIshāʾ, and Midnight.
 - Supports different **Asr calculation methods** (standard & Hanafi).
 - Handles **Makkah-based** Isha timing in Ramadan.
 - Computes **Islamic midnight** based on the next day's Fajr or Solar Midnight.
@@ -62,7 +62,7 @@ def calculate_prayer_times(jde: float, deltaT: float, latitude: float, longitude
     - The **Makkah method** sets **Isha time** as **one hour after Maghrib (two hours in Ramadan)**.
     - **Islamic midnight** is determined based on either:
         	midnight_type=0`: Midpoint between sunset and sunrise.
-        	midnight_type=1`: Midpoint between sunset and the next day’s Fajr.
+        	midnight_type=1`: Midpoint between sunset and the next day''s Fajr.
     """
 
     # Extract parameters
@@ -96,7 +96,7 @@ def calculate_prayer_times(jde: float, deltaT: float, latitude: float, longitude
     standard_sunset = te.solar2standard(jd, solar_sunset, utc_diff, longitude, eq_of_time)
     
     # Calculate ʿAṣr time
-    asr_hours = asr_time(latitude, sun_declination, t=asr_type + 1)
+    asr_hours = asr_time(latitude, sun_declination, ts=asr_type + 1)
     
     if asr_hours != np.inf:
         standard_asr = standard_noon + timedelta(hours=asr_hours)
@@ -160,7 +160,7 @@ def find_tomorrow_time(jde: float, deltaT: float, utc_change: float, lat: float,
     Parameters:
     	jde (float): Julian Ephemeris Date (JDE) for the current day.
     	deltaT (float): Difference between Terrestrial Time and Universal Time.
-    	utc_change (float): Observer’s UTC offset.
+    	utc_change (float): Observer's UTC offset.
     	lat (float): Latitude of the observer.
     	long (float): Longitude of the observer.
     	eq_of_time_minutes (float): Equation of Time (minutes) for correcting solar time.
@@ -171,7 +171,8 @@ def find_tomorrow_time(jde: float, deltaT: float, utc_change: float, lat: float,
     """
     jde_tomorrow = jde + 1
 
-    tomorrow_sun_declination = se.sunpos(jde_tomorrow, deltaT, lat, long)[11]
+    sun_params = se.sunpos(jde_tomorrow, deltaT, lat, long)
+    tomorrow_sun_declination = sun_params.apparent_declination
     tomorrow_time_solar_angle = se.solar_hour_angle(lat, tomorrow_sun_declination, angle)
     tomorrow_solar_time = se.sunrise_sunset(-1, tomorrow_time_solar_angle)
     tomorrow_standard_time = te.solar2standard(jde_tomorrow - deltaT / 86400, tomorrow_solar_time, utc_change, long, eq_of_time_minutes)
@@ -181,7 +182,7 @@ def find_tomorrow_time(jde: float, deltaT: float, utc_change: float, lat: float,
 # ʿAṣr time
 # Type 0: Most schools
 # Type 1: Ḥanafī definition
-def asr_time(lat: float, dec: float, t: int = 1) -> float:
+def asr_time(lat: float, dec: float, ts: int = 1) -> float:
     """
     Computes the **ʿaṣr prayer time** based on the observer's **shadow ratio**.
 
@@ -192,8 +193,8 @@ def asr_time(lat: float, dec: float, t: int = 1) -> float:
 
     Parameters:
         lat (float): Observer's latitude in decimal degrees.
-        dec (float): Sun’s **declination** at the given time.
-        t (int, optional): ʿaṣr calculation method:
+        dec (float): Sun's **declination** at the given time.
+        ts (int, optional): ʿaṣr calculation method:
             - 1 (Standard) → Shadow ratio of 1:1.
             - 2 (Hanafi) → Shadow ratio of 2:1.  
 
@@ -204,7 +205,7 @@ def asr_time(lat: float, dec: float, t: int = 1) -> float:
     - **If the sun never reaches the required shadow ratio**, the function returns **infinity (`np.inf`)**.
     - This condition occurs in **polar regions** during certain seasons.
     """
-    temp_num = ce.sin(np.rad2deg(np.arctan2(1, t + ce.tan(lat - dec)))) - ce.sin(lat) * ce.sin(dec)
+    temp_num = ce.sin(np.rad2deg(np.arctan2(1, ts + ce.tan(lat - dec)))) - ce.sin(lat) * ce.sin(dec)
     temp_denom = ce.cos(lat) * ce.cos(dec)
     
     # Sometimes, ʿaṣr cannot be calculated because the sun's geometry at the given date and coordintes does not satisfy the shadow ratio

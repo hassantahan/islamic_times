@@ -16,10 +16,11 @@ References:
 import math
 import numpy as np
 from typing import List, Tuple
+from dataclasses import dataclass
 from islamic_times import calculation_equations as ce
 from islamic_times import time_equations as te
 
-__obliquity_terms = [
+__OBLIQUITY_TERMS = [
     -4680.93,
     -1.55,
     1999.25,
@@ -32,7 +33,7 @@ __obliquity_terms = [
     2.45
 ]
 
-__sun_nutation_arguments = [
+__SUN_NUTATION_ARGUMENTS = [
      0,  0,  0,  0,  1,
     -2,  0,  0,  2,  2,
      0,  0,  0,  2,  2,
@@ -98,7 +99,7 @@ __sun_nutation_arguments = [
      2, -1,  0,  2,  2
 ]
 
-__sun_nutation_coefficients = [
+__SUN_NUTATION_COEFFICIENTS = [
     -171996,  -174.2,   92025,     8.9,          #  0,  0,  0,  0,  1 
      -13187,    -1.6,    5736,    -3.1,          # -2,  0,  0,  2,  2 
       -2274,     -.2,     977,     -.5,          #  0,  0,  0,  2,  2 
@@ -164,6 +165,84 @@ __sun_nutation_coefficients = [
          -3,       0,       0,       0           #  2, -1,  0,  2,  2 
 ]
 
+@dataclass
+class Sun:
+    jde: float
+    deltaT: float
+    local_latitude: float
+    local_longitude: float
+    temperature: float = 10
+    pressure: float = 101
+
+    def calculate(self):
+        t = (self.jde - te.J2000) / te.JULIAN_MILLENNIUM
+        t2 = t ** 2
+        t3 = t ** 3
+        t4 = t ** 4
+        t5 = t ** 5
+
+        # Coordinates
+        self.mean_longitude: float = (280.4664567 + (360007.6982779 * t) + (0.03032028 * t2) + (t3 / 49931) - (t4 / 15300) - (t5 / 2000000)) % 360
+        self.mean_anomaly: float = (357.52911 + 359990.50340 * t - 0.001603 * t2 - t3 / 30000) % 360
+
+        self.earth_oribit_eccentricity: float = 0.016708634 - 0.00042037 * t - 0.000001267 * t2
+        
+        self.sun_centre: float = (1.914602 - 0.04817 * t - 0.000014 * t2) * ce.sin(self.mean_anomaly) + \
+                            (0.019993 - 0.000101 * t) * ce.sin(2 * self.mean_anomaly) + \
+                            0.000289 * ce.sin(3 * self.mean_anomaly)
+
+        self.true_longitude: float = self.mean_longitude + self.sun_centre
+        self.true_anomaly: float = self.mean_anomaly + self.sun_centre
+
+        self.geocentric_distance: float = (1.000001018 * (1 - self.earth_oribit_eccentricity ** 2)) / (1 + (self.earth_oribit_eccentricity * ce.cos(self.true_anomaly)))
+        self.omega: float = 125.04452 - 19341.36261 * t + 0.020708 * t2 + t3 / 45000
+
+        self.apparent_longitude: float = self.true_longitude - 0.00569 - 0.00478 * ce.sin(self.omega)
+
+        # TODO: Chapter 26 for referencing to J2000.0 standard
+
+        self.nutation: Tuple[float, float] = sun_nutation(self.jde)
+        self.delta_obliquity: float = self.nutation[1]
+        self.mean_obliquity: float = oblique_eq(self.jde)
+        self.true_obliquity: float = self.mean_obliquity + self.delta_obliquity
+
+        # True Right ascension (RA) & declination calculations
+        self.true_right_ascension: float = (np.rad2deg(math.atan2(ce.cos(self.mean_obliquity) * ce.sin(self.true_longitude), ce.cos(self.true_longitude)))) % 360
+        self.true_declination: float = np.rad2deg(math.asin(ce.sin(self.mean_obliquity) * ce.sin(self.true_longitude)))
+
+        # Adjust RA and declination to find their apparents
+        self.apparent_right_ascension: float = (np.rad2deg(math.atan2(ce.cos(self.true_obliquity + 0.00256 * ce.cos(self.omega)) * ce.sin(self.apparent_longitude), ce.cos(self.apparent_longitude)))) % 360
+        self.apparent_declination: float = np.rad2deg(math.asin(ce.sin(self.true_obliquity + 0.00256 * ce.cos(self.omega)) * ce.sin(self.apparent_longitude)))
+
+        greenwich_hour_angle: float = te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400) % 360
+        nutation_in_longitude_dms = ce.decimal_to_dms(self.nutation[0])
+        
+        # Make correction for the apparent sidereal time according to pg. 88
+        st_correction: float = (nutation_in_longitude_dms[2] + nutation_in_longitude_dms[1] * 60 + nutation_in_longitude_dms[0] * 3600) * ce.cos(self.true_obliquity) / 15
+        greenwich_hour_angle += (st_correction / 240)
+
+        # Local Hour angle is then simply the GHA minus the apparent RA adjusted for the local longitude
+        self.local_hour_angle: float = (greenwich_hour_angle + self.local_longitude - self.apparent_right_ascension) % 360
+
+        # Topocentric R.A., Declination, and LHA
+        self.eh_parallax = np.rad2deg(np.arcsin(ce.sin(8.794 / 3600) / self.geocentric_distance))
+        self.topocentric_ascension, self.topocentric_declination = ce.correct_ra_dec(self.apparent_right_ascension, self.apparent_declination, self.local_hour_angle, self.eh_parallax, self.local_latitude, 76)
+        self.topocentric_local_hour_angle = (greenwich_hour_angle + self.local_longitude - self.topocentric_ascension) % 360
+
+        self.altitude = np.rad2deg(math.asin(ce.sin(self.local_latitude) * ce.sin(self.topocentric_declination) + ce.cos(self.local_latitude) * ce.cos(self.topocentric_declination) * ce.cos(self.topocentric_local_hour_angle))) 
+        self.azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(self.topocentric_declination) * ce.sin(self.topocentric_local_hour_angle), ce.sin(self.topocentric_declination) * ce.cos(self.local_latitude) \
+                                          - ce.cos(self.topocentric_declination) * ce.sin(self.local_latitude) * ce.cos(self.topocentric_local_hour_angle))) % 360
+
+        # # Geocentric Altitude & Azimuth calculations (disabled)
+        # self.altitude: float = np.rad2deg(math.asin(ce.sin(self.local_latitude) * ce.sin(self.true_declination) + ce.cos(self.local_latitude) * ce.cos(self.true_declination) * ce.cos(self.local_hour_angle))) 
+        # self.azimuth: float = np.rad2deg(np.arctan2(-1 * ce.cos(self.true_declination) * ce.sin(self.local_hour_angle), ce.sin(self.true_declination) * ce.cos(self.local_latitude) - ce.cos(self.true_declination) \
+        #                                             * ce.sin(self.local_latitude) * ce.cos(self.local_hour_angle))) % 360
+        
+        # # Correct for atmospheric refraction (taken from https://en.wikipedia.org/wiki/Atmospheric_refraction)
+        # # Currently disabled
+        # refraction = 1.02 / ce.tan(altitude + 10.3 / (altitude + 5.11)) * pressure / 101 * 283 / (273 + temperature)
+        # self.altitude += refraction / 60
+
 # Chapter 22
 def oblique_eq(jde: float) -> float:
     '''
@@ -179,8 +258,8 @@ def oblique_eq(jde: float) -> float:
 
     eps = 23 + 26 / 60 + (21.448 / 3600)
 
-    powers = np.power(u, np.arange(1, len(__obliquity_terms) + 1))
-    eps += np.dot(__obliquity_terms, powers) / 3600
+    powers = np.power(u, np.arange(1, len(__OBLIQUITY_TERMS) + 1))
+    eps += np.dot(__OBLIQUITY_TERMS, powers) / 3600
 
     return eps
 
@@ -211,8 +290,8 @@ def sun_nutation(jde: float) -> Tuple[float, float]:
 
     ta = np.radians(ta)
 
-    sun_args = np.array(__sun_nutation_arguments).reshape(-1, 5)
-    sun_coeff = np.array(__sun_nutation_coefficients).reshape(-1, 4)
+    sun_args = np.array(__SUN_NUTATION_ARGUMENTS).reshape(-1, 5)
+    sun_coeff = np.array(__SUN_NUTATION_COEFFICIENTS).reshape(-1, 4)
 
     ang = np.dot(sun_args, ta)
 
@@ -225,9 +304,9 @@ def sun_nutation(jde: float) -> Tuple[float, float]:
     return (deltaPsi, deltaEpsilon)
 
 # Chapter 25
-def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, temperature: float = 10, pressure: float = 101) -> List[float]:
+def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, temperature: float = 10, pressure: float = 101) -> Sun:
     '''
-    Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 25 of the Astronomical Algorthims for more information.
+    Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 25 of the *Astronomical Algorthims* for more information.
 
     Parameters:
         jde (float): The Julian Ephemeris Day.
@@ -238,100 +317,22 @@ def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: fl
         pressure (float): The observer's pressure in kPa.
 
     Returns:
-        list: It's complicated. To be fixed later.
+        Sun (obj): A `Sun` object that contains various attributes that describe its position. 
 
     Notes: 
     - The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is disabled.
     '''
-    T = (jde - te.J2000) / te.JULIAN_MILLENNIUM
-    T2 = T ** 2
-    T3 = T ** 3
-    T4 = T ** 4
-    T5 = T ** 5
-
-    L0 = 280.4664567 + (360007.6982779 * T) + (0.03032028 * T2) + (T3 / 49931) - (T4 / 15300) - (T5 / 2000000)
-    L0 %= 360
-
-    M = 357.52911 + 359990.50340 * T - 0.001603 * T2 - T3 / 30000
-    M %= 360
-
-    e = 0.016708634 - 0.00042037 * T - 0.000001267 * T2
-
-    C = (1.914602 - 0.04817 * T - 0.000014 * T2) * ce.sin(M) + \
-        (0.019993 - 0.000101 * T) * ce.sin(2 * M) + \
-        0.000289 * ce.sin(3 * M)
-
-    sunLong = L0 + C
-    sunAnomaly = M + C
-
-    sunR = (1.000001018 * (1 - e ** 2)) / (1 + (e * ce.cos(sunAnomaly)))
-
-    omega = 125.04452 - 19341.36261 * T + 0.020708 * T2 + T3 / 45000
-    Lambda = sunLong - 0.00569 - 0.00478 * ce.sin(omega)
-
-    nut = sun_nutation(jde)
-    delta_epsilon = nut[1]
-    epsilon0 = oblique_eq(jde)
-    epsilon = epsilon0 + delta_epsilon
     
+    the_sun = Sun(
+        jde,
+        deltaT,
+        local_latitude,
+        local_longitude
+    )
 
-    # Right ascension (RA) & declination calculations
-    alpha = (np.rad2deg(math.atan2(ce.cos(epsilon0) * ce.sin(sunLong), ce.cos(sunLong)))) % 360
-    delta = np.rad2deg(math.asin(ce.sin(epsilon0) * ce.sin(sunLong)))
-
-    # Adjust RA and declination to find their apparents
-    alphaApp = (np.rad2deg(math.atan2(ce.cos(epsilon) * ce.sin(Lambda), ce.cos(Lambda)))) % 360
-    deltaApp = np.rad2deg(math.asin(ce.sin(epsilon) * ce.sin(Lambda)))
-
-    # Local Hour Angle calculation
-    # Start by calculating Mean Greenwich Sidereal Time
-    greenwich_hour_angle = (te.greenwich_mean_sidereal_time(jde - deltaT / 86400)) % 360
-
-    # Attain the sun's nutation in the longitude in DMS
-    nut_long_dms = ce.decimal_to_dms(nut[0])
+    the_sun.calculate()
     
-    # Make correction for the apparent sidereal time according to pg. 88
-    st_correction = (nut_long_dms[2] + nut_long_dms[1] * 60 + nut_long_dms[0] * 3600) * ce.cos(epsilon) / 15
-    greenwich_hour_angle += (st_correction / 240)
-
-    # Local Hour angle is then simply the GHA minus the apparent RA adjusted for the local longitude
-    local_hour_angle = (greenwich_hour_angle + local_longitude - alphaApp) % 360
-
-    # Altitude & Azimuth calculations
-    altitude = np.rad2deg(math.asin(ce.sin(local_latitude) * ce.sin(delta) + ce.cos(local_latitude) * ce.cos(delta) * ce.cos(local_hour_angle))) 
-    azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(delta) * ce.sin(local_hour_angle), ce.sin(delta) * ce.cos(local_latitude) - ce.cos(delta) * ce.sin(local_latitude) * ce.cos(local_hour_angle))) % 360
-
-    # Correct for atmospheric refraction (taken from https://en.wikipedia.org/wiki/Atmospheric_refraction)
-    # Currently disabled
-    #refraction = 1.02 / ce.tan(altitude + 10.3 / (altitude + 5.11)) * pressure / 101 * 283 / (273 + temperature)
-    #altitude += refraction / 60
-
-    # Correct for parallax 
-    eh_parallax = np.rad2deg(np.arcsin(te.EARTH_RADIUS_KM / (sunR * te.ASTRONOMICAL_UNIT) ))
-    parallax_correction = -np.rad2deg(np.deg2rad(eh_parallax) * ce.cos(altitude))
-    altitude += parallax_correction
-
-
-    return [
-        nut,                # 0; sun nutation
-        L0,                 # 1; sun mean longitude
-        e,                  # 2; eccentricity
-        C,                  # 3; sun's centre
-        sunLong,            # 4; true longitude
-        sunAnomaly,         # 5; true anomaly
-        sunR,               # 6; distance to sun (in AU)
-        Lambda,             # 7; apparent longitude
-        alpha,              # 8; right ascension
-        delta,              # 9; declination
-        alphaApp,           # 10; apparent right ascension
-        deltaApp,           # 11; apparent declination
-        epsilon0,           # 12; mean obliquity of the ecliptic
-        epsilon,            # 13; true obliquity of the ecliptic
-        omega,              # 14; Longitude of the ascending node of the Moon’s mean orbit on the ecliptic
-        altitude,           # 15; apparent
-        azimuth,            # 16; apparent
-        local_hour_angle    # 17
-    ]
+    return the_sun
 
 def equation_of_time(deltaPsi: float, L0: float, epsilon: float, alpha: float) -> float:
     '''

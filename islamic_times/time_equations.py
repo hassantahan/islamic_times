@@ -37,9 +37,9 @@ MECCA_LONG: float           = 39.822330044
 ISLAMIC_MONTHS: Dict[int, str] = {
         1: 'Muḥarram',
         2: 'Ṣaffar',
-        3: 'Rabīʿ al-ʾAwwal',
+        3: 'Rabīʿ al-Awwal',
         4: 'Rabīʿ al-Thānī',
-        5: 'Jumādā al-ʾŪlā',
+        5: 'Jumādā al-Ūlā',
         6: 'Jumādā al-Thāniyah',
         7: 'Rajab',
         8: 'Shaʿbān',
@@ -50,12 +50,12 @@ ISLAMIC_MONTHS: Dict[int, str] = {
     }
 
 ISLAMIC_DAYS = {
-        'Sunday': 'al-ʾAḥad',
+        'Sunday': 'al-Aḥad',
         'Monday': 'al-Ithnayn',
         'Tuesday': 'al-Thulāthāʾ',
-        'Wednesday': 'al-ʾArbiʿā',
+        'Wednesday': 'al-Arbiʿāʾ',
         'Thursday': 'al-Khamīs',
-        'Friday': 'al-Jumʿah',
+        'Friday': 'al-Jumuʿah',
         'Saturday': 'al-Sabt',
     }
 

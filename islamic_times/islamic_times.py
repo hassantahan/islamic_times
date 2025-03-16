@@ -84,8 +84,8 @@ class ITLocation:
         "latitude", "longitude", "elevation", "temperature", "pressure", "today", "find_local_tz", "auto_calculate", "datetime_modified", "prayers_modified", "tz_name", "utc_diff", 
         "asr_type", "fajr_angle", "isha_angle", "maghrib_angle", "midnight_type", "method", "times_of_prayer", "islamic_date", 
         "jd", "deltaT", "jde", 
-        "sun_factors", "delPsi", "sun_declination", "sun_alpha", "solar_angle", "sun_alt", "sun_az", 
-        "moon_factors", "moon_declination", "moon_alpha", "moon_pi", "moon_alt", "moon_az", "moonset", "moon_illumin"
+        "sun_params", "delPsi", "sun_declination", "sun_right_ascension", "solar_angle", "sun_alt", "sun_az", 
+        "moon_params", "moon_declination", "moon_right_ascension", "moon_pi", "moon_alt", "moon_az", "moonset", "moon_illumin"
     )
 
     ##### Prayer Methods #####
@@ -272,7 +272,7 @@ class ITLocation:
                 super().__setattr__('tz_name', tz_name)
                 super().__setattr__('utc_diff', utc_diff)
             else:
-                super().__setattr__('tz_name', timezone)
+                super().__setattr__('tz_name', timezone.utc)
                 super().__setattr__('utc_diff', 0)
         else:  
             super().__setattr__('tz_name', self.today.tzinfo)
@@ -340,35 +340,36 @@ class ITLocation:
         super().__setattr__('islamic_date', te.gregorian_to_hijri(self.today.year, self.today.month, self.today.day))
 
         ### Sun & Moon Properties Calculations
-        # Get factors arrays
-        super().__setattr__('sun_factors', se.sunpos(self.jde, self.deltaT, self.latitude, self.longitude, self.temperature, self.pressure))
-        delPsi = self.sun_factors[0][0]
-        super().__setattr__('delPsi', delPsi)
-        super().__setattr__('moon_factors', me.moonpos(self.jde, self.deltaT ,self.latitude, self.longitude, self.delPsi, self.sun_factors[13], self.elevation))
+        # Get Sun and Moon Objects with their parameters
+        temp_sun = se.sunpos(self.jde, self.deltaT, self.latitude, self.longitude, self.temperature, self.pressure)
+        super().__setattr__('sun_params', temp_sun)
+
+        temp_moon = me.moonpos(self.jde, self.deltaT ,self.latitude, self.longitude, temp_sun.nutation[0], temp_sun.true_obliquity, self.elevation)
+        super().__setattr__('moon_params', temp_moon)
 
         # Important Sun Factors placed into local variables
-        super().__setattr__('sun_declination', self.sun_factors[11])
-        super().__setattr__('sun_alpha', ce.decimal_to_hms(self.sun_factors[10]))
+        super().__setattr__('sun_declination', temp_sun.apparent_declination)
+        super().__setattr__('sun_right_ascension', ce.decimal_to_hms(temp_sun.apparent_right_ascension))
         super().__setattr__('solar_angle', se.solar_hour_angle(self.latitude, self.sun_declination))
-        super().__setattr__('sun_alt', self.sun_factors[15])
-        super().__setattr__('sun_az', self.sun_factors[16])
+        super().__setattr__('sun_alt', temp_sun.altitude)
+        super().__setattr__('sun_az', temp_sun.azimuth)
 
         # Important Moon Factors placed into local variables
-        super().__setattr__('moon_declination', self.moon_factors[5])
-        super().__setattr__('moon_alpha', ce.decimal_to_hms(self.moon_factors[4]))
-        super().__setattr__('moon_pi', self.moon_factors[8])
-        super().__setattr__('moon_alt', self.moon_factors[9])
-        super().__setattr__('moon_az', self.moon_factors[10])
+        super().__setattr__('moon_declination', temp_moon.declination)
+        super().__setattr__('moon_right_ascension', ce.decimal_to_hms(temp_moon.right_ascension))
+        super().__setattr__('moon_pi', temp_moon.eh_parallax)
+        super().__setattr__('moon_alt', temp_moon.altitude)
+        super().__setattr__('moon_az', temp_moon.azimuth)
 
         # Moon calculations
         super().__setattr__('moonset', self.__find_proper_moonset(self.today))
         super().__setattr__('moon_illumin', me.moon_illumination(
                                 self.sun_declination, 
-                                self.sun_factors[10], 
+                                ce.hms_to_decimal(self.sun_right_ascension), 
                                 self.moon_declination, 
-                                self.moon_factors[4], 
-                                self.sun_factors[6], 
-                                self.moon_factors[2] / te.ASTRONOMICAL_UNIT
+                                temp_moon.right_ascension, 
+                                temp_sun.geocentric_distance, 
+                                temp_moon.geocentric_distance / te.ASTRONOMICAL_UNIT
                             ))
         
         # Astronomical parameters have been calculated so the flag is set to False
@@ -388,17 +389,22 @@ class ITLocation:
             datetime: Adjusted moonset time. If moonset is not found, returns `datetime.min`.
         """
 
-        date_doy = date.timetuple().tm_yday
+        temp_utc_diff = np.floor(self.longitude / 15)
         temp_moonset = me.calculate_moonset(date, self.latitude, self.longitude, self.elevation, self.utc_diff)
+        date_doy = date.timetuple().tm_yday
         if temp_moonset == np.inf:
             return datetime.min
 
-        temp_utc_diff = np.floor(self.longitude / 15)
+        
         i = 1
         while(True):
             temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_diff)).timetuple().tm_yday
             if (temp_moonset_doy < date_doy and temp_moonset.year == date.year) or ((temp_moonset + timedelta(hours=temp_utc_diff)).year < date.year):
-                temp_moonset = me.calculate_moonset(date + timedelta(days=i), self.latitude, self.longitude, self.elevation, self.utc_diff)
+                new_date = date + timedelta(days=i)
+                # if (new_date.timetuple().tm_yday > date_doy and temp_moonset.year == date.year) or (new_date.year > date.year):
+                #     temp_moonset = me.calculate_moonset(date - timedelta(hours=temp_utc_diff), self.latitude, self.longitude, self.elevation, self.utc_diff)
+                # else:
+                temp_moonset = me.calculate_moonset(new_date, self.latitude, self.longitude, self.elevation, self.utc_diff)
                 i += 1
             else: 
                 return temp_moonset
@@ -427,7 +433,7 @@ class ITLocation:
             raise ValueError("Since auto_calculate has been set to false, prayer times cannot be calculated since astronomical parameters have not been calculated. Call 'calculate_astro()' first.")
 
         super().__setattr__('times_of_prayer', pt.calculate_prayer_times(self.jde, self.deltaT, self.latitude, self.longitude, self.utc_diff, 
-                                                         (self.sun_declination, self.solar_angle, self.delPsi, self.sun_factors[1], self.sun_factors[13], self.sun_factors[10]),
+                                                         (self.sun_declination, self.solar_angle, self.sun_params.delta_obliquity, self.sun_params.mean_longitude, self.sun_params.true_obliquity, self.sun_params.apparent_right_ascension),
                                                         (self.fajr_angle, self.maghrib_angle, self.isha_angle, self.midnight_type, self.asr_type), 
                                                         self.islamic_date[2] == 9))
         
@@ -650,7 +656,7 @@ class ITLocation:
                 "hijri" : f"{te.get_islamic_day(self.today.strftime('%A'))}, {self.islamic_date[2]} {te.get_islamic_month(self.islamic_date[1])}, {self.islamic_date[0]}",
                 "time" : self.today.strftime("%X"), "timezone" : self.tz_name, "utc_offset" : te.format_utc_offset(self.utc_diff * -1),
                 "jd" : np.round(self.jd, 7),
-                "eq_of_time" : np.round(se.equation_of_time(self.delPsi, self.sun_factors[1], self.sun_factors[13], self.sun_factors[10]), 2),
+                "eq_of_time" : np.round(se.equation_of_time(self.sun_params.delta_obliquity, self.sun_params.mean_longitude, self.sun_params.true_obliquity, self.sun_params.apparent_right_ascension), 2),
                 "deltaT" : np.round(self.deltaT, 2)
             }
 
@@ -732,7 +738,7 @@ class ITLocation:
 
         return {
                 "declination" : np.round(self.sun_declination, 3),
-                "right_ascension" : f"{self.sun_alpha[0]}h {self.sun_alpha[1]}m {self.sun_alpha[2]:.2f}s",
+                "right_ascension" : f"{self.sun_right_ascension[0]}h {self.sun_right_ascension[1]}m {self.sun_right_ascension[2]:.2f}s",
                 "altitude" : np.round(self.sun_alt, 2),
                 "azimuth" : np.round(self.sun_az, 2)
             }
@@ -760,7 +766,7 @@ class ITLocation:
         return {
                 "moonset" : self.moonset.strftime("%X %d-%m-%Y"),
                 "declination" : np.round(self.moon_declination, 3),
-                "right_ascension" : f"{self.moon_alpha[0]}h {self.moon_alpha[1]}m {self.moon_alpha[2]:.2f}s",
+                "right_ascension" : f"{self.moon_right_ascension[0]}h {self.moon_right_ascension[1]}m {self.moon_right_ascension[2]:.2f}s",
                 "altitude" : np.round(self.moon_alt, 2),
                 "azimuth" : np.round(self.moon_az, 2),
                 "illumination" : np.round(self.moon_illumin * 100, 2)
@@ -796,8 +802,11 @@ class ITLocation:
         return moon_phases
 
     # Calculate Next New Moon Visibilities
-    def visibilities(self, days: int = 3, type: int = 0) -> Dict [datetime, List[str | float]]:
-        '''Returns a dictionary describing the visibility of the [nearest in time] new moon for the observer.
+    def visibilities(self, days: int = 3, criterion: int = 0) -> Dict [datetime, List[str | float]]:
+        """
+        Returns a dictionary describing the visibility of the nearest new moon for the observer.
+
+        The dictionary contains `datetime` keys and lists of `str` or `float` values.
     
         The size of the dictionary is controlled by `days` which specifies how many days from the new moon to look at visibilities.
 
@@ -806,31 +815,34 @@ class ITLocation:
         The value of each item in the dictionary is a list in which the first element is the raw number output of the visibility. The second element is the classification of the first element.
 
         The `type` argument specifies which new moon visibility classification method to use:
-        - Type 0: Odeh, 2006
-        - Type 1: Yallop, 1997; a.k.a. HMNAO TN No. 69
+        - Criterion 0: Odeh, 2006
+        - Criterion 1: Yallop, 1997; a.k.a. HMNAO TN No. 69
 
         Parameters:
             days (int, optional): How many days from the new moon to look at visibilities. Defaults to 3 days.
-            type (int, optional): Which method to classify visibilities. Either 0 (referring to Odeh, 2006) or 1 (referring to Yallop, 1997). Defaults 0.
+            criterion (int, optional): Which method to classify visibilities. Either 0 (referring to Odeh, 2006) or 1 (referring to Yallop, 1997). Defaults 0.
 
         Returns:
             list (List[Dict[str, str | float]]): A list of dictionaries containing:
                 - 'datetime': The key of each dictionary which represents the best time to look for the new moon crescent.
                 - 'visibility': Raw number output of the visibility.
-                - 'classification': Classification of the visibility.
-        '''
+        """
 
         if not isinstance(days, int):
-            raise TypeError(f"'days' must be of type `int`, but got `{type(days).__name__}`.")
+            raise TypeError(f"'days' must be of type `int`, but got `{criterion(days).__name__}`.")
         
         if days < 1:
             raise ValueError(f"'days' must be greater than 0. Invalid value: {days}.")
         
-        if not isinstance(type, int):
-            raise TypeError(f"'type' must be of type `int`, but got `{type(type).__name__}`.")
+        if criterion not in (0, 1):
+            raise ValueError(f"'type' must be either 0 or 1. Invalid value: {criterion}.")
         
-        if type not in (0, 1):
-            raise ValueError(f"'type' must be either 0 or 1. Invalid value: {type}.")
+        
+        if not isinstance(criterion, int):
+            raise TypeError(f"'type' must be of type `int`, but got `{criterion(criterion).__name__}`.")
+        
+        if criterion not in (0, 1):
+            raise ValueError(f"'type' must be either 0 or 1. Invalid value: {criterion}.")
         
 
         # Get New Moon Date from moon_phases list
@@ -854,7 +866,7 @@ class ITLocation:
             jd_new_moon = te.gregorian_to_jd(new_moon, -1 * self.utc_diff) - te.fraction_of_day(new_moon)
 
         # Find local sunset as visibilities are calculated from then
-        nm_sun_factors = se.sunpos(jde_new_moon, deltaT_new_moon, self.latitude, self.longitude)     
+        # nm_sun_factors = se.sunpos(jde_new_moon, deltaT_new_moon, self.latitude, self.longitude)     
 
         # Find visibilities for the three days
         visibilities = []
@@ -883,15 +895,15 @@ class ITLocation:
             test_jde_new_moon = test_jd_new_moon + test_deltaT_new_moon / 86400
 
             # Set sun parameters
-            nm_sun_factors = se.sunpos(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude)
+            nm_sun_params = se.sunpos(test_jde_new_moon, test_deltaT_new_moon, self.latitude, self.longitude)
 
             # Sunset & moonset calculations
             test_nm_sunset = te.solar2standard(
                                         test_jd_new_moon, 
-                                        se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, nm_sun_factors[11])), 
+                                        se.sunrise_sunset(1, se.solar_hour_angle(self.latitude, nm_sun_params.apparent_declination)), 
                                         self.utc_diff, 
                                         self.longitude,
-                                        se.equation_of_time(nm_sun_factors[0][0], nm_sun_factors[1], nm_sun_factors[13], nm_sun_factors[10])
+                                        se.equation_of_time(nm_sun_params.nutation[0], nm_sun_params.mean_longitude, nm_sun_params.true_obliquity, nm_sun_params.apparent_right_ascension)
                                     )
 
             if day == 0:
@@ -935,20 +947,16 @@ class ITLocation:
             best_jds.append(best_time_jd)
 
             # Recalculate sun & calculate moon parameters
-            nm_sun_factors = se.sunpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude)
-            delPsi, delEps = nm_sun_factors[0][0], nm_sun_factors[0][1]
-            nm_moon_factors = me.moonpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude, delPsi, nm_sun_factors[13], self.elevation)
+            nm_sun_params = se.sunpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude)
+            nm_moon_params = me.moonpos(best_time_jde, test_deltaT_new_moon, self.latitude, self.longitude, nm_sun_params.delta_obliquity, nm_sun_params.true_obliquity, self.elevation)
 
             # Visibility is now calculated
-            v = me.calculate_visibility(nm_sun_factors[16], nm_sun_factors[15], nm_moon_factors[10], nm_moon_factors[9], np.deg2rad(nm_moon_factors[8]), type)
+            v = me.calculate_visibility(nm_sun_params.azimuth, nm_sun_params.altitude, nm_moon_params.azimuth, nm_moon_params.altitude, np.deg2rad(nm_moon_params.eh_parallax), criterion)
 
             visibilities.append(v)
 
         # Arrange and classify visibilties
-        q_values = [
-            [visibility, me.classify_visibility(visibility, type)] 
-            for visibility in visibilities
-        ]
+        q_values = [[v, me.classify_visibility(v, criterion)] for v in visibilities]
 
         # Convert best times from JD to datetime
         best_dates = [
@@ -956,10 +964,10 @@ class ITLocation:
             for jd in best_jds
         ]
 
-        # Label each q_value to its associated date 
+        # Label each q_value to its associated date
         visibility_dictionary = {
-            dt.strftime('%Y-%m-%d %X'): q_values[i]
-            for i, dt in enumerate(best_dates)
+            dt.strftime('%Y-%m-%d %X'): q_value
+            for dt, q_value in zip(best_dates, q_values)
         }
 
         return visibility_dictionary
