@@ -167,6 +167,49 @@ __SUN_NUTATION_COEFFICIENTS = [
 
 @dataclass
 class Sun:
+    '''
+    A class to compute the position of the Sky in the sky based on given astronomical parameters.
+
+    Attributes:
+        jde (float): The Julian Ephemeris Day.
+        deltaT (float): The difference between Terrestrial Time and Universal Time (ΔT).
+        local_latitude (float): The observer's latitude in degrees.
+        local_longitude (float): The observer's longitude in degrees.
+        temperature (float): The observer's ambient temperature in degrees Celcius.
+        pressure (float): The observer's ambient pressure in kPa.
+        mean_longitude (float): The mean longitude of the Sun in degrees.
+        mean_anomaly (float): The mean anomaly of the Sun in degrees.
+        earth_orbit_eccentricity (float): The eccentricity of Earth's orbit.
+        sun_centre (float): The Sun's equation of center in degrees.
+        true_longitude (float): The Sun's true longitude in degrees.
+        true_anomaly (float): The Sun's true anomaly in degrees.
+        geocentric_distance (float): The distance from the Earth to the Sun in Astronomical Units (AU).
+        omega (float): The longitude of the ascending node of the Moon's orbit in degrees.
+        apparent_longitude (float): The apparent longitude of the Sun in degrees.
+        nutation (Tuple[float, float]): Nutation in longitude and obliquity in degrees.
+        delta_obliquity (float): Change in Earth's obliquity due to nutation.
+        mean_obliquity (float): The mean obliquity of the ecliptic in degrees.
+        true_obliquity (float): The true obliquity of the ecliptic in degrees.
+        true_right_ascension (float): The true right ascension of the Sun in degrees.
+        true_declination (float): The true declination of the Sun in degrees.
+        apparent_right_ascension (float): The apparent right ascension of the Sun in degrees.
+        apparent_declination (float): The apparent declination of the Sun in degrees.
+        local_hour_angle (float): The local hour angle of the Sun in degrees.
+        eh_parallax (float): The equatorial horizontal parallax of the Sun in degrees.
+        topocentric_ascension (float): The topocentric right ascension of the Sun in degrees.
+        topocentric_declination (float): The topocentric declination of the Sun in degrees.
+        topocentric_local_hour_angle (float): The topocentric local hour angle in degrees.
+        altitude (float): The altitude of the Sun above the horizon in degrees.
+        azimuth (float): The azimuth angle of the Sun in degrees.
+
+    Methods:
+        `calculate()`: Computes various positional attributes of the Sun, including its right ascension, declination, altitude, and azimuth.
+
+    Notes:
+        - All attributes after `elev` are only computed and available after the `calculate()` method is called.
+        - The `calculate()` method is called automatically by the `sunpos()` method.
+    '''
+        
     jde: float
     deltaT: float
     local_latitude: float
@@ -331,7 +374,7 @@ def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: fl
     )
 
     the_sun.calculate()
-    
+
     return the_sun
 
 def equation_of_time(deltaPsi: float, L0: float, epsilon: float, alpha: float) -> float:

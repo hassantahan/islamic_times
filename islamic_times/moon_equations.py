@@ -399,6 +399,40 @@ __A_COEFFS = [
 
 @dataclass
 class Moon:
+	'''
+	A class to compute the position of the Moon in the sky based on given astronomical parameters.
+
+	Attributes:
+		jde (float): The Julian Ephemeris Day.
+		deltaT (float): The difference between Terrestrial Time and Universal Time (ΔT).
+		local_latitude (float): The observer's latitude in degrees.
+		local_longitude (float): The observer's longitude in degrees.
+		deltaPsi (float): The nutation in longitude in degrees.
+		ecliptic (float): The observer's ecliptic in degrees.
+		elev (float): The observer's elevation above sea level in meters.
+		lunar_nutation (tuple): Nutation parameters for the Moon.
+		true_longitude (float): The true longitude of the Moon in degrees.
+		true_latitude (float): The true latitude of the Moon in degrees.
+		geocentric_distance (float): The distance from the Earth to the Moon in kilometers.
+		apparent_longitude (float): The apparent longitude of the Moon in degrees.
+		right_ascension (float): The right ascension of the Moon in degrees.
+		declination (float): The declination of the Moon in degrees.
+		eh_parallax (float): The equatorial horizontal parallax of the Moon in degrees.
+		local_hour_angle (float): The local hour angle of the Moon in degrees.
+		top_ascension (float): The topocentric right ascension of the Moon in degrees.
+		top_declination (float): The topocentric declination of the Moon in degrees.
+		top_local_hour_angle (float): The topocentric local hour angle in degrees.
+		altitude (float): The altitude of the Moon above the horizon in degrees.
+		azimuth (float): The azimuth angle of the Moon in degrees.
+
+	Methods:
+		`calculate()`: Computes various positional attributes of the Moon, including its right ascension, declination, altitude, and azimuth.
+
+	Notes:
+		- All attributes after `elev` are only computed and available after the `calculate()` method is called.
+		- The `calculate()` method is called automatically by the `moonpos()` method.
+    '''
+
 	jde: float
 	deltaT: float
 	local_latitude: float
@@ -533,7 +567,8 @@ def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: f
 		elev (float): The observer's elevation above sea level (m).
 
 	Returns:
-		list (List[float]): The Moon's position in the sky. The list needs to be restructured.
+		Moon (obj): A `Moon` object that contains various attributes that describe its position. 
+
 	Notes: 
 		- The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is enabled.
 	'''
@@ -548,7 +583,7 @@ def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: f
 		elev
 	)
 	the_moon.calculate()
-	
+
 	return the_moon
 
 # TODO: Properly get the next phases instead of all the phases after the next new moon ==> Using round (temp fix)
