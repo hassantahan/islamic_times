@@ -341,10 +341,10 @@ class ITLocation:
 
         ### Sun & Moon Properties Calculations
         # Get Sun and Moon Objects with their parameters
-        temp_sun = se.sunpos(self.jde, self.deltaT, self.latitude, self.longitude, self.temperature, self.pressure)
+        temp_sun: se.Sun = se.sunpos(self.jde, self.deltaT, self.latitude, self.longitude, self.temperature, self.pressure)
         super().__setattr__('sun_params', temp_sun)
 
-        temp_moon = me.moonpos(self.jde, self.deltaT ,self.latitude, self.longitude, temp_sun.nutation[0], temp_sun.true_obliquity, self.elevation)
+        temp_moon: me.Moon = me.moonpos(self.jde, self.deltaT ,self.latitude, self.longitude, temp_sun.nutation[0], temp_sun.true_obliquity, self.elevation)
         super().__setattr__('moon_params', temp_moon)
 
         # Important Sun Factors placed into local variables
@@ -389,22 +389,17 @@ class ITLocation:
             datetime: Adjusted moonset time. If moonset is not found, returns `datetime.min`.
         """
 
-        temp_utc_diff = np.floor(self.longitude / 15)
+        temp_utc_diff = np.floor(self.longitude / 15) - 1
         temp_moonset = me.calculate_moonset(date, self.latitude, self.longitude, self.elevation, self.utc_diff)
         date_doy = date.timetuple().tm_yday
         if temp_moonset == np.inf:
             return datetime.min
 
-        
         i = 1
         while(True):
-            temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_diff)).timetuple().tm_yday
+            temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_diff, minutes=-20)).timetuple().tm_yday
             if (temp_moonset_doy < date_doy and temp_moonset.year == date.year) or ((temp_moonset + timedelta(hours=temp_utc_diff)).year < date.year):
-                new_date = date + timedelta(days=i)
-                # if (new_date.timetuple().tm_yday > date_doy and temp_moonset.year == date.year) or (new_date.year > date.year):
-                #     temp_moonset = me.calculate_moonset(date - timedelta(hours=temp_utc_diff), self.latitude, self.longitude, self.elevation, self.utc_diff)
-                # else:
-                temp_moonset = me.calculate_moonset(new_date, self.latitude, self.longitude, self.elevation, self.utc_diff)
+                temp_moonset = me.calculate_moonset(date + timedelta(days=i), self.latitude, self.longitude, self.elevation, self.utc_diff)
                 i += 1
             else: 
                 return temp_moonset

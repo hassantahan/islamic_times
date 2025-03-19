@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta, timezone
 import numpy as np
-from islamic_times.islamic_times import ITLocation
 from time import time
+from datetime import datetime, timedelta, timezone
+from islamic_times.islamic_times import ITLocation
 
 def decimal_to_dms(decimal_value: float) -> str:
     degrees = int(decimal_value)
@@ -15,8 +15,6 @@ def decimal_to_dms(decimal_value: float) -> str:
 def timing(str_to_print, start_time):
     print(f"{str_to_print}: {(time() - start_time)*1000000:.2f}μs")
     return time()
-
-##### Calculation #####
 
 def output_observer(local: ITLocation):
     start_time = time()
@@ -115,7 +113,7 @@ def mecca(local: ITLocation):
 
 def update_time(local: ITLocation):
     start_time = time()
-    local.update_time(datetime(2025, 2, 27, 21, 21, 54))
+    local.update_time(datetime.now())
     timing("Time to update_time()", start_time)
     local.calculate_astro()
 
@@ -152,9 +150,9 @@ def output_moonphases(local: ITLocation):
     for item in temp:
         print(f"\t{item['phase']}:\t\t{item['datetime'].strftime('%X %A, %d %B, %Y')}")
 
-def output_visibilities(local: ITLocation):
+def output_visibilities(local: ITLocation, days: int = 3, criterion: int = 0):
     start_time = time()
-    temp = local.visibilities(days=3, type=0)
+    temp = local.visibilities(days=days, criterion=criterion)
     timing("Time to calculate new moon visibilities and fetch visibilities()", start_time)
 
     print("Visibility Values of New Moon at Observer TZ 'Best Time' on...")
@@ -166,13 +164,15 @@ def main(local: ITLocation):
     output_observer(local)
 
     # Astro
-    #calculate_astro(local)
+    if not local.auto_calculate:
+        calculate_astro(local)
 
     # Date & Time
     output_dates_times(local)
 
     # Prayer Times
-    #update_prayer_times(local)
+    if not local.auto_calculate:
+        update_prayer_times(local)
     prayer_times(local)
 
     # Mecca
@@ -196,13 +196,6 @@ def main(local: ITLocation):
 
 if __name__ == '__main__':
     start_time = time()
-    local = ITLocation(
-                        latitude=43.70011,
-                        longitude=-79.4163,
-                        elevation=150,
-                        today=datetime.now(),
-                        find_local_tz=True,
-                        auto_calculate=True
-                    )
+    local = ITLocation()
     timing("Time to initialize", start_time)
     main(local)

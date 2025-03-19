@@ -1,4 +1,4 @@
-'''
+"""
 Module for Moon astronomical calculations.
 
 This module provides functions to:
@@ -14,7 +14,7 @@ References:
   - Meeus, Jean. *Astronomical Algorithms*, 2nd ed. VA: Willmann-Bell, 1998.
   - Odeh, Mohammad Sh. "New criterion for lunar crescent visibility." Experimental astronomy 18, no. 1 (2004): 39-64.
   - Yallop, Bernard D. "A method for predicting the first sighting of the new Crescent Moon." RGO NAO Technical Note 69 (1997).
-'''
+"""
 
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
@@ -399,7 +399,7 @@ __A_COEFFS = [
 
 @dataclass
 class Moon:
-	'''
+	"""
 	A class to compute the position of the Moon in the sky based on given astronomical parameters.
 
 	Attributes:
@@ -431,7 +431,7 @@ class Moon:
 	Notes:
 		- All attributes after `elev` are only computed and available after the `calculate()` method is called.
 		- The `calculate()` method is called automatically by the `moonpos()` method.
-    '''
+    """
 
 	jde: float
 	deltaT: float
@@ -486,7 +486,7 @@ class Moon:
 
 # Chapter 47
 def moon_nutation(jde: float) -> Tuple[float, float, float]:
-	'''
+	"""
 	Calculate the Moon's nutation in for a given Julian Ephemeris Day. See Chapter 47 of *Astronomical Algorithms* for more information.
 
 	Parameters:
@@ -494,7 +494,7 @@ def moon_nutation(jde: float) -> Tuple[float, float, float]:
 
 	Returns:
 		List[float]: The nutation in longitude and obliquity (in degrees).
-	'''
+	"""
 
 	t = (jde - te.J2000) / te.JULIAN_CENTURY
 	t2 = t ** 2
@@ -554,7 +554,7 @@ def moon_nutation(jde: float) -> Tuple[float, float, float]:
 	return (fundamental_arguments, sum_l, sum_b, sum_r)
 
 def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, deltaPsi: float, ecliptic: float, elev: float) -> Moon:
-	'''
+	"""
 	Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 47 of *Astronomical Algorthims* for more information.
 
 	Parameters:
@@ -571,7 +571,7 @@ def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: f
 
 	Notes: 
 		- The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is enabled.
-	'''
+	"""
 
 	the_moon = Moon(
 		jde,
@@ -589,7 +589,7 @@ def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: f
 # TODO: Properly get the next phases instead of all the phases after the next new moon ==> Using round (temp fix)
 # Chapter 49
 def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
-	'''
+	"""
 	Calculate the next four phases of the Moon (New Moon, First Quarter, Full Moon, Last Quarter) after a given date. See Chapter 49 of *Astronomical Algorithms* for more information.
 
 	Parameters:
@@ -597,7 +597,7 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 
 	Returns:
 		list (List[datetime]): The next four phases of the Moon.
-	'''
+	"""
 
 	# Find the day of the year.
 	day_of_year = date.timetuple().tm_yday
@@ -722,7 +722,7 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 
 # Refer to Chapter 48 of AA
 def moon_illumination(sun_dec: float, sun_ra: float, moon_dec: float, moon_ra: float, sun_earth_distance: float, moon_earth_distance: float) -> float:
-	'''
+	"""
 	Calculate the fraction of the Moon illuminated for a given date. See Chapter 48 of *Astronomical Algorithms* for more information.
 
 	Parameters:
@@ -735,7 +735,7 @@ def moon_illumination(sun_dec: float, sun_ra: float, moon_dec: float, moon_ra: f
 
 	Returns:
 		float: The fraction of the Moon illuminated.
-	'''
+	"""
 	# Eqs. 48.2
 	cos_psi = ce.sin(sun_dec) * ce.sin(moon_dec) + ce.cos(sun_dec) * ce.cos(moon_dec) * ce.cos(sun_ra - moon_ra)
 	psi = np.rad2deg(np.arccos(cos_psi))
@@ -750,7 +750,7 @@ def moon_illumination(sun_dec: float, sun_ra: float, moon_dec: float, moon_ra: f
 
 # Refer to Chapter 15 of AA
 def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_diff: float) -> datetime:
-	'''
+	"""
 	Calculate the time of moonset for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
 	Parameters:
@@ -762,7 +762,7 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 
 	Returns:
 		datetime: The time of moonset.
-	'''
+	"""
 
 	# First find the Year Month Day at UT 0h from JDE
 	ymd = datetime(date.year, date.month, date.day)
@@ -791,31 +791,28 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 	# GMST
 	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
 
+	# Compute m0 and m2 without wrapping
 	# Transit
-	m0 = ((moon_params[1].right_ascension + -1 * long - sidereal_time) / 360) % 1
+	m0 = (moon_params[1].right_ascension - long - sidereal_time) / 360
 
 	# Setting
-	m2 = (m0 + H_zero / 360) % 1
+	m2 = m0 + H_zero / 360
 
-	# Minor corrective steps
+	# Minor corrective steps thru iteration
 	for _ in range(3):
 		little_theta_zero = (sidereal_time + 360.985647 * m2) % 360
-
 		n = m2 + new_deltaT / 86400
 		interpolated_moon_dec = ce.interpolation(n, moon_params[0].declination, moon_params[1].declination, moon_params[2].declination)
 		interpolated_moon_ra = ce.interpolation(n, moon_params[0].right_ascension, moon_params[1].right_ascension, moon_params[2].right_ascension)
-
-		lunar_local_hour_angle = (little_theta_zero - -1 * long - interpolated_moon_ra) % 360
-		moon_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(interpolated_moon_dec) + ce.cos(lat) * ce.cos(interpolated_moon_dec) * ce.cos(lunar_local_hour_angle)))
+		lunar_local_hour_angle = (little_theta_zero - (-long) - interpolated_moon_ra) % 360
+		moon_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(interpolated_moon_dec) +
+										ce.cos(lat) * ce.cos(interpolated_moon_dec) *
+										ce.cos(lunar_local_hour_angle)))
 		deltaM = (moon_alt - h_zero) / (360 * ce.cos(interpolated_moon_dec) * ce.cos(lat) * ce.sin(lunar_local_hour_angle))
-
 		m2 += deltaM
 
-	# Offset days
-	local_hours = m2 * 24 - utc_diff
-
-	# Combine
-	moonset_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(hours=(local_hours))
+	# Compute final moonset time by adding days to base date
+	moonset_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m2) - timedelta(hours=utc_diff)
 
 	return moonset_dt
 
@@ -823,7 +820,7 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 # Criterion 0: Odeh, 2006
 # Criterion 1: HMNAO TN No. 69, a.k.a. Yallop, 1997
 def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt: float, moon_pi: float, criterion: int = 0) -> float:
-	'''
+	"""
 	Calculate the visibility of the Moon's crescent for a given date and observer coordinates.
 
 	Parameters:
@@ -836,7 +833,7 @@ def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt
 	
 	Returns:
 		float: The visibility of the Moon's crescent.
-	'''
+	"""
 
 	arcl = ce.calculate_angle_diff(sun_az, sun_alt, moon_az, moon_alt)
 	arcv = np.abs(sun_alt - moon_alt)
@@ -857,7 +854,7 @@ def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt
 
 # Classification according to Odeh, 2006 or HMNAO TN No.69
 def classify_visibility(q: float, criterion: int = 0) -> str:
-	'''
+	"""
 	Classify the visibility of the Moon's crescent based on the given q value.
 
 	Parameters:
@@ -866,7 +863,7 @@ def classify_visibility(q: float, criterion: int = 0) -> str:
 
 	Returns:
 		str: The classification of the Moon's crescent visibility.
-	'''
+	"""
 	
 	if q == -999: 
 		return "Moonset before the new moon."
