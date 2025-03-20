@@ -33,17 +33,18 @@ class Tee:
 def compute_q_values_for_lat(i_lat: float, lon: float, day: datetime, amount: int, type: int):
         q_values_temp = []
         for i_lon in lon:
-            local = it.ITLocation(latitude=i_lat, longitude=i_lon, elevation=0, today=day, find_local_tz=False, auto_calculate=False)
+            local = it.ITLocation(latitude=i_lat, longitude=i_lon, elevation=0, date=day, find_local_tz=False, auto_calculate=False)
             vis = local.visibilities(days=amount, criterion=type)
             for label, value in vis.items():
                 q_values_temp.append(value[1])
         return q_values_temp
 
 def calculate_moon_visibility(lon: float, lat: float, day: datetime, amount: int = 1, type: int = 0):
-    moon_phases = it.ITLocation(latitude=0, longitude=0, today=day, find_local_tz=False, auto_calculate=False).moonphases()
+    moon_phases = it.ITLocation(date=day, auto_calculate=False).moonphases()
     for item in moon_phases:
             if item['phase'] == "New Moon":
-                new_moon_date = item['datetime']  
+                new_moon_date = item['datetime']
+                break  
     
     from multiprocessing import Pool
     def parallel_compute_q_values(lat: float, lon: float, day: datetime, amount: int, type: int, num_processes: int = 8):
@@ -165,19 +166,30 @@ def plot_map(lon_vals, lat_vals, visibilities_mapped, states_clip, places_clip, 
     legend_ax.set_ylim(0, len(legend_labels) * row_height)
     legend_ax.set_aspect("auto")
 
+    criterion_string = "Odeh, 2006" if criterion == 0 else "Yallop, 1997"
+
+    # Adjust the plots slightly
     plt.subplots_adjust(hspace=0.2, left=0.05, right=0.85, top=0.95, bottom=0.05)
+
+    # Add text
     plt.figtext(0.15, 0.01, f"The New Moon (i.e. conjunction) occurs at {start_date.strftime("%Y-%m-%d %X")} UTC", ha="center", fontsize=12)
+    plt.figtext(0.945, 0.03, f"Criterion: {criterion_string}", ha="center", fontsize=12)
     plt.figtext(0.84, 0.01, f"CC BY-SA | Hassan Tahan | Created with the islamic_times Python library", ha="center", fontsize=12)
     plt.figtext(0.5, 0.98, f"{days}-Day New Moon Crescent Visibility Map for {islamic_month_name}, {islamic_year} A.H.", ha="center", fontsize=16)
 
-    name = f"{start_date.strftime("%Y-%m-%d")} {islamic_month_name} {islamic_year}"
+    # Name the file
+    name: str = f"{start_date.strftime("%Y-%m-%d")} {islamic_month_name} {islamic_year}"
+    if criterion == 1:
+        name += " Type 1"
+
+    # Save and close
     plt.savefig(os.path.join(out_dir, name))
     plt.close()
 
 def print_ts(message: str):
     print(f"[{datetime.fromtimestamp(time()).strftime("%X %d-%m-%Y")}] {message}")
 
-def main(day, res, amount=1, visibility_type=0, coords=(-179, 180, -61, 61), path=""):
+def main(day, res, amount=1, visibility_criterion=0, coords=(-179, 180, -61, 61), path=""):
     print_ts(f"Loading shape files...")
     t1 = time()
     states_gdf, places_gdf = load_shapefiles("map_shp_files/combined_polygons.shp", "map_shp_files/combined_points.shp", CITIES)
@@ -195,7 +207,7 @@ def main(day, res, amount=1, visibility_type=0, coords=(-179, 180, -61, 61), pat
 
     print_ts(f"Calculating new moon crescent visibilities...")
     t1 = time()
-    visibilities_2d, start_date = calculate_moon_visibility(lon_vals, lat_vals, day, amount, visibility_type)
+    visibilities_2d, start_date = calculate_moon_visibility(lon_vals, lat_vals, day, amount, visibility_criterion)
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
     print_ts(f"Rearranging the visibility values...")
@@ -205,7 +217,7 @@ def main(day, res, amount=1, visibility_type=0, coords=(-179, 180, -61, 61), pat
 
     print_ts(f"Getting colours for the categories...")
     t1 = time()
-    categories, colors_rgba = get_category_colors(visibility_type)
+    categories, colors_rgba = get_category_colors(visibility_criterion)
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
     print_ts(f"Categorizing visibilities...")
@@ -220,13 +232,14 @@ def main(day, res, amount=1, visibility_type=0, coords=(-179, 180, -61, 61), pat
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
 if __name__ == "__main__":
-    today = datetime(2022, 7, 27)
-    months: int = 12
+    today = datetime(2024, 8, 4)
+    months: int = 1
     map_coord: tuple[int, int, int, int] = (-170, -40, 15, 61)
-    resolution: int = 100
+    resolution: int = 150
     days: int = 3
+    criterion: int = 0 # Either 0 (Odeh, 2006), or 1 (Yallop, 1997)
 
-    # sys.stdout = Tee(f"mapper_logs/mapper_{datetime.fromtimestamp(time()).strftime("%Y-%m-%d_%H%M%S")}.log")
+    sys.stdout = Tee(f"mapper_logs/mapper_{datetime.fromtimestamp(time()).strftime("%Y-%m-%d_%H%M%S")}.log")
     start_time: float = time()
     for month in range(months):
         month_start_time: float = time()
@@ -235,21 +248,22 @@ if __name__ == "__main__":
         # Islamic Date Formatting
         islamic_date = gregorian_to_hijri(new_day.year, new_day.month, new_day.day)
         islamic_year, islamic_month, islamic_day = islamic_date[0], islamic_date[1], islamic_date[2]
-        islamic_month += 1
-        if islamic_month > 12:
-            islamic_month = 1
-            islamic_year += 1
+        if islamic_day > 6:
+            islamic_month += 1
+            if islamic_month > 12:
+                islamic_month = 1
+                islamic_year += 1
         islamic_month_name = get_islamic_month(islamic_month)
 
         # Create path
-        new_path = f"B:/Personal/New Moon Visibilities/New/{islamic_year}/"
+        new_path = f"B:/Personal/New Moon Visibilities/Experiment/"
         if not os.path.exists(new_path):
             print_ts(f"Creating {new_path}...")
             os.makedirs(new_path)
 
-        print_ts(f"Generating map for {islamic_month_name}, {islamic_year}...")
-        main(day=new_day, res=resolution, amount=days, visibility_type=0, path=new_path)
-
+        print_ts(f"===Generating map for {islamic_month_name}, {islamic_year}===")
+        main(day=new_day, res=resolution, amount=days, visibility_criterion=criterion, path=new_path)
+        print_ts(f"===Map for {islamic_month_name}, {islamic_year} Complete===")
         print_ts(f"Time to generate map for {islamic_month_name}, {islamic_year}: {(time() - month_start_time):.2f}s")
 
     print_ts(f"Total time taken: {(time() - start_time):.2f}s")

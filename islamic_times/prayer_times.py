@@ -25,8 +25,10 @@ import numpy as np
 from typing import Tuple, Dict
 
 
-def calculate_prayer_times(jde: float, deltaT: float, latitude: float, longitude: float, utc_diff: float, solar_parameters: Tuple[float, float], 
-                           prayer_times_parameters: Tuple [float, float, float, int, int], is_ramadan = False) -> Dict[str, datetime]:
+def calculate_prayer_times(date: datetime, latitude: float, longitude: float, elevation: float, utc_diff: float, sun_declination: float,
+                           prayer_times_parameters: Tuple [float, float, float, int, int], 
+                           is_ramadan = False
+                           ) -> Dict[str, datetime]:
     """
     Computes Islamic prayer times for a given date and location.
 
@@ -38,14 +40,8 @@ def calculate_prayer_times(jde: float, deltaT: float, latitude: float, longitude
     	deltaT (float): Difference between Terrestrial Time (TT) and Universal Time (UT).
     	latitude (float): Observer's latitude in decimal degrees.
     	longitude (float): Observer's longitude in decimal degrees.
+        elevation (float): Observer's elevation above sea level in metres.
     	utc_diff (float): Difference between local time and UTC (in hours).
-    	solar_parameters (Tuple[float, float, float, float, float, float]):
-            - Sun declination (degrees).
-            - Solar angle for sunrise/sunset.
-            - Delta Psi (nutation in longitude).
-            - Mean longitude of the Sun.
-            - Obliquity of the ecliptic.
-            - Right ascension of the Sun.
     	prayer_times_parameters (Tuple[float, float, float, int, int]):
             - Fajr angle (degrees).
             - Maghrib angle (degrees).
@@ -72,28 +68,10 @@ def calculate_prayer_times(jde: float, deltaT: float, latitude: float, longitude
     midnight_type = prayer_times_parameters[3]
     asr_type = prayer_times_parameters[4]
 
-    sun_declination = solar_parameters[0]
-    solar_angle = solar_parameters[1]
-    deltaPsi = solar_parameters[2]
-    L0 = solar_parameters[3]
-    epsilon = solar_parameters[4]
-    alpha = solar_parameters[5]
-
-    jd = jde - deltaT / 86400
-
-    # Equation of Time
-    eq_of_time = se.equation_of_time(deltaPsi, L0, epsilon, alpha)
-
-    # Calculate prayer times in solar time
-    solar_fajr = se.sunrise_sunset(-1, se.solar_hour_angle(latitude, sun_declination, fajr_angle))
-    solar_sunrise = se.sunrise_sunset(-1, solar_angle)
-    solar_sunset = se.sunrise_sunset(1, solar_angle)
-
-    # Convert prayer times from solar to standard time
-    standard_fajr = te.solar2standard(jd, solar_fajr, utc_diff, longitude, eq_of_time)
-    standard_sunrise = te.solar2standard(jd, solar_sunrise, utc_diff, longitude, eq_of_time)
-    standard_noon = te.solar2standard(jd, 12.0, utc_diff, longitude, eq_of_time)
-    standard_sunset = te.solar2standard(jd, solar_sunset, utc_diff, longitude, eq_of_time)
+    standard_fajr = find_proper_suntime(date, latitude, longitude, elevation, utc_diff, 'rise', fajr_angle)
+    standard_sunrise = find_proper_suntime(date, latitude, longitude, elevation, utc_diff, 'rise')
+    _, standard_noon, _ = se.rise_transit_set(date, latitude, longitude, 0, utc_diff)
+    standard_sunset = find_proper_suntime(date, latitude, longitude, elevation, utc_diff, 'set')
     
     # Calculate ʿAṣr time
     asr_hours = asr_time(latitude, sun_declination, ts=asr_type + 1)
@@ -106,8 +84,7 @@ def calculate_prayer_times(jde: float, deltaT: float, latitude: float, longitude
     # Calculate Maghrib time
     # Only if maghrib is not at sunset
     if maghrib_angle > 0:
-        solar_maghrib = se.sunrise_sunset(1, se.solar_hour_angle(latitude, sun_declination, maghrib_angle))
-        standard_maghrib = te.solar2standard(jd, solar_maghrib, utc_diff, longitude, eq_of_time)
+        standard_maghrib = se.sunrise_or_sunset(date, latitude, longitude, elevation, utc_diff, 'set', maghrib_angle)
     else:
         # Otherwise Maghrib is sunset
         standard_maghrib = standard_sunset
@@ -115,8 +92,7 @@ def calculate_prayer_times(jde: float, deltaT: float, latitude: float, longitude
     # Calculate ʿishāʾ time
     # If NOT makkah method
     if isha_angle is not np.inf:
-        solar_isha = se.sunrise_sunset(1, se.solar_hour_angle(latitude, sun_declination, isha_angle))
-        standard_isha = te.solar2standard(jd, solar_isha, utc_diff, longitude, eq_of_time)
+        standard_isha = se.sunrise_or_sunset(date, latitude, longitude, elevation, utc_diff, 'set', isha_angle)
     # Makkah method is special
     else:
         # Ramadan has isha as two hours after maghrib
@@ -124,13 +100,13 @@ def calculate_prayer_times(jde: float, deltaT: float, latitude: float, longitude
             standard_isha = standard_maghrib + timedelta(hours=2)
         # Otherwise it is one hour
         else:
-            standard_isha = standard_maghrib + timedelta(hours=2)
+            standard_isha = standard_maghrib + timedelta(hours=1)
     
     # Calculate Midnight time
     if midnight_type:
-        standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(jde, deltaT, utc_diff, latitude, longitude, eq_of_time, fajr_angle))
+        standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_diff, fajr_angle))
     else:
-        standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(jde, deltaT, utc_diff, latitude, longitude, eq_of_time, 0))
+        standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_diff))
 
     prayer_dict = {
         'fajr': standard_fajr,
@@ -150,7 +126,7 @@ def calculate_prayer_times(jde: float, deltaT: float, latitude: float, longitude
     return prayer_dict
 
 # Used to calculate islamic midnight
-def find_tomorrow_time(jde: float, deltaT: float, utc_change: float, lat: float, long: float, eq_of_time_minutes: float, angle: float) -> datetime:
+def find_tomorrow_time(date: datetime, lat: float, long: float, elev: float, utc_diff: float, angle: float = 5 / 6) -> datetime:
     """
     Calculates the solar time for the next day to determine **Islamic midnight**.
 
@@ -158,24 +134,17 @@ def find_tomorrow_time(jde: float, deltaT: float, utc_change: float, lat: float,
     for the **midnight calculation** in the **Sunset-to-Fajr method**.
 
     Parameters:
-    	jde (float): Julian Ephemeris Date (JDE) for the current day.
-    	deltaT (float): Difference between Terrestrial Time and Universal Time.
-    	utc_change (float): Observer's UTC offset.
+    	date (datetime): Date of the observer.
     	lat (float): Latitude of the observer.
     	long (float): Longitude of the observer.
-    	eq_of_time_minutes (float): Equation of Time (minutes) for correcting solar time.
-    	angle (float): Solar hour angle for computing Fajr time.
+    	elevation (float): Observer's elevation above sea level in metres.
+    	utc_change (float): Observer's UTC offset.
 
     Returns:
     	datetime: The calculated **fajr time** for the next day in **local standard time**.
     """
-    jde_tomorrow = jde + 1
-
-    sun_params = se.sunpos(jde_tomorrow, deltaT, lat, long)
-    tomorrow_sun_declination = sun_params.apparent_declination
-    tomorrow_time_solar_angle = se.solar_hour_angle(lat, tomorrow_sun_declination, angle)
-    tomorrow_solar_time = se.sunrise_sunset(-1, tomorrow_time_solar_angle)
-    tomorrow_standard_time = te.solar2standard(jde_tomorrow - deltaT / 86400, tomorrow_solar_time, utc_change, long, eq_of_time_minutes)
+    tomorrow_date = date + timedelta(days=1)
+    tomorrow_standard_time = se.sunrise_or_sunset(tomorrow_date, lat, long, elev, utc_diff, 'rise', angle)
 
     return tomorrow_standard_time
 
@@ -215,7 +184,35 @@ def asr_time(lat: float, dec: float, ts: int = 1) -> float:
         return np.inf
     else:
         return 1 / 15 * np.rad2deg(np.arccos(temp_num / temp_denom))
-    
+
+def find_proper_suntime(true_date: datetime, latitude, longitude, elevation, utc_offset, rise_or_set: str, angle: float = 5 / 6) -> datetime:
+        """
+        Determines the proper local sunset time.
+
+        Adjusts the calculated sunset time to account for local UTC differences.
+
+        Parameters:
+            date (datetime): The reference date.
+
+        Returns:
+            datetime: Adjusted sunset time. If sunset is not found, returns `datetime.min`.
+        """
+
+        temp_utc_offset = np.floor(longitude / 15) - 1
+        temp_sunset = se.sunrise_or_sunset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set, angle)
+        date_doy = true_date.timetuple().tm_yday
+        if temp_sunset == np.inf:
+            return datetime.min
+
+        i = 1
+        while(True):
+            temp_sunset_doy = (temp_sunset + timedelta(hours=temp_utc_offset, minutes=-20)).timetuple().tm_yday
+            if (temp_sunset_doy < date_doy and temp_sunset.year == true_date.year) or ((temp_sunset + timedelta(hours=temp_utc_offset)).year < true_date.year):
+                temp_sunset = se.sunrise_or_sunset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set, angle)
+                i += 1
+            else: 
+                return temp_sunset
+
 def extreme_latitutdes():
     """
     Placeholder function for handling **prayer time adjustments in extreme latitudes**.

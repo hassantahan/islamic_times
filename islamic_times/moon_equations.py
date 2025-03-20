@@ -604,6 +604,8 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 
 	# Preserve the sign relative to year 2000.
 	p_sign = np.sign(date.year - 2000)
+	if not (p_sign in [1, -1]):
+		p_sign = 1
 
 	# Calculate k based on eq. 49.2.
 	k_temp = ((abs(date.year - 2000) + p_sign * day_of_year / te.TROPICAL_YEAR) * 12.3685)
@@ -616,7 +618,7 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 	])
 
 	# Prepare output array.
-	moon_phases = [None] * 4 # np.empty(4)
+	moon_phases = [None] * 4
 
 	# Pre-convert A-term coefficients to NumPy arrays.
 	a_sin_term_coeffs = [np.array(item) for item in __A_SIN_TERM_PHASES_COEFF]
@@ -785,7 +787,7 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 	H_zero = np.rad2deg(np.arccos(cosH_zero))
 
 	# No moonset/rise
-	if math.isnan(H_zero):
+	if np.isnan(H_zero):
 		return np.inf
 
 	# GMST
@@ -802,8 +804,8 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 	for _ in range(3):
 		little_theta_zero = (sidereal_time + 360.985647 * m2) % 360
 		n = m2 + new_deltaT / 86400
-		interpolated_moon_dec = ce.interpolation(n, moon_params[0].declination, moon_params[1].declination, moon_params[2].declination)
-		interpolated_moon_ra = ce.interpolation(n, moon_params[0].right_ascension, moon_params[1].right_ascension, moon_params[2].right_ascension)
+		interpolated_moon_dec = ce.interpolation(n, moon_params[0].top_declination, moon_params[1].top_declination, moon_params[2].top_declination)
+		interpolated_moon_ra = ce.interpolation(n, moon_params[0].top_ascension, moon_params[1].top_ascension, moon_params[2].top_ascension)
 		lunar_local_hour_angle = (little_theta_zero - (-long) - interpolated_moon_ra) % 360
 		moon_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(interpolated_moon_dec) +
 										ce.cos(lat) * ce.cos(interpolated_moon_dec) *
