@@ -223,7 +223,7 @@ def correct_ra_dec(ra: float, dec: float, lha: float, parallax: float, lat: floa
 	p_cos_psi_prime: float = cos(u) + elev / dist * cos(lat)
 
 	temp_num: float = -1 * p_cos_psi_prime * sin(parallax) * sin(lha)
-	temp_denom: float = cos(dec) - p_cos_psi_prime * sin(parallax) * sin(lha)
+	temp_denom: float = cos(dec) - p_cos_psi_prime * sin(parallax) * cos(lha)
 	deltaA: float = np.rad2deg(np.arctan2(temp_num, temp_denom))
 
 	temp_num: float = (sin(dec) - p_sin_psi_prime * sin(parallax)) * cos(deltaA)

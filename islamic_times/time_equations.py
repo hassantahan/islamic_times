@@ -410,6 +410,9 @@ def time_midpoint(datetime1: datetime, datetime2: datetime) -> datetime:
     Returns:
         datetime: The midpoint datetime
     '''
+    if datetime1 == np.inf or datetime2 == np.inf:
+        raise ValueError
+
     # Calculate the difference
     difference = datetime2 - datetime1
 

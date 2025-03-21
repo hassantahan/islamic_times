@@ -28,7 +28,7 @@ from typing import Tuple, Dict
 def calculate_prayer_times(date: datetime, latitude: float, longitude: float, elevation: float, utc_diff: float, sun_declination: float,
                            prayer_times_parameters: Tuple [float, float, float, int, int], 
                            is_ramadan = False
-                           ) -> Dict[str, datetime]:
+                           ) -> Dict[str, datetime | str]:
     """
     Computes Islamic prayer times for a given date and location.
 
@@ -68,18 +68,17 @@ def calculate_prayer_times(date: datetime, latitude: float, longitude: float, el
     midnight_type = prayer_times_parameters[3]
     asr_type = prayer_times_parameters[4]
 
-    standard_fajr = find_proper_suntime(date, latitude, longitude, elevation, utc_diff, 'rise', fajr_angle)
-    standard_sunrise = find_proper_suntime(date, latitude, longitude, elevation, utc_diff, 'rise')
-    _, standard_noon, _ = se.rise_transit_set(date, latitude, longitude, 0, utc_diff)
-    standard_sunset = find_proper_suntime(date, latitude, longitude, elevation, utc_diff, 'set')
+    # Standard sun times calculations
+    standard_fajr = se.find_proper_suntime(date, latitude, longitude, elevation, utc_diff, 'rise', fajr_angle)
+    standard_sunrise = se.find_proper_suntime(date, latitude, longitude, elevation, utc_diff, 'rise')
+    standard_noon = se.find_transit(date, latitude, longitude, elevation, utc_diff)
+    standard_sunset = se.find_proper_suntime(date, latitude, longitude, elevation, utc_diff, 'set')
     
     # Calculate ʿAṣr time
-    asr_hours = asr_time(latitude, sun_declination, ts=asr_type + 1)
-    
-    if asr_hours != np.inf:
-        standard_asr = standard_noon + timedelta(hours=asr_hours)
-    else:
-        standard_asr = "ʿAṣr time cannot be calculated because the sun's geometry at the given date and coordintes does not satisfy the shadow ratio."
+    try:
+        standard_asr = asr_time(standard_noon, latitude, sun_declination, asr_type)
+    except ArithmeticError as e:
+        standard_asr = str(e)
     
     # Calculate Maghrib time
     # Only if maghrib is not at sunset
@@ -103,10 +102,13 @@ def calculate_prayer_times(date: datetime, latitude: float, longitude: float, el
             standard_isha = standard_maghrib + timedelta(hours=1)
     
     # Calculate Midnight time
-    if midnight_type:
-        standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_diff, fajr_angle))
-    else:
-        standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_diff))
+    try:
+        if midnight_type:
+            standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_diff, fajr_angle))
+        else:
+            standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_diff))
+    except ValueError as e:
+        standard_midnight = np.inf
 
     prayer_dict = {
         'fajr': standard_fajr,
@@ -119,9 +121,9 @@ def calculate_prayer_times(date: datetime, latitude: float, longitude: float, el
         'midnight': standard_midnight
     }
 
-    for key, value in prayer_dict.items():
-        if value == datetime.min:
-            prayer_dict[key] = "Does not exist."
+    # Deal with locations at extreme latitudes
+    if any(dt == np.inf for dt in prayer_dict.values()):
+        prayer_dict = extreme_latitudes(prayer_dict)
 
     return prayer_dict
 
@@ -151,7 +153,7 @@ def find_tomorrow_time(date: datetime, lat: float, long: float, elev: float, utc
 # ʿAṣr time
 # Type 0: Most schools
 # Type 1: Ḥanafī definition
-def asr_time(lat: float, dec: float, ts: int = 1) -> float:
+def asr_time(noon: datetime, lat: float, dec: float, ts: int = 1) -> datetime:
     """
     Computes the **ʿaṣr prayer time** based on the observer's **shadow ratio**.
 
@@ -161,6 +163,7 @@ def asr_time(lat: float, dec: float, ts: int = 1) -> float:
     - **Ḥanafī Method (`t=2`)**: Shadow is **twice** the object's height.
 
     Parameters:
+        noon (datetime): Time of ẓuhr/solar noon/sun transit/sun culmination.
         lat (float): Observer's latitude in decimal degrees.
         dec (float): Sun's **declination** at the given time.
         ts (int, optional): ʿaṣr calculation method:
@@ -174,6 +177,7 @@ def asr_time(lat: float, dec: float, ts: int = 1) -> float:
     - **If the sun never reaches the required shadow ratio**, the function returns **infinity (`np.inf`)**.
     - This condition occurs in **polar regions** during certain seasons.
     """
+
     temp_num = ce.sin(np.rad2deg(np.arctan2(1, ts + ce.tan(lat - dec)))) - ce.sin(lat) * ce.sin(dec)
     temp_denom = ce.cos(lat) * ce.cos(dec)
     
@@ -181,39 +185,13 @@ def asr_time(lat: float, dec: float, ts: int = 1) -> float:
     # In such a scenario, it will just return that message.
     # TODO: Another fix might be needed.
     if temp_num > temp_denom:
-        return np.inf
+        raise ArithmeticError("ʿAṣr time cannot be calculated because the sun's geometry at the given date and coordintes does not satisfy the shadow ratio.")
     else:
-        return 1 / 15 * np.rad2deg(np.arccos(temp_num / temp_denom))
+        asr_hours = 1 / 15 * np.rad2deg(np.arccos(temp_num / temp_denom))
+    
+    return noon + timedelta(hours=asr_hours)
 
-def find_proper_suntime(true_date: datetime, latitude, longitude, elevation, utc_offset, rise_or_set: str, angle: float = 5 / 6) -> datetime:
-        """
-        Determines the proper local sunset time.
-
-        Adjusts the calculated sunset time to account for local UTC differences.
-
-        Parameters:
-            date (datetime): The reference date.
-
-        Returns:
-            datetime: Adjusted sunset time. If sunset is not found, returns `datetime.min`.
-        """
-
-        temp_utc_offset = np.floor(longitude / 15) - 1
-        temp_sunset = se.sunrise_or_sunset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set, angle)
-        date_doy = true_date.timetuple().tm_yday
-        if temp_sunset == np.inf:
-            return datetime.min
-
-        i = 1
-        while(True):
-            temp_sunset_doy = (temp_sunset + timedelta(hours=temp_utc_offset, minutes=-20)).timetuple().tm_yday
-            if (temp_sunset_doy < date_doy and temp_sunset.year == true_date.year) or ((temp_sunset + timedelta(hours=temp_utc_offset)).year < true_date.year):
-                temp_sunset = se.sunrise_or_sunset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set, angle)
-                i += 1
-            else: 
-                return temp_sunset
-
-def extreme_latitutdes():
+def extreme_latitudes(prayer_times: Dict[str, datetime]):
     """
     Placeholder function for handling **prayer time adjustments in extreme latitudes**.
 
@@ -229,4 +207,9 @@ def extreme_latitutdes():
     ### Returns:
     - (To be implemented)
     """
-    ...
+
+    for key, value in prayer_times.items():
+        if value == np.inf:
+            prayer_times[key] = "The observer at a latitude such that the sun does not reach the given angle for the prayer."
+
+    return prayer_times

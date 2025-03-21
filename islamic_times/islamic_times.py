@@ -85,7 +85,7 @@ class ITLocation:
         "asr_type", "fajr_angle", "isha_angle", "maghrib_angle", "midnight_type", "method", "times_of_prayer", "islamic_date", 
         "jd", "deltaT", "jde", 
         "sun_params", "delPsi", "sun_declination", "sun_right_ascension", "solar_angle", "sun_alt", "sun_az", 
-        "moon_params", "moon_declination", "moon_right_ascension", "moon_pi", "moon_alt", "moon_az", "moonset", "moon_illumin"
+        "moon_params", "moon_declination", "moon_right_ascension", "moon_pi", "moon_alt", "moon_az", "moonrise", "moon_transit", "moonset", "moon_illumin"
     )
 
     ##### Prayer Methods #####
@@ -351,14 +351,16 @@ class ITLocation:
         super().__setattr__('sun_az', temp_sun.azimuth)
 
         # Important Moon Factors placed into local variables
-        super().__setattr__('moon_declination', temp_moon.declination)
+        super().__setattr__('moon_declination', temp_moon.top_declination)
         super().__setattr__('moon_right_ascension', ce.decimal_to_hms(temp_moon.right_ascension))
         super().__setattr__('moon_pi', temp_moon.eh_parallax)
         super().__setattr__('moon_alt', temp_moon.altitude)
         super().__setattr__('moon_az', temp_moon.azimuth)
 
         # Moon calculations
-        super().__setattr__('moonset', self.__find_proper_moonset(self.observer_date))
+        super().__setattr__('moonrise', me.find_proper_moon_event(self.observer_date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'rise'))
+        super().__setattr__('moon_transit', me.find_transit(self.observer_date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset))
+        super().__setattr__('moonset', me.find_proper_moon_event(self.observer_date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'set'))
         super().__setattr__('moon_illumin', me.moon_illumination(
                                 self.sun_declination, 
                                 ce.hms_to_decimal(self.sun_right_ascension), 
@@ -370,35 +372,6 @@ class ITLocation:
         
         # Astronomical parameters have been calculated so the flag is set to False
         super().__setattr__('datetime_modified', False)
-        
-    # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
-    def __find_proper_moonset(self, date: datetime) -> datetime:
-        """
-        Determines the proper local moonset time.
-
-        Adjusts the calculated moonset time to account for local UTC differences.
-
-        Parameters:
-            date (datetime): The reference date.
-
-        Returns:
-            datetime: Adjusted moonset time. If moonset is not found, returns `datetime.min`.
-        """
-
-        temp_utc_offset = np.floor(self.observer_longitude / 15) - 1
-        temp_moonset = me.calculate_moonset(date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset)
-        date_doy = date.timetuple().tm_yday
-        if temp_moonset == np.inf:
-            return datetime.min
-
-        i = 1
-        while(True):
-            temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_offset, minutes=-20)).timetuple().tm_yday
-            if (temp_moonset_doy < date_doy and temp_moonset.year == date.year) or ((temp_moonset + timedelta(hours=temp_utc_offset)).year < date.year):
-                temp_moonset = me.calculate_moonset(date + timedelta(days=i), self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset)
-                i += 1
-            else: 
-                return temp_moonset
 
     # Prayer Time Calculations
     def calculate_prayer_times(self) -> None:
@@ -755,6 +728,8 @@ class ITLocation:
             raise ValueError("Cannot print dates and times without calculating the astronomical parameters. First call `calculate_astro()`.")
 
         return {
+                "moonrise" : self.moonrise.strftime("%X %d-%m-%Y"),
+                "moon_transit" : self.moon_transit.strftime("%X %d-%m-%Y"),
                 "moonset" : self.moonset.strftime("%X %d-%m-%Y"),
                 "declination" : np.round(self.moon_declination, 3),
                 "right_ascension" : f"{self.moon_right_ascension[0]}h {self.moon_right_ascension[1]}m {self.moon_right_ascension[2]:.2f}s",
@@ -866,7 +841,7 @@ class ITLocation:
         for day in range(days):
             # First, check if the moonset is before the new moon for the first day
             if day == 0:
-                nm_moonset = self.__find_proper_moonset(ymd_new_moon)
+                nm_moonset = me.find_proper_moon_event(ymd_new_moon, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'set')
                 if nm_moonset == datetime.min:
                     # Moonset doesn't exist, for extreme latitudes
                     v = -997
@@ -890,7 +865,7 @@ class ITLocation:
             nm_sun_params = se.sunpos(test_jde_new_moon, test_deltaT_new_moon, self.observer_latitude, self.observer_longitude)
 
             # Sunset & moonset calculations
-            test_nm_sunset = pt.find_proper_suntime(test_ymd_new_moon, 
+            test_nm_sunset = se.find_proper_suntime(test_ymd_new_moon, 
                                                   self.observer_latitude, 
                                                   self.observer_longitude,
                                                   self.observer_elevation,
@@ -900,7 +875,7 @@ class ITLocation:
             if day == 0:
                 test_nm_moonset = nm_moonset
             else:
-                test_nm_moonset = self.__find_proper_moonset(test_ymd_new_moon)
+                test_nm_moonset = me.find_proper_moon_event(test_ymd_new_moon, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'set')
 
             # For extreme latitudes where the moonset or sunset don't exist:
             if np.abs(self.observer_latitude) > 62:

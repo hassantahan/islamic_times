@@ -430,7 +430,7 @@ def solar_hour_angle(latitude: float, declination: float, angle: float = 5 / 6) 
     else:
         return np.rad2deg(np.arccos(ratio))
 
-def rise_transit_set(date: datetime, lat: float, long: float, elev: float, utc_diff: float, angle: float = 5 / 6) -> Tuple[datetime, datetime, datetime]:
+def find_transit(date: datetime, lat: float, long: float, elev: float, utc_diff: float, angle: float = 5 / 6) -> Tuple[datetime, datetime, datetime]:
     """
     Calculate the times of sunrise, sunset, and its transit for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
@@ -474,50 +474,22 @@ def rise_transit_set(date: datetime, lat: float, long: float, elev: float, utc_d
     # Transit
     m0 = (sun_params[1].topocentric_ascension - long - sidereal_time) / 360
 
-    # Rising
-    m1 = m0 - H_zero / 360
-
-    # Setting
-    m2 = m0 + H_zero / 360
-
     # Minor corrective steps thru iteration
     for _ in range(3):
-        m_vals = [m0, m1, m2]
-        for i in range(3):
-            little_theta_zero = (sidereal_time + 360.985647 * m_vals[i]) % 360
-            n = m_vals[i] + new_deltaT / 86400
+        little_theta_zero = (sidereal_time + 360.985647 * m0) % 360
+        n = m0 + new_deltaT / 86400
+        interpolated_sun_ra = ce.interpolation(n, sun_params[0].topocentric_ascension, 
+                                                sun_params[1].topocentric_ascension, 
+                                                sun_params[2].topocentric_ascension)
 
-            interpolated_sun_dec = ce.interpolation(n, sun_params[0].topocentric_declination, 
-                                                    sun_params[1].topocentric_declination, 
-                                                    sun_params[2].topocentric_declination)
-            interpolated_sun_ra = ce.interpolation(n, sun_params[0].topocentric_ascension, 
-                                                   sun_params[1].topocentric_ascension, 
-                                                   sun_params[2].topocentric_ascension)
-
-
-            solar_local_hour_angle = (little_theta_zero - (-long) - interpolated_sun_ra) % 360
-            if i == 0:
-                m0 -= solar_local_hour_angle / 360
-                continue
-
-            sun_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(interpolated_sun_dec) +
-                                            ce.cos(lat) * ce.cos(interpolated_sun_dec) *
-                                            ce.cos(solar_local_hour_angle)))
-            deltaM = (sun_alt - h_zero) / (360 * ce.cos(interpolated_sun_dec) * ce.cos(lat) * ce.sin(solar_local_hour_angle))
-
-            if i == 1:
-                m1 += deltaM
-            else:
-                m2 += deltaM
+        solar_local_hour_angle = (little_theta_zero - (-long) - interpolated_sun_ra) % 360
+        m0 -= solar_local_hour_angle / 360
 
     # Compute final rise, transit, and set time by adding days to base date
-    #m0 %= 1
-    m_vals = [m % 1 for m in m_vals]
-    sunrise_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m1) - timedelta(hours=utc_diff)
+    m0 %= 1
     sun_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=utc_diff)
-    sunset_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m2) - timedelta(hours=utc_diff)
-
-    return (sunrise_dt, sun_transit_dt, sunset_dt)
+                                                                                        
+    return sun_transit_dt
 
 def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_diff: float, rise_or_set: str, angle: float = 5/6) -> datetime:
     """
@@ -539,6 +511,7 @@ def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_
     Raises:
         ValueError: If the value of rise_or_set is not recognized.
     """
+
     if rise_or_set not in ['rise', 'set', 'sunrise', 'sunset']:
         raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
 
@@ -560,6 +533,7 @@ def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_
     cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(sun_params[1].topocentric_declination)) / (
                 ce.cos(lat) * ce.cos(sun_params[1].topocentric_declination))
     H_zero = np.rad2deg(np.arccos(cosH_zero))
+
     # If H_zero is not defined (NaN), the event does not occur (e.g., polar day/night).
     if np.isnan(H_zero):
         return np.inf
@@ -605,6 +579,34 @@ def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_
     # Convert the fractional day to a datetime object, adjusting for the UTC offset.
     event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=utc_diff)
     return event_dt
+
+def find_proper_suntime(true_date: datetime, latitude, longitude, elevation, utc_offset, rise_or_set: str, angle: float = 5 / 6) -> datetime:
+        """
+        Determines the proper local sunset time.
+
+        Adjusts the calculated sunset time to account for local UTC differences.
+
+        Parameters:
+            date (datetime): The reference date.
+
+        Returns:
+            datetime: Adjusted sunset time. If sunset is not found, returns `datetime.min`.
+        """
+
+        temp_utc_offset = np.floor(longitude / 15) - 1
+        temp_suntime = sunrise_or_sunset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set, angle)
+        date_doy = true_date.timetuple().tm_yday
+        if temp_suntime == np.inf:
+            return np.inf
+
+        i = 1
+        while(True):
+            temp_suntime_doy = (temp_suntime + timedelta(hours=temp_utc_offset, minutes=-20)).timetuple().tm_yday
+            if (temp_suntime_doy < date_doy and temp_suntime.year == true_date.year) or ((temp_suntime + timedelta(hours=temp_utc_offset)).year < true_date.year):
+                temp_suntime = sunrise_or_sunset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set, angle)
+                i += 1
+            else: 
+                return temp_suntime
 
 # -1 for Sunrise
 # 1 for Sunset
