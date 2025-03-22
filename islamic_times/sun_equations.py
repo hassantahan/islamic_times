@@ -430,7 +430,7 @@ def solar_hour_angle(latitude: float, declination: float, angle: float = 5 / 6) 
     else:
         return np.rad2deg(np.arccos(ratio))
 
-def find_transit(date: datetime, lat: float, long: float, elev: float, utc_diff: float, angle: float = 5 / 6) -> Tuple[datetime, datetime, datetime]:
+def find_sun_transit(date: datetime, lat: float, long: float, elev: float, utc_offset: float, angle: float = 5 / 6) -> Tuple[datetime, datetime, datetime]:
     """
     Calculate the times of sunrise, sunset, and its transit for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
@@ -439,7 +439,7 @@ def find_transit(date: datetime, lat: float, long: float, elev: float, utc_diff:
         lat (float): The observer's latitude (°).
         long (float): The observer's longitude (°).
         elev (float): The observer's elevation above sea level (m).
-        utc_diff (float): The observer's difference from UTC (hours).
+        utc_offset (float): The observer's difference from UTC (hours).
 
     Returns:
         datetime: The time of moonset.
@@ -451,21 +451,12 @@ def find_transit(date: datetime, lat: float, long: float, elev: float, utc_diff:
     new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
     new_jde = new_jd + new_deltaT / 86400
 
-    # Calculate new sun and moon params with the new_jd
+    # Calculate new sun params with the new_jd
     sun_params: List[Sun] = []
     for i in range(3):
-        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_diff)
+        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_offset)
         delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
         sun_params.append(sunpos(new_jde + i - 1, delT_temp, lat, long))
-
-    # Find H0
-    h_zero = - angle
-    cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(sun_params[1].topocentric_declination)) / (ce.cos(lat) * ce.cos(sun_params[1].topocentric_declination))
-    H_zero = np.rad2deg(np.arccos(cosH_zero))
-
-    # No moonset/rise
-    if np.isnan(H_zero):
-        return np.inf
 
     # GMST
     sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
@@ -487,11 +478,11 @@ def find_transit(date: datetime, lat: float, long: float, elev: float, utc_diff:
 
     # Compute final rise, transit, and set time by adding days to base date
     m0 %= 1
-    sun_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=utc_diff)
+    sun_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=utc_offset)
                                                                                         
     return sun_transit_dt
 
-def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_diff: float, rise_or_set: str, angle: float = 5/6) -> datetime:
+def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_offset: float, rise_or_set: str, angle: float = 5/6) -> datetime:
     """
     Calculate either the sunrise or the sunset time for a given date and observer coordinates.
     This function computes only the requested event (sunrise or sunset) without calculating both.
@@ -501,7 +492,7 @@ def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_
         lat (float): Observer's latitude in degrees.
         long (float): Observer's longitude in degrees.
         elev (float): Observer's elevation above sea level in meters.
-        utc_diff (float): The observer's time difference from UTC in hours.
+        utc_offset (float): The observer's time difference from UTC in hours.
         rise_or_set (str): 'rise' or 'sunrise' to calculate sunrise; 'set' or 'sunset' to calculate sunset.
         angle (float): The standard altitude of the sun (default is 5/6°).
         
@@ -524,7 +515,7 @@ def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_
     # Calculate sun parameters for three consecutive days.
     sun_params: List[Sun] = []
     for i in range(3):
-        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_diff)
+        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_offset)
         delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
         sun_params.append(sunpos(new_jde + i - 1, delT_temp, lat, long))
 
@@ -577,7 +568,7 @@ def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_
         m_event += deltaM
 
     # Convert the fractional day to a datetime object, adjusting for the UTC offset.
-    event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=utc_diff)
+    event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=utc_offset)
     return event_dt
 
 def find_proper_suntime(true_date: datetime, latitude, longitude, elevation, utc_offset, rise_or_set: str, angle: float = 5 / 6) -> datetime:
@@ -607,31 +598,3 @@ def find_proper_suntime(true_date: datetime, latitude, longitude, elevation, utc
                 i += 1
             else: 
                 return temp_suntime
-
-# -1 for Sunrise
-# 1 for Sunset
-def sunrise_sunset(set_or_rise: int, hour_angle: float) -> float:
-    '''
-    Calculate the time of sunrise or sunset for a given hour angle. The hour angle is the angle between the observer's meridian and the sun's position. The hour angle is positive for sunset and negative for sunrise.
-
-    Parameters:
-        set_or_rise (int): The value 1 for sunset and -1 for sunrise.
-        hour_angle (float): The hour angle in degrees.
-
-    Raises:
-        ValueError: If the 'set_or_rise' is not -1 or 1.
-
-    Returns:
-        float: The time of sunrise or sunset in hours from noon. Returns 'np.inf' if the angle is not possible to achieve
-    '''
-    
-    if set_or_rise not in [1, -1]:
-        raise ValueError("'set_or_rise' from sun_equations.sunrise_sunset() accepts only -1 or 1 for sunset or sunrise respectively.")
-    
-    if hour_angle == np.inf:
-        return np.inf
-    
-    hours_offset_from_noon = hour_angle / 15
-
-    offset = 12 + set_or_rise * hours_offset_from_noon
-    return  offset

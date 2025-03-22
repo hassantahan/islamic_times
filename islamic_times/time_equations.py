@@ -337,35 +337,6 @@ def delta_t_approx(year: int, month: int) -> float:
         u = (year - 1820) / 100
         return -20 + 32 * u**2
 
-# Converts a solar time to a standard time (i.e. UTC standardized)
-def solar2standard(jd: float, solar_time: float, utc_offset: float, longitude: float, eq_of_time: float) -> datetime:
-    '''Convert solar time (in decimal hours) to standard local datetime.
-
-    The conversion accounts for the difference between the solar time and the standard time
-    by adjusting for the longitude (which gives a local solar time correction) and the equation
-    of time correction.
-
-    Parameters:
-        jd (float): Julian Day corresponding to the local date (at midnight).
-        solar_time (float): Solar time in decimal hours.
-        utc_offset (float): UTC offset in hours.
-        longitude (float): Observer's longitude in degrees.
-        eq_of_time (float): Equation of time in minutes.
-
-    Returns:
-        datetime: Standard local datetime.
-    '''
-
-    if solar_time == np.inf:
-        return datetime.min
-
-    half_jd = np.floor(jd - utc_offset / 24 - 0.5) + 0.5 + utc_offset / 24
-    local_standard_meridian = utc_offset * 15
-    error_in_minutes = 4 * (local_standard_meridian + longitude) + eq_of_time
-    standard_time = solar_time - error_in_minutes / 60
-    day = jd_to_gregorian(half_jd + standard_time / 24, utc_offset)
-    return day
-
 # The most computationally expensive function
 # Finds the UTC offset given a date and coordinates
 def find_utc_offset(lat, long, day) -> Tuple[str, float]:

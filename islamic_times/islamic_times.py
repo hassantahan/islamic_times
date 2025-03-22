@@ -358,9 +358,9 @@ class ITLocation:
         super().__setattr__('moon_az', temp_moon.azimuth)
 
         # Moon calculations
-        super().__setattr__('moonrise', me.find_proper_moon_event(self.observer_date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'rise'))
-        super().__setattr__('moon_transit', me.find_transit(self.observer_date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset))
-        super().__setattr__('moonset', me.find_proper_moon_event(self.observer_date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'set'))
+        super().__setattr__('moonrise', me.find_proper_moontime(self.observer_date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'rise'))
+        super().__setattr__('moon_transit', me.find_moon_transit(self.observer_date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset))
+        super().__setattr__('moonset', me.find_proper_moontime(self.observer_date, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'set'))
         super().__setattr__('moon_illumin', me.moon_illumination(
                                 self.sun_declination, 
                                 ce.hms_to_decimal(self.sun_right_ascension), 
@@ -841,7 +841,7 @@ class ITLocation:
         for day in range(days):
             # First, check if the moonset is before the new moon for the first day
             if day == 0:
-                nm_moonset = me.find_proper_moon_event(ymd_new_moon, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'set')
+                nm_moonset = me.find_proper_moontime(ymd_new_moon, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'set')
                 if nm_moonset == datetime.min:
                     # Moonset doesn't exist, for extreme latitudes
                     v = -997
@@ -875,7 +875,7 @@ class ITLocation:
             if day == 0:
                 test_nm_moonset = nm_moonset
             else:
-                test_nm_moonset = me.find_proper_moon_event(test_ymd_new_moon, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'set')
+                test_nm_moonset = me.find_proper_moontime(test_ymd_new_moon, self.observer_latitude, self.observer_longitude, self.observer_elevation, self.utc_offset, 'set')
 
             # For extreme latitudes where the moonset or sunset don't exist:
             if np.abs(self.observer_latitude) > 62:
