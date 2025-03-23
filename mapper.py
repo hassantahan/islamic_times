@@ -7,15 +7,111 @@ from datetime import timedelta, datetime
 from islamic_times import islamic_times as it
 from islamic_times.time_equations import get_islamic_month, gregorian_to_hijri
 
-CITIES = [
-        'Washington,  D.C.', 'Los Angeles', 'London',
-        'Vienna', 'Moscow', 'Tokyo', 'Beijing', 'Mumbai',
-        'Cairo', 'Lagos', 'Sydney', 'São Paulo', 'Mexico City', 
-        'Toronto', 'Istanbul', 'Tehran', 'Islamabad', 'Perth',
-        'Bangkok', 'Hong Kong', 'Singapore', 'Makkah', 'Miami',
-        'Lima', 'Bogota', 'Cape Town', 'Madrid', 'Vancouver',
-        'Nairobi', 'Addis Ababa', 'Dakar', 'Santiago'
+CITIES_WORLD: list[str] = [
+        # PACIFIC
+        'Honolulu', 
+        
+        # NORTH AMERICA
+        'Vancouver', 'Los Angeles', 'Mexico City',
+        'Toronto', 'Miami', 'Washington,  D.C.',
+
+        # SOUTH AMERICA
+        'Lima', 'Bogota', 'Santiago', 'São Paulo',
+
+        # WEST AFRICA
+        'Dakar', 'Lagos',
+
+        # EUROPE
+        'Madrid', 'London', 'Vienna', 'Moscow',
+
+        # SOUTH AFRICA
+        'Cape Town', 
+
+        # MIDDLE EAST
+        'Istanbul', 'Cairo', 'Makkah', 'Tehran',
+
+        # EAST AFRICA
+        'Nairobi', 'Addis Ababa', 
+
+        # SOUTH ASIA
+        'Islamabad', 'Mumbai',
+
+        # SOUTH EAST ASIA
+        'Bangkok',  'Singapore',
+
+        # EAST ASIA
+        'Hong Kong', 'Beijing', 'Tokyo', 
+        
+        # AUSTRALIA
+        'Sydney', 'Perth' 
     ]
+
+CITIES_IRAN: list[str] = [
+    'Tehran', 'Mashhad', 'Kerman', 'Shiraz', 'Zanjan', 
+    'Ardabil', 'Isfahan', 'Gorgan', 'Tabriz', 'Semnan', 
+    'Yazd', 'Rasht', 'Arak', 'Boshruyeh', 'Mehran', 'Dargaz', 
+    'Chabahar', 'Zahedan', 'Birjand', 'Sanandaj', 'Ahvaz', 
+    'Saravan', 'Hamadan', 'Khorramabad', 'Qomsheh', 'Ilam', 
+    'Sari', 'Qazvin', 'Bandar-e-Abbas', 'Bandar-e Bushehr', 
+    'Sirjan', 'Kashmar', 'Bojnurd', 'Qom', 'Urmia', 'Khvoy',
+    'Yasuj'
+    ]
+
+CITIES_MIDDLE_EAST: list[str] = [
+    'Istanbul', 'Khartoum', 'Cairo', 'Luxor', 'Ankara', 
+    'Beirut', 'Aleppo', 'Medina', 'Makkah', 'Djibouti',
+    'Sanaa', 'Irbil', 'Baghdad', 'Riyadh', 'Kuwait City',
+    'Baku', 'Tehran', 'Doha', 'Dubai', 'Kerman', 'Muscat', 
+    'Mashhad', 'Karachi', 'Kabul'
+    ]
+
+CITIES_NORTH_AMERICA: list[str] = [
+    # Pacific
+    'Honolulu',
+    
+    # CANADA
+    'Vancouver', 'Edmonton', 'Calgary', 'Winnipeg', 'Thunder Bay', 
+    'Toronto', 'Montréal', 'Halifax', 'St. John\'s',
+
+    # UNITED STATES
+    'Portland', 'San Francisco', 'Los Angeles', 'Billings', 
+    'Albuquerque', 'Denver', 'Kansas City', 'Dallas', 'Houston', 
+    'Minneapolis', 'Chicago', 'Orlando', 'Atlanta', 'Miami', 
+    'Washington,  D.C.', 'Boston',
+
+    # MEXICO
+    'Hermosillo', 'Monterrey', 'Mexico City', 'Mérida',
+
+    # CARIBBEAN
+    'Havana', 'Kingston',
+]
+
+CITIES_EUROPE: list[str] = [
+    'Lisbon', 'Dublin', 'Madrid', 'Edinburgh',
+    'London', 'Barcelona', 'Paris', 'Amsterdam', 'Zürich', 
+    'Oslo', 'Rome', 'København', 'Venice', 'Berlin', 
+    'Vienna', 'Stockholm', 'Sarajevo', 'Warsaw', 'Athens',
+    'Riga', 'Bucharest', 'Minsk', 'Istanbul', 'Kyiv',
+    'Ankara', 'Moscow', 'Rostov', 'Tbilisi'
+]
+
+REGION_COORDINATES: dict[str, tuple[int, int, int, int]] = {
+    'WORLD'         :   (-179, 180, -61, 61),
+    'WORLD_FULL'    :   (-179, 180, -89, 90),
+    'NORTH_AMERICA' :   (-170, -40, 15, 61),
+    'EUROPE'        :   (-15, 50, 34, 61),
+    'MIDDLE_EAST'   :   (25, 75, 10, 45),
+    'IRAN'          :   (43.5, 63.5, 24.5, 40)
+}
+
+REGION_CITIES: dict[str, list[str]] = {
+    'WORLD'         : CITIES_WORLD,
+    'WORLD_FULL'    : CITIES_WORLD,
+    'NORTH_AMERICA' : CITIES_NORTH_AMERICA,
+    'EUROPE'        : CITIES_EUROPE,
+    'MIDDLE_EAST'   : CITIES_MIDDLE_EAST,
+    'IRAN'          : CITIES_IRAN 
+}
 
 class Tee:
     def __init__(self, filename, mode="w", encoding="utf-8"):
@@ -33,18 +129,18 @@ class Tee:
 def compute_q_values_for_lat(i_lat: float, lon: float, day: datetime, amount: int, type: int):
         q_values_temp = []
         for i_lon in lon:
-            local = it.ITLocation(latitude=i_lat, longitude=i_lon, elevation=0, today=day, find_local_tz=False, auto_calculate=False)
+            local = it.ITLocation(latitude=i_lat, longitude=i_lon, elevation=0, date=day, find_local_tz=False, auto_calculate=False)
             vis = local.visibilities(days=amount, criterion=type)
             for label, value in vis.items():
                 q_values_temp.append(value[1])
         return q_values_temp
 
 def calculate_moon_visibility(lon: float, lat: float, day: datetime, amount: int = 1, type: int = 0):
-    moon_phases = it.ITLocation(latitude=0, longitude=0, today=day, find_local_tz=False, auto_calculate=False).moonphases()
+    moon_phases = it.ITLocation(date=day, auto_calculate=False).moonphases()
     for item in moon_phases:
             if item['phase'] == "New Moon":
-                new_moon_date = item['datetime']  
-    
+                new_moon_date = item['datetime']
+                break  
     from multiprocessing import Pool
     def parallel_compute_q_values(lat: float, lon: float, day: datetime, amount: int, type: int, num_processes: int = 8):
         # Create the pool of worker processes
@@ -56,8 +152,7 @@ def calculate_moon_visibility(lon: float, lat: float, day: datetime, amount: int
             )
         return results
 
-    q_values = parallel_compute_q_values(lat, lon, day, amount, type)
-
+    q_values = parallel_compute_q_values(lat, lon, day, amount, type, 8)
     return q_values, new_moon_date
 
 def load_shapefiles(states_path, places_path, cities):
@@ -165,22 +260,35 @@ def plot_map(lon_vals, lat_vals, visibilities_mapped, states_clip, places_clip, 
     legend_ax.set_ylim(0, len(legend_labels) * row_height)
     legend_ax.set_aspect("auto")
 
+    criterion_string = "Odeh, 2006" if criterion == 0 else "Yallop, 1997"
+
+    # Adjust the plots slightly
     plt.subplots_adjust(hspace=0.2, left=0.05, right=0.85, top=0.95, bottom=0.05)
+
+    # Add text
     plt.figtext(0.15, 0.01, f"The New Moon (i.e. conjunction) occurs at {start_date.strftime("%Y-%m-%d %X")} UTC", ha="center", fontsize=12)
+    plt.figtext(0.945, 0.03, f"Criterion: {criterion_string}", ha="center", fontsize=12)
     plt.figtext(0.84, 0.01, f"CC BY-SA | Hassan Tahan | Created with the islamic_times Python library", ha="center", fontsize=12)
     plt.figtext(0.5, 0.98, f"{days}-Day New Moon Crescent Visibility Map for {islamic_month_name}, {islamic_year} A.H.", ha="center", fontsize=16)
 
-    name = f"{start_date.strftime("%Y-%m-%d")} {islamic_month_name} {islamic_year}"
+    # Name the file
+    name: str = f"{start_date.strftime("%Y-%m-%d")} {islamic_month_name} {islamic_year}"
+    if criterion == 1:
+        name += " Type 1"
+    # Save and close
     plt.savefig(os.path.join(out_dir, name))
     plt.close()
 
 def print_ts(message: str):
     print(f"[{datetime.fromtimestamp(time()).strftime("%X %d-%m-%Y")}] {message}")
 
-def main(day, res, amount=1, visibility_type=0, coords=(-179, 180, -61, 61), path=""):
+def main(day: datetime, res: int = 100, region: str = 'WORLD', amount: int = 1, visibility_criterion: int = 0, path: str = ""):
+    cities: list[str] = REGION_CITIES[region]
+    coords: tuple[int, int, int, int] = REGION_COORDINATES[region] 
+
     print_ts(f"Loading shape files...")
     t1 = time()
-    states_gdf, places_gdf = load_shapefiles("map_shp_files/combined_polygons.shp", "map_shp_files/combined_points.shp", CITIES)
+    states_gdf, places_gdf = load_shapefiles("map_shp_files/combined_polygons.shp", "map_shp_files/combined_points.shp", cities)
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
     print_ts(f"Clipping map to coordinates...")
@@ -195,7 +303,8 @@ def main(day, res, amount=1, visibility_type=0, coords=(-179, 180, -61, 61), pat
 
     print_ts(f"Calculating new moon crescent visibilities...")
     t1 = time()
-    visibilities_2d, start_date = calculate_moon_visibility(lon_vals, lat_vals, day, amount, visibility_type)
+    visibilities_2d, start_date = calculate_moon_visibility(lon_vals, lat_vals, day, amount, visibility_criterion)
+    print_ts(f"Conjunction Date: {start_date.strftime("%Y-%m-%d %X")}")
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
     print_ts(f"Rearranging the visibility values...")
@@ -205,7 +314,7 @@ def main(day, res, amount=1, visibility_type=0, coords=(-179, 180, -61, 61), pat
 
     print_ts(f"Getting colours for the categories...")
     t1 = time()
-    categories, colors_rgba = get_category_colors(visibility_type)
+    categories, colors_rgba = get_category_colors(visibility_criterion)
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
     print_ts(f"Categorizing visibilities...")
@@ -220,13 +329,15 @@ def main(day, res, amount=1, visibility_type=0, coords=(-179, 180, -61, 61), pat
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
 if __name__ == "__main__":
-    today = datetime(2022, 7, 27)
-    months: int = 12
-    map_coord: tuple[int, int, int, int] = (-170, -40, 15, 61)
-    resolution: int = 100
-    days: int = 3
+    today = datetime(2007, 10, 11)
+    months: int = 1 # 12 * 5
+    map_region: str = 'MIDDLE_EAST'
+    resolution: int = 75
+    days: int = 2
+    criterion: int = 1 # Either 0 (Odeh, 2006), or 1 (Yallop, 1997)
 
-    # sys.stdout = Tee(f"mapper_logs/mapper_{datetime.fromtimestamp(time()).strftime("%Y-%m-%d_%H%M%S")}.log")
+    sys.stdout = Tee(f"mapper_logs/mapper_{datetime.fromtimestamp(time()).strftime("%Y-%m-%d_%H%M%S")}.log")
+    map_region = map_region.upper()
     start_time: float = time()
     for month in range(months):
         month_start_time: float = time()
@@ -235,21 +346,22 @@ if __name__ == "__main__":
         # Islamic Date Formatting
         islamic_date = gregorian_to_hijri(new_day.year, new_day.month, new_day.day)
         islamic_year, islamic_month, islamic_day = islamic_date[0], islamic_date[1], islamic_date[2]
-        islamic_month += 1
-        if islamic_month > 12:
-            islamic_month = 1
-            islamic_year += 1
+        if islamic_day > 6:
+            islamic_month += 1
+            if islamic_month > 12:
+                islamic_month = 1
+                islamic_year += 1
         islamic_month_name = get_islamic_month(islamic_month)
 
         # Create path
-        new_path = f"B:/Personal/New Moon Visibilities/New/{islamic_year}/"
+        new_path = f"B:/Personal/New Moon Visibilities/Experiment/Comparison/{map_region.replace('_', ' ').title()}/{islamic_year}/"
         if not os.path.exists(new_path):
             print_ts(f"Creating {new_path}...")
             os.makedirs(new_path)
 
-        print_ts(f"Generating map for {islamic_month_name}, {islamic_year}...")
-        main(day=new_day, res=resolution, amount=days, visibility_type=0, path=new_path)
-
+        print_ts(f"===Generating map for {islamic_month_name}, {islamic_year}===")
+        main(day=new_day, res=resolution, region=map_region, amount=days, visibility_criterion=criterion, path=new_path)
+        print_ts(f"===Map for {islamic_month_name}, {islamic_year} Complete===")
         print_ts(f"Time to generate map for {islamic_month_name}, {islamic_year}: {(time() - month_start_time):.2f}s")
 
     print_ts(f"Total time taken: {(time() - start_time):.2f}s")

@@ -604,6 +604,8 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 
 	# Preserve the sign relative to year 2000.
 	p_sign = np.sign(date.year - 2000)
+	if not (p_sign in [1, -1]):
+		p_sign = 1
 
 	# Calculate k based on eq. 49.2.
 	k_temp = ((abs(date.year - 2000) + p_sign * day_of_year / te.TROPICAL_YEAR) * 12.3685)
@@ -616,7 +618,7 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 	])
 
 	# Prepare output array.
-	moon_phases = [None] * 4 # np.empty(4)
+	moon_phases = [None] * 4
 
 	# Pre-convert A-term coefficients to NumPy arrays.
 	a_sin_term_coeffs = [np.array(item) for item in __A_SIN_TERM_PHASES_COEFF]
@@ -748,17 +750,16 @@ def moon_illumination(sun_dec: float, sun_ra: float, moon_dec: float, moon_ra: f
 	fraction_illuminated = (1 + ce.cos(phase_angle)) / 2
 	return fraction_illuminated
 
-# Refer to Chapter 15 of AA
-def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_diff: float) -> datetime:
+def find_moon_transit(date: datetime, lat: float, long: float, elev: float, utc_offset: float) -> datetime:
 	"""
-	Calculate the time of moonset for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
+	Calculate the time of the moon transit for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
 	Parameters:
 		date (datetime): The date to calculate the moonset for.
 		lat (float): The observer's latitude (°).
 		long (float): The observer's longitude (°).
 		elev (float): The observer's elevation above sea level (m).
-		utc_diff (float): The observer's difference from UTC (hours).
+		utc_offset (float): The observer's difference from UTC (hours).
 
 	Returns:
 		datetime: The time of moonset.
@@ -770,10 +771,68 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 	new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
 	new_jde = new_jd + new_deltaT / 86400
 
-	# Calculate new sun and moon params with the new_jd
+	# Calculate new moon params with the new_jd
 	moon_params: List[Moon] = []
 	for i in range(3):
-		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_diff)
+		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_offset)
+		delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
+		sun_params = se.sunpos(new_jde + i - 1, delT_temp, lat, long)
+		delPsi = sun_params.delta_obliquity
+		moon_params.append(moonpos(new_jde + i - 1, delT_temp, lat, long, delPsi, sun_params.true_obliquity, elev))
+
+	# GMST
+	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
+
+	# Transit
+	m0 = (moon_params[1].right_ascension - long - sidereal_time) / 360
+
+	# Minor corrective steps thru iteration
+	for _ in range(3):
+		little_theta_zero = (sidereal_time + 360.985647 * m0) % 360
+		n = m0 + new_deltaT / 86400
+		interpolated_moon_ra = ce.interpolation(n, 
+										  moon_params[0].right_ascension, 
+										  moon_params[1].right_ascension, 
+										  moon_params[2].right_ascension)
+		lunar_local_hour_angle = (little_theta_zero - (-long) - interpolated_moon_ra) % 360
+
+		m0 -= lunar_local_hour_angle / 360
+
+	# Compute final moonset time by adding days to base date
+	m0 %= 1
+	moon_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=utc_offset)
+
+	return moon_transit_dt
+
+# Refer to Chapter 15 of AA
+def moonrise_or_moonset(date: datetime, lat: float, long: float, elev: float, utc_offset: float, rise_or_set: str = 'set') -> datetime:
+	"""
+	Calculate the time of moonset for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
+
+	Parameters:
+		date (datetime): The date to calculate the moonset for.
+		lat (float): The observer's latitude (°).
+		long (float): The observer's longitude (°).
+		elev (float): The observer's elevation above sea level (m).
+		utc_offset (float): The observer's difference from UTC (hours).
+
+	Returns:
+		datetime: The time of moonset.
+	"""
+
+	if rise_or_set not in ['rise', 'set', 'moonrise', 'moonset']:
+		raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
+
+	# First find the Year Month Day at UT 0h from JDE
+	ymd = datetime(date.year, date.month, date.day)
+	new_jd = te.gregorian_to_jd(date) - te.fraction_of_day(date)
+	new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
+	new_jde = new_jd + new_deltaT / 86400
+
+	# Calculate new moon params with the new_jd
+	moon_params: List[Moon] = []
+	for i in range(3):
+		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_offset)
 		delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
 		sun_params = se.sunpos(new_jde + i - 1, delT_temp, lat, long)
 		delPsi = sun_params.delta_obliquity
@@ -785,36 +844,83 @@ def calculate_moonset(date: datetime, lat: float, long: float, elev: float, utc_
 	H_zero = np.rad2deg(np.arccos(cosH_zero))
 
 	# No moonset/rise
-	if math.isnan(H_zero):
+	if np.isnan(H_zero):
 		return np.inf
 
 	# GMST
 	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
 
-	# Compute m0 and m2 without wrapping
 	# Transit
 	m0 = (moon_params[1].right_ascension - long - sidereal_time) / 360
 
-	# Setting
-	m2 = m0 + H_zero / 360
+	# Choose which event to compute.
+	event = rise_or_set.lower()
+	if event in ['rise', 'sunrise']:
+		# Initial estimate for sunrise.
+		m_event = m0 - H_zero / 360
+	else:
+		# Initial estimate for sunset.
+		m_event = m0 + H_zero / 360
 
 	# Minor corrective steps thru iteration
 	for _ in range(3):
-		little_theta_zero = (sidereal_time + 360.985647 * m2) % 360
-		n = m2 + new_deltaT / 86400
-		interpolated_moon_dec = ce.interpolation(n, moon_params[0].declination, moon_params[1].declination, moon_params[2].declination)
-		interpolated_moon_ra = ce.interpolation(n, moon_params[0].right_ascension, moon_params[1].right_ascension, moon_params[2].right_ascension)
+		little_theta_zero = (sidereal_time + 360.985647 * m_event) % 360
+		n = m_event + new_deltaT / 86400
+		interpolated_moon_dec = ce.interpolation(n, 
+										   moon_params[0].declination, 
+										   moon_params[1].declination, 
+										   moon_params[2].declination)
+		
+		interpolated_moon_ra = ce.interpolation(n, 
+										  moon_params[0].right_ascension, 
+										  moon_params[1].right_ascension, 
+										  moon_params[2].right_ascension)
+		
 		lunar_local_hour_angle = (little_theta_zero - (-long) - interpolated_moon_ra) % 360
+
 		moon_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(interpolated_moon_dec) +
 										ce.cos(lat) * ce.cos(interpolated_moon_dec) *
 										ce.cos(lunar_local_hour_angle)))
+		
 		deltaM = (moon_alt - h_zero) / (360 * ce.cos(interpolated_moon_dec) * ce.cos(lat) * ce.sin(lunar_local_hour_angle))
-		m2 += deltaM
+		m_event += deltaM
 
 	# Compute final moonset time by adding days to base date
-	moonset_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m2) - timedelta(hours=utc_diff)
+	moon_event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=utc_offset)
 
-	return moonset_dt
+	return moon_event_dt
+
+# This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
+def find_proper_moontime(true_date: datetime, latitude: float, longitude: float, elevation: float, utc_offset: float, rise_or_set: str = 'set') -> datetime:
+	"""
+	Determines the proper local moonset time.
+
+	Adjusts the calculated moonset time to account for local UTC differences.
+
+	Parameters:
+		date (datetime): The reference date.
+
+	Returns:
+		datetime: Adjusted moonset time. If moonset is not found, returns `datetime.min`.
+	"""
+
+	if rise_or_set not in ['rise', 'set', 'moonrise', 'moonset']:
+		raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
+
+	temp_utc_offset = np.floor(longitude / 15) - 1
+	temp_moonset = moonrise_or_moonset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set)
+	date_doy = true_date.timetuple().tm_yday
+	if temp_moonset == np.inf:
+		return datetime.min
+
+	i = 1
+	while(True):
+		temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_offset, minutes=-20)).timetuple().tm_yday
+		if (temp_moonset_doy < date_doy and temp_moonset.year == true_date.year) or ((temp_moonset + timedelta(hours=temp_utc_offset)).year < true_date.year):
+			temp_moonset = moonrise_or_moonset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set)
+			i += 1
+		else: 
+			return temp_moonset
 
 # Visibility calculations either:
 # Criterion 0: Odeh, 2006
@@ -835,9 +941,10 @@ def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt
 		float: The visibility of the Moon's crescent.
 	"""
 
-	arcl = ce.calculate_angle_diff(sun_az, sun_alt, moon_az, moon_alt)
+	daz = sun_az - moon_az
 	arcv = np.abs(sun_alt - moon_alt)
-	#daz = sun_az - moon_az
+	arcl = np.rad2deg(np.arccos(ce.cos(daz) * ce.cos(arcv)))
+
 	moon_pi *= 206265 / 60
 
 	semi_diameter = 0.27245 * moon_pi
