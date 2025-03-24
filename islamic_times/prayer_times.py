@@ -27,6 +27,7 @@ from typing import Tuple, Dict
 
 def calculate_prayer_times(date: datetime, latitude: float, longitude: float, elevation: float, utc_offset: float, sun_declination: float,
                            prayer_times_parameters: Tuple [float, float, float, int, int], 
+                           sunrise: datetime = None, sun_transit: datetime = None, sunset: datetime = None,
                            is_ramadan = False
                            ) -> Dict[str, datetime | str]:
     """
@@ -48,6 +49,7 @@ def calculate_prayer_times(date: datetime, latitude: float, longitude: float, el
             - Isha angle (degrees, or `inf for Makkah method).
             - Asr method (0 = Standard, 1 = Hanafi).
             - Midnight method (0 = Sunset to Sunrise, 1 = Sunset to Fajr).
+        sunrise:
     	is_ramadan (bool, optional): If `True`, applies the special **Makkah ʿishāʾ method** for Ramadan. Defaults to `False`.
 
     Returns:
@@ -68,15 +70,22 @@ def calculate_prayer_times(date: datetime, latitude: float, longitude: float, el
     midnight_type = prayer_times_parameters[3]
     asr_type = prayer_times_parameters[4]
 
-    # Standard sun times calculations
+    # See if suntimes passed, calculate if not
+    if sunrise == None:
+        sunrise = se.find_proper_suntime(date, latitude, longitude, elevation, utc_offset, 'rise')
+    
+    if sun_transit == None:
+        sun_transit = se.find_sun_transit(date, latitude, longitude, elevation, utc_offset)
+    
+    if sunset == None:
+        sunset = se.find_proper_suntime(date, latitude, longitude, elevation, utc_offset, 'set')
+
+    # Calculate fajr
     standard_fajr = se.find_proper_suntime(date, latitude, longitude, elevation, utc_offset, 'rise', fajr_angle)
-    standard_sunrise = se.find_proper_suntime(date, latitude, longitude, elevation, utc_offset, 'rise')
-    standard_noon = se.find_sun_transit(date, latitude, longitude, elevation, utc_offset)
-    standard_sunset = se.find_proper_suntime(date, latitude, longitude, elevation, utc_offset, 'set')
     
     # Calculate ʿAṣr time
     try:
-        standard_asr = asr_time(standard_noon, latitude, sun_declination, asr_type)
+        standard_asr = asr_time(sun_transit, latitude, sun_declination, asr_type)
     except ArithmeticError as e:
         standard_asr = str(e)
     
@@ -86,7 +95,7 @@ def calculate_prayer_times(date: datetime, latitude: float, longitude: float, el
         standard_maghrib = se.sunrise_or_sunset(date, latitude, longitude, elevation, utc_offset, 'set', maghrib_angle)
     else:
         # Otherwise Maghrib is sunset
-        standard_maghrib = standard_sunset
+        standard_maghrib = sunset
 
     # Calculate ʿishāʾ time
     # If NOT makkah method
@@ -104,18 +113,18 @@ def calculate_prayer_times(date: datetime, latitude: float, longitude: float, el
     # Calculate Midnight time
     try:
         if midnight_type:
-            standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_offset, fajr_angle))
+            standard_midnight = te.time_midpoint(sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_offset, fajr_angle))
         else:
-            standard_midnight = te.time_midpoint(standard_sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_offset))
+            standard_midnight = te.time_midpoint(sunset, find_tomorrow_time(date, latitude, longitude, elevation, utc_offset))
     except ValueError as e:
         standard_midnight = np.inf
 
     prayer_dict = {
         'fajr': standard_fajr,
-        'sunrise': standard_sunrise,
-        'noon': standard_noon,
+        'sunrise': sunrise,
+        'zuhr': sun_transit,
         'asr': standard_asr,
-        'sunset': standard_sunset,
+        'sunset': sunset,
         'maghrib': standard_maghrib,
         'isha': standard_isha,
         'midnight': standard_midnight

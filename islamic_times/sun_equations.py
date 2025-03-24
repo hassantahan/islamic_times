@@ -523,10 +523,10 @@ def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_
     h_zero = -angle
     cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(sun_params[1].topocentric_declination)) / (
                 ce.cos(lat) * ce.cos(sun_params[1].topocentric_declination))
-    H_zero = np.rad2deg(np.arccos(cosH_zero))
-
-    # If H_zero is not defined (NaN), the event does not occur (e.g., polar day/night).
-    if np.isnan(H_zero):
+    
+    if abs(cosH_zero) < 1:
+        H_zero = np.rad2deg(np.arccos(cosH_zero))
+    else:
         return np.inf
 
     # Compute Greenwich Mean Sidereal Time (GMST) at new_jd.

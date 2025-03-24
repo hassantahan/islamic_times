@@ -841,7 +841,11 @@ def moonrise_or_moonset(date: datetime, lat: float, long: float, elev: float, ut
 	# Find H0
 	h_zero = 0.7275 * moon_params[1].eh_parallax - 0.566667
 	cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(moon_params[1].declination)) / (ce.cos(lat) * ce.cos(moon_params[1].declination))
-	H_zero = np.rad2deg(np.arccos(cosH_zero))
+	
+	if abs(cosH_zero) < 1:
+		H_zero = np.rad2deg(np.arccos(cosH_zero))
+	else:
+		return np.inf
 
 	# No moonset/rise
 	if np.isnan(H_zero):
