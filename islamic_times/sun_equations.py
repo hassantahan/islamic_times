@@ -587,11 +587,12 @@ def find_proper_suntime(true_date: datetime, latitude, longitude, elevation, utc
         temp_utc_offset = np.floor(longitude / 15) - 1
         temp_suntime = sunrise_or_sunset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set, angle)
         date_doy = true_date.timetuple().tm_yday
-        if temp_suntime == np.inf:
-            return np.inf
 
         i = 1
         while(True):
+            if temp_suntime == np.inf:
+                return np.inf
+            
             temp_suntime_doy = (temp_suntime + timedelta(hours=temp_utc_offset, minutes=-20)).timetuple().tm_yday
             if (temp_suntime_doy < date_doy and temp_suntime.year == true_date.year) or ((temp_suntime + timedelta(hours=temp_utc_offset)).year < true_date.year):
                 temp_suntime = sunrise_or_sunset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set, angle)

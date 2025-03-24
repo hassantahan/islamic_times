@@ -689,18 +689,17 @@ class ITLocation:
     # Return sun properties and position values
     def sun(self) -> Dict[str, float | str]:
         """
-        Returns properties and position of the Moon.
+        Returns properties and position of the Sun.
 
         Returns:
             dict (Dict[str, float | str]): Dictionary containing:
-                - 'sunset': Moonrise time (str)
-                - 'sun_transit': Moon transit (culmination) time (str)
+                - 'sunset': Sunrise time (str)
+                - 'sun_transit': Sun transit (culmination) time (str)
                 - 'sunset': Sunset time (str)
-                - 'declination' (°)
-                - 'right_ascension' (HMS format)
-                - 'altitude' (°)
-                - 'azimuth' (°)
-                - 'illumination': Percentage of illumination (%)
+                - 'declination': The angular distance of the Sun perpendicular to the celestial equator using the true equinox of date (°)
+                - 'right_ascension': The angular distance of the Sun eastward along the celestial equator from the vernal equinox to the hour circle passing through the Sun using the true equinox of date (HMS format)
+                - 'altitude': The angle between the Sun and the observer's local horizon accounting for atmospheric refraction (°)
+                - 'azimuth': The angle of the Sun around the horizon measured from true north (°)
         """
 
         can_print = self.auto_calculate or not self.datetime_modified
@@ -728,11 +727,11 @@ class ITLocation:
                 - 'moonset': Moonrise time (str)
                 - 'moon_transit': Moon transit (culmination) time (str)
                 - 'moonset': Moonset time (str)
-                - 'declination' (°)
-                - 'right_ascension' (HMS format)
-                - 'altitude' (°)
-                - 'azimuth' (°)
-                - 'parallax' (°)
+                - 'declination': The angular distance of the Moon perpendicular to the celestial equator using the true equinox of date (°)
+                - 'right_ascension': The angular distance of the Moon eastward along the celestial equator from the vernal equinox to the hour circle passing through the Moon using the true equinox of date (HMS format)
+                - 'altitude': The angle between the Moon and the observer's local horizon accounting for atmospheric refraction (°)
+                - 'azimuth': The angle of the Moon around the horizon measured from true north (°)
+                - 'parallax': Equitorial horizontal parallax (′)
                 - 'illumination': Percentage of illumination (%)
         """
 
@@ -749,7 +748,7 @@ class ITLocation:
                 "right_ascension" : f"{self.moon_right_ascension[0]}h {self.moon_right_ascension[1]}m {self.moon_right_ascension[2]:.2f}s",
                 "altitude" : round(self.moon_alt, 3),
                 "azimuth" : round(self.moon_az, 3),
-                "parallax" : round(self.moon_pi),
+                "parallax" : round(self.moon_pi * 60, 3),
                 "illumination" : round(self.moon_illumin * 100, 2)
             }
     
@@ -932,7 +931,7 @@ class ITLocation:
             nm_moon_params = me.moonpos(best_time_jde, test_deltaT_new_moon, self.observer_latitude, self.observer_longitude, nm_sun_params.delta_obliquity, nm_sun_params.true_obliquity, self.observer_elevation)
 
             # Visibility is now calculated
-            v = me.calculate_visibility(nm_sun_params.azimuth, nm_sun_params.altitude, nm_moon_params.azimuth, nm_moon_params.altitude, np.deg2rad(nm_moon_params.eh_parallax), criterion)
+            v = me.calculate_visibility(nm_sun_params.azimuth, nm_sun_params.altitude, nm_moon_params.azimuth, nm_moon_params.altitude, nm_moon_params.eh_parallax, criterion)
 
             visibilities.append(v)
 

@@ -914,11 +914,12 @@ def find_proper_moontime(true_date: datetime, latitude: float, longitude: float,
 	temp_utc_offset = np.floor(longitude / 15) - 1
 	temp_moonset = moonrise_or_moonset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set)
 	date_doy = true_date.timetuple().tm_yday
-	if temp_moonset == np.inf:
-		return datetime.min
 
 	i = 1
 	while(True):
+		if temp_moonset == np.inf:
+			return datetime.min
+		
 		temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_offset, minutes=-20)).timetuple().tm_yday
 		if (temp_moonset_doy < date_doy and temp_moonset.year == true_date.year) or ((temp_moonset + timedelta(hours=temp_utc_offset)).year < true_date.year):
 			temp_moonset = moonrise_or_moonset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set)
@@ -949,10 +950,10 @@ def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt
 	arcv = np.abs(sun_alt - moon_alt)
 	arcl = np.rad2deg(np.arccos(ce.cos(daz) * ce.cos(arcv)))
 
-	moon_pi *= 206265 / 60
+	moon_pi_min = 60 * moon_pi
 
-	semi_diameter = 0.27245 * moon_pi
-	semi_diameter_prime = semi_diameter * (1 + ce.sin(moon_alt) * ce.sin(moon_pi / 60))
+	semi_diameter = 0.27245 * moon_pi_min
+	semi_diameter_prime = semi_diameter * (1 + ce.sin(moon_alt) * ce.sin(moon_pi_min / 60))
 
 	w_prime = semi_diameter_prime * (1 - ce.cos(arcl))
 
