@@ -296,9 +296,9 @@ class ITLocation:
 
         # Time is only updates to the latest if no argument is passed
         if date_time is None:
-            super().__setattr__('date', datetime.now(self.observer_date.tzinfo))
+            super().__setattr__('observer_date', datetime.now(self.observer_date.tzinfo))
         else:
-            super().__setattr__('date', date_time)
+            super().__setattr__('observer_date', date_time)
         
         # Set bools for astro_calculation stuff
         if not self.auto_calculate:
