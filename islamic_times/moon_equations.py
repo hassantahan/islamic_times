@@ -946,8 +946,8 @@ def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt
 		float: The visibility of the Moon's crescent.
 	"""
 
-	daz = sun_az - moon_az
-	arcv = np.abs(sun_alt - moon_alt)
+	daz = abs(sun_az - moon_az)
+	arcv = abs(sun_alt - moon_alt)
 	arcl = np.rad2deg(np.arccos(ce.cos(daz) * ce.cos(arcv)))
 
 	moon_pi_min = 60 * moon_pi
