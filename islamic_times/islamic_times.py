@@ -147,7 +147,7 @@ class ITLocation:
                  date: datetime = datetime.now(timezone.utc),
                  method: str = 'JAFARI',
                  asr_type: int = 0,
-                 find_local_tz: bool = True,
+                 find_local_tz: bool = False,
                  auto_calculate: bool = True
                  ) -> None:
         """
@@ -260,16 +260,15 @@ class ITLocation:
         Parameters:
             find_local_tz (bool): Controls whether or not to use the timezonefinder library to fine the timezone of the observer
         """
-        if self.observer_date.tzinfo == None or self.observer_date.tzinfo == timezone.utc:
-            ### Find UTC Offset According to Lat/Long & adjust datetime
-            # This is very computationally expensive
-            if find_local_tz: 
-                tz_name, utc_offset = te.find_utc_offset(self.observer_latitude, self.observer_longitude, self.observer_date)
-                super().__setattr__('tz_name', tz_name)
-                super().__setattr__('utc_offset', utc_offset)
-            else:
-                super().__setattr__('tz_name', timezone.utc)
-                super().__setattr__('utc_offset', 0)
+        # Find UTC Offset According to Lat/Long datetime
+        # This is very computationally expensive
+        if find_local_tz: 
+            tz_name, utc_offset = te.find_utc_offset(self.observer_latitude, self.observer_longitude, self.observer_date)
+            super().__setattr__('tz_name', tz_name)
+            super().__setattr__('utc_offset', utc_offset)
+        elif self.observer_date.tzinfo == None or self.observer_date.tzinfo == timezone.utc:
+            super().__setattr__('tz_name', timezone.utc)
+            super().__setattr__('utc_offset', 0)
         else:  
             super().__setattr__('tz_name', self.observer_date.tzinfo)
             super().__setattr__('utc_offset', self.observer_date.utcoffset().total_seconds() / 3600)
@@ -581,15 +580,13 @@ class ITLocation:
         Returns observer's date and time information.
 
         Returns:
-            dict: Dictionary containing:
-                - 'gregorian': Gregorian date (str)
-                - 'hijri': Islamic (Hijri) date (str)
-                - 'time': Local time (str)
-                - 'timezone': Time zone (str)
-                - 'utc_offset': UTC offset (str)
-                - 'jd': Julian Date (float)
-                - 'eq_of_time': Equation of time (float)
-                - 'deltaT': Delta T in seconds (float)
+            dict: 
+            Dictionary containing:
+                - 'latitude': Observer latitude (°).
+                - 'longitude': Observer longitude (°).
+                - 'elevation': Observer elevation above sea level (m).
+                - 'pressure': Observer ambient pressure (kPa).
+                - 'temperature': Observer ambient temperature (℃).
         """
         return {
                 "latitude" : round(self.observer_latitude, 5),
