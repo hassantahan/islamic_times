@@ -260,7 +260,7 @@ class ITLocation:
         Parameters:
             find_local_tz (bool): Controls whether or not to use the timezonefinder library to fine the timezone of the observer
         """
-        if self.observer_date.tzinfo == None:
+        if self.observer_date.tzinfo == None or self.observer_date.tzinfo == timezone.utc:
             ### Find UTC Offset According to Lat/Long & adjust datetime
             # This is very computationally expensive
             if find_local_tz: 

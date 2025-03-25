@@ -571,31 +571,45 @@ def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_
     event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=utc_offset)
     return event_dt
 
-def find_proper_suntime(true_date: datetime, latitude, longitude, elevation, utc_offset, rise_or_set: str, angle: float = 5 / 6) -> datetime:
-        """
-        Determines the proper local sunset time.
+def find_proper_suntime(true_date: datetime, latitude: float, longitude: float, elevation: float, utc_offset: float, rise_or_set: str, angle: float = 5 / 6) -> datetime:
+    """
+    Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 
-        Adjusts the calculated sunset time to account for local UTC differences.
+    Parameters:
+        true_date (datetime): The reference date.
+        latitude (float): Observer latitude (°).
+        longitude (float): Observer longitude (°).
+        elevation (float): Observer elevation from sea level (m).
+        utc_offset (float): Observer offset from UTC (hours).
+        rise_or_set (str): Find either the setting or rising option.
+        angle (float): Find the time when the sun reaches the given angle above or below the observer's horizon (controlled by `rise_or_set`) (°). Default is 50 arcminutes (0.8333°) for visible sunset/sunrise.
 
-        Parameters:
-            date (datetime): The reference date.
+    Returns:
+        datetime: The date and time of the sun event. If the sun event is not found (does not set or rise), returns `np.inf`.
 
-        Returns:
-            datetime: Adjusted sunset time. If sunset is not found, returns `datetime.min`.
-        """
+    Raises:
+        ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
+    """
 
+    if rise_or_set not in ['rise', 'set', 'sunrise', 'sunset']:
+        raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
+
+    if utc_offset == 0:
         temp_utc_offset = np.floor(longitude / 15) - 1
-        temp_suntime = sunrise_or_sunset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set, angle)
-        date_doy = true_date.timetuple().tm_yday
+    else:
+        temp_utc_offset = utc_offset * -1
 
-        i = 1
-        while(True):
-            if temp_suntime == np.inf:
-                return np.inf
-            
-            temp_suntime_doy = (temp_suntime + timedelta(hours=temp_utc_offset, minutes=-20)).timetuple().tm_yday
-            if (temp_suntime_doy < date_doy and temp_suntime.year == true_date.year) or ((temp_suntime + timedelta(hours=temp_utc_offset)).year < true_date.year):
-                temp_suntime = sunrise_or_sunset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set, angle)
-                i += 1
-            else: 
-                return temp_suntime
+    temp_suntime = sunrise_or_sunset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set, angle)
+    date_doy = true_date.timetuple().tm_yday
+
+    i = 1
+    while(True):
+        if temp_suntime == np.inf:
+            return np.inf
+        
+        temp_suntime_doy = (temp_suntime + timedelta(hours=temp_utc_offset)).timetuple().tm_yday
+        if (temp_suntime_doy < date_doy and temp_suntime.year == true_date.year) or ((temp_suntime + timedelta(hours=temp_utc_offset)).year < true_date.year):
+            temp_suntime = sunrise_or_sunset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set, angle)
+            i += 1
+        else: 
+            return temp_suntime

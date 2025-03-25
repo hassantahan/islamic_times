@@ -92,7 +92,7 @@ def calculate_prayer_times(date: datetime, latitude: float, longitude: float, el
     # Calculate Maghrib time
     # Only if maghrib is not at sunset
     if maghrib_angle > 0:
-        standard_maghrib = se.sunrise_or_sunset(date, latitude, longitude, elevation, utc_offset, 'set', maghrib_angle)
+        standard_maghrib = se.find_proper_suntime(date, latitude, longitude, elevation, utc_offset, 'set', maghrib_angle)
     else:
         # Otherwise Maghrib is sunset
         standard_maghrib = sunset
@@ -100,7 +100,7 @@ def calculate_prayer_times(date: datetime, latitude: float, longitude: float, el
     # Calculate ʿishāʾ time
     # If NOT makkah method
     if isha_angle is not np.inf:
-        standard_isha = se.sunrise_or_sunset(date, latitude, longitude, elevation, utc_offset, 'set', isha_angle)
+        standard_isha = se.find_proper_suntime(date, latitude, longitude, elevation, utc_offset, 'set', isha_angle)
     # Makkah method is special
     else:
         # Ramadan has isha as two hours after maghrib
@@ -155,7 +155,7 @@ def find_tomorrow_time(date: datetime, lat: float, long: float, elev: float, utc
     	datetime: The calculated **fajr time** for the next day in **local standard time**.
     """
     tomorrow_date = date + timedelta(days=1)
-    tomorrow_standard_time = se.sunrise_or_sunset(tomorrow_date, lat, long, elev, utc_offset, 'rise', angle)
+    tomorrow_standard_time = se.find_proper_suntime(tomorrow_date, lat, long, elev, utc_offset, 'rise', angle)
 
     return tomorrow_standard_time
 

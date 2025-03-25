@@ -897,21 +897,31 @@ def moonrise_or_moonset(date: datetime, lat: float, long: float, elev: float, ut
 # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
 def find_proper_moontime(true_date: datetime, latitude: float, longitude: float, elevation: float, utc_offset: float, rise_or_set: str = 'set') -> datetime:
 	"""
-	Determines the proper local moonset time.
+    Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 
-	Adjusts the calculated moonset time to account for local UTC differences.
+    Parameters:
+        true_date (datetime): The reference date.
+        latitude (float): Observer latitude (°).
+        longitude (float): Observer longitude (°).
+        elevation (float): Observer elevation from sea level (m).
+        utc_offset (float): Observer offset from UTC (hours).
+        rise_or_set (str): Find either the setting or rising option. Default is set to 'set'.
 
-	Parameters:
-		date (datetime): The reference date.
+    Returns:
+        datetime: The date and time of the moon event. If the moon event is not found (does not set or rise), returns `np.inf`.
 
-	Returns:
-		datetime: Adjusted moonset time. If moonset is not found, returns `datetime.min`.
-	"""
+    Raises:
+        ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
+    """
 
 	if rise_or_set not in ['rise', 'set', 'moonrise', 'moonset']:
 		raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
 
-	temp_utc_offset = np.floor(longitude / 15) - 1
+	if utc_offset == 0:
+			temp_utc_offset = np.floor(longitude / 15) - 1
+	else:
+		temp_utc_offset = utc_offset * -1
+
 	temp_moonset = moonrise_or_moonset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set)
 	date_doy = true_date.timetuple().tm_yday
 
@@ -920,7 +930,7 @@ def find_proper_moontime(true_date: datetime, latitude: float, longitude: float,
 		if temp_moonset == np.inf:
 			return datetime.min
 		
-		temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_offset, minutes=-20)).timetuple().tm_yday
+		temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_offset)).timetuple().tm_yday
 		if (temp_moonset_doy < date_doy and temp_moonset.year == true_date.year) or ((temp_moonset + timedelta(hours=temp_utc_offset)).year < true_date.year):
 			temp_moonset = moonrise_or_moonset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set)
 			i += 1
