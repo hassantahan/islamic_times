@@ -281,10 +281,13 @@ class ITLocation:
             sunrise=se.find_proper_suntime(self.observer_dateinfo, self.observer_info, 'rise'),
             sun_transit=se.find_sun_transit(self.observer_dateinfo, self.observer_info),
             sunset=se.find_proper_suntime(self.observer_dateinfo, self.observer_info, 'set'),
+            apparent_altitude=self.sun_params.true_altitude,
+            true_azimuth=self.sun_params.true_azimuth,
+            geocentric_distance=self.sun_params.geocentric_distance,
             apparent_declination=self.sun_params.apparent_declination,
             apparent_right_ascension=self.sun_params.apparent_right_ascension,
-            apparent_altitude=self.sun_params.true_altitude,
-            true_azimuth=self.sun_params.true_azimuth
+            greenwich_hour_angle=self.sun_params.greenwich_hour_angle,
+            local_hour_angle=self.sun_params.local_hour_angle
         )
 
         illumination: float = me.moon_illumination(self.sun_params.apparent_declination, 
@@ -300,12 +303,15 @@ class ITLocation:
             moonrise=me.find_proper_moontime(self.observer_dateinfo, self.observer_info, 'rise'),
             moon_transit=me.find_moon_transit(self.observer_dateinfo, self.observer_info),
             moonset=me.find_proper_moontime(self.observer_dateinfo, self.observer_info, 'set'),
-            topocentric_declination=self.moon_params.top_declination,
-            topocentric_right_ascension=self.moon_params.topocentric_ascension,
+            illumination=illumination,
             apparent_altitude=self.moon_params.apparent_altitude,
             true_azimuth=self.moon_params.true_azimuth,
+            geocentric_distance=self.moon_params.geocentric_distance,
             parallax=self.moon_params.eh_parallax,
-            illumination=illumination
+            topocentric_declination=self.moon_params.top_declination,
+            topocentric_right_ascension=self.moon_params.topocentric_ascension,
+            greenwich_hour_angle=self.moon_params.greenwich_hour_angle,
+            local_hour_angle=self.moon_params.local_hour_angle
         )
 
         # Astronomical parameters have been calculated so the flag is set to False

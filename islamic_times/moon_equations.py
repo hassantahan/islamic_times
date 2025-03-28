@@ -421,6 +421,7 @@ class Moon:
 	right_ascension: RightAscension = field(init=False)
 	declination: Angle = field(init=False)
 	eh_parallax: Angle = field(init=False)
+	greenwich_hour_angle: Angle = field(init=False)
 	local_hour_angle: Angle = field(init=False)
 	topocentric_ascension: RightAscension = field(init=False)
 	top_declination: Angle = field(init=False)
@@ -478,6 +479,7 @@ class Moon:
 		app_gst = gst + (st_corr / 3600)
 		lha = (app_gst + self.local_longitude.decimal - self.right_ascension.decimal_degrees.decimal) % 360
 
+		object.__setattr__(self, 'greenwich_hour_angle', Angle(app_gst))
 		object.__setattr__(self, 'local_hour_angle', Angle(lha))
 
 	def _compute_topocentric(self):

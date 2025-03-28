@@ -464,29 +464,38 @@ class SunInfo:
         sunrise (datetime): Sunrise time.
         sun_transit (datetime): Solar transit (culmination) time.
         sunset (datetime): Sunset time.
-        apparent_declination (Angle): Apparent declination.
-        apparent_right_ascension (RightAscension): Apparent right ascension.
         apparent_altitude (Angle): Apparent altitude.
         true_azimuth (Angle): True azimuth.
+        geocentric_distance (Distance): Geocentric distance from the Sun to the centre of the Earth.
+        apparent_declination (Angle): Apparent declination.
+        apparent_right_ascension (RightAscension): Apparent right ascension.
+        greenwich_hour_angle (Angle): Greenwich hour angle.
+        local_hour_angle (Angle): Local hour angle.
     """
 
     sunrise: datetime
     sun_transit: datetime
     sunset: datetime
-    apparent_declination: Angle
-    apparent_right_ascension: RightAscension
     apparent_altitude: Angle
     true_azimuth: Angle
+    geocentric_distance: Distance
+    apparent_declination: Angle
+    apparent_right_ascension: RightAscension
+    greenwich_hour_angle: Angle
+    local_hour_angle: Angle
 
     def __str__(self):
         return ("The Sun\n"
                 f"\tSunrise:\t\t{self.sunrise.strftime("%X %d-%m-%Y")}\n"
                 f"\tSun Transit:\t\t{self.sun_transit.strftime("%X %d-%m-%Y")}\n"
                 f"\tSunset:\t\t\t{self.sunset.strftime("%X %d-%m-%Y")}\n"
+                f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
+                f"\tApp. Azimuth:\t\t{self.true_azimuth}\n"
+                f"\tDistance:\t\t{self.geocentric_distance.in_unit(DistanceUnits.KILOMETRE)}\n"
                 f"\tApp. Declination:\t{self.apparent_declination}\n"
                 f"\tApp. Right Ascension:\t{self.apparent_right_ascension}\n"
-                f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
-                f"\tApp. Azimuth:\t\t{self.true_azimuth}")
+                f"\tGreenwich Hour Angle:\t{self.greenwich_hour_angle}\n"
+                f"\tLocal Hour Angle:\t{self.local_hour_angle}")
 
 @dataclass(frozen=True, slots=True)
 class MoonInfo:
@@ -497,32 +506,41 @@ class MoonInfo:
         moonrise (datetime): Moonrise time.
         moon_transit (datetime): Moon's upper transit time.
         moonset (datetime): Moonset time.
-        topocentric_declination (Angle): Topocentric declination.
-        topocentric_right_ascension (RightAscension): Topocentric right ascension.
+        illumination (float): Illuminated fraction (0 to 1).
         apparent_altitude (Angle): Apparent altitude.
         true_azimuth (Angle): True azimuth.
+        geocentric_distance (Distance): Geocentric distance from the Moon to the centre of the Earth.
         parallax (Angle): Lunar parallax.
-        illumination (float): Illuminated fraction (0 to 1).
+        topocentric_declination (Angle): Topocentric declination.
+        topocentric_right_ascension (RightAscension): Topocentric right ascension.
+        greenwich_hour_angle (Angle): Greenwich hour angle.
+        local_hour_angle (Angle): Local hour angle.
     """
 
     moonrise: datetime
     moon_transit: datetime
     moonset: datetime
-    topocentric_declination: Angle
-    topocentric_right_ascension: RightAscension
+    illumination: float
     apparent_altitude: Angle
     true_azimuth: Angle
+    geocentric_distance: Distance
     parallax: Angle
-    illumination: float
+    topocentric_declination: Angle
+    topocentric_right_ascension: RightAscension
+    greenwich_hour_angle: Angle
+    local_hour_angle: Angle
 
     def __str__(self):
         return ("The Moon\n"
                 f"\tMoonrise:\t\t{self.moonrise.strftime("%X %d-%m-%Y")}\n"
                 f"\tMoon Transit:\t\t{self.moon_transit.strftime("%X %d-%m-%Y")}\n"
                 f"\tMoonset:\t\t{self.moonset.strftime("%X %d-%m-%Y")}\n"
-                f"\tTop. Declination:\t{self.topocentric_declination}\n"
-                f"\tTop. Right Ascension:\t{self.topocentric_right_ascension}\n"
+                f"\tIllumination:\t\t{self.illumination * 100:.2f}%"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tAzimuth:\t\t{self.true_azimuth}\n"
+                f"\tDistance:\t\t{self.geocentric_distance.in_unit(DistanceUnits.KILOMETRE)}\n"
                 f"\tParallax:\t\t{self.parallax}\n"
-                f"\tIllumination:\t\t{self.illumination * 100:.2f}%")
+                f"\tTop. Declination:\t{self.topocentric_declination}\n"
+                f"\tTop. Right Ascension:\t{self.topocentric_right_ascension}\n"
+                f"\tGreenwich Hour Angle:\t{self.greenwich_hour_angle}\n"
+                f"\tLocal Hour Angle:\t{self.local_hour_angle}")
