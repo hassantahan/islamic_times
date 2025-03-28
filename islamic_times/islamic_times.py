@@ -14,8 +14,8 @@ References:
 
 import numpy as np
 from numbers import Number
+from typing import Dict, List
 from dataclasses import replace
-from typing import Dict, List, Tuple
 from datetime import datetime, timedelta, timezone
 from islamic_times.dataclasses import *
 from islamic_times import prayer_times as pt
@@ -240,8 +240,8 @@ class ITLocation:
         
         # Set bools for astro_calculation stuff
         if not self.auto_calculate:
-            super().__setattr__('datetime_modified', True)
-            super().__setattr__('prayers_modified', True)
+            self.datetime_modified = True
+            self.prayers_modified = True
         else:
             self.calculate_astro()
 
@@ -334,7 +334,7 @@ class ITLocation:
 
     # Set the method of calculating prayer times among the available default options
     # The default option (from creation) is the Jaʿfarī method.
-    def set_prayer_method(self, method_key: str = 'JAFARI', asr_type: int = 0):
+    def set_prayer_method(self, method_key: str = 'JAFARI', asr_type: int = 0) -> None:
         """
         Sets the prayer time calculation method.
 
@@ -342,7 +342,8 @@ class ITLocation:
         http://praytimes.org/wiki/Calculation_Methods.
 
         Parameters:
-            method (str): The name of the prayer calculation method (e.g., 'JAFARI', 'ISNA', etc.). Defaults to 'JAFARI'.
+            method_key (str): The name of the prayer calculation method (e.g., 'JAFARI', 'ISNA', etc.). Defaults to 'JAFARI'.
+            asr_type (int): 
 
         Raises:
             ValueError: If the method is not among the supported options.
@@ -356,6 +357,9 @@ class ITLocation:
     
         for method in pt.DEFAULT_PRAYER_METHODS:
             if method_key in (key.upper() for key in method.keys):
+                if asr_type not in (0, 1):
+                    raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
+
                 if asr_type == 0:
                     self.method = method
                 else:
@@ -372,17 +376,15 @@ class ITLocation:
     
     # Helper function to validate and set angle
     def __validate_and_set(self, attribute_name: str, value: float | int) -> None:
-        # if value is not None:
-        #     if isinstance(value, (int, float)):  # Check if it's a number
-        #         if value > 0:
-                    
-        #         else:
-        #             ValueError(f"{attribute_name} must be greater than 0. Invalid value: {value}")
-        #     else:
-        #         raise ValueError(f"{attribute_name} must be a number. Invalid value: {value}")
-        ...
+        if value is not None:
+            if isinstance(value, (int, float)):  # Check if it's a number
+                if value > 0:
+                    setattr(self.method, attribute_name, Angle(value))
+                else:
+                    ValueError(f"{attribute_name} must be greater than 0. Invalid value: {value}")
+            else:
+                raise ValueError(f"{attribute_name} must be a number. Invalid value: {value}")
 
-    # TODO
     # Alows user to set their own solar hour angles for prayer time calculations.
     def set_custom_prayer_angles(self, fajr_angle: float = None, maghrib_angle: float = None, isha_angle: float = None) -> None:
         """
@@ -409,16 +411,14 @@ class ITLocation:
         self.__validate_and_set('maghrib_angle', maghrib_angle)
         self.__validate_and_set('isha_angle', isha_angle)
 
-        # Method is now custom
-        super().__setattr__('method', 'Custom')
+        setattr(self.method, "name", "Custom")
 
         # Update prayer times
         if self.auto_calculate:
             self.calculate_prayer_times()
         else:
-            super().__setattr__('prayers_modified', True)
+            self.prayers_modified = True
     
-    # TODO
     # Separated from angles since it is defined by shadow ratio
     def set_asr_type(self, asr_type: int = 0) -> None:
         """
@@ -441,20 +441,19 @@ class ITLocation:
         """
 
         if asr_type in (0, 1):
-            super().__setattr__("asr_type", asr_type)
+            setattr(self.method, "asr_type", asr_type)
         else:
             raise ValueError(f"'asr_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {asr_type}")
 
         # Method is now custom
-        super().__setattr__('method', 'Custom')
+        setattr(self.method, "name", "Custom")
 
         # Update prayer times
         if self.auto_calculate:
             self.calculate_prayer_times()
         else:
-            super().__setattr__('prayers_modified', True)
+            self.prayers_modified = True
 
-    # TODO
     # Set to either 0 (sunset to sunrise; the majority method) or 1 (sunset to fajr, the 'Jaʿfarī' method)
     def set_midnight_type(self, midnight_type: int = 0) -> None:
         """
@@ -477,18 +476,18 @@ class ITLocation:
         """
 
         if midnight_type in (0, 1):
-           super().__setattr__("midnight_type", midnight_type)
+           setattr(self.method, "midnight_type", midnight_type)
         else:
             raise ValueError(f"'midnight_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {midnight_type}")
 
         # Method is now custom
-        super().__setattr__('method', 'Custom')
+        setattr(self.method, "name", "Custom")
 
         # Update prayer times
         if self.auto_calculate:
             self.calculate_prayer_times()
         else:
-            super().__setattr__('prayers_modified', True)
+            self.prayers_modified = True
 
     # Return Observer Parameters
     def observer(self) -> ObserverInfo:
@@ -532,7 +531,7 @@ class ITLocation:
         return self.observer_dateinfo
 
     # Return prayer times
-    def prayer_times(self) -> Dict[str, str]:
+    def prayer_times(self) -> PrayerTimes:
         """
         Returns calculated prayer times.
 
@@ -557,7 +556,7 @@ class ITLocation:
         return self.times_of_prayer
     
     # Return Mecca information
-    def mecca(self) -> Dict[str, float | str]:
+    def mecca(self) -> MeccaInfo:
         """
         Returns observer's distance and direction to Mecca.
 
@@ -578,7 +577,7 @@ class ITLocation:
         )
     
     # Return sun properties and position values
-    def sun(self) -> Dict[str, float | str]:
+    def sun(self) -> SunInfo:
         """
         Returns properties and position of the Sun.
 
@@ -601,7 +600,7 @@ class ITLocation:
         return self.sun_info
     
     # Return moon properties and position values
-    def moon(self) -> Dict[str, str | float]:
+    def moon(self) -> MoonInfo:
         """
         Returns properties and position of the Moon.
 
