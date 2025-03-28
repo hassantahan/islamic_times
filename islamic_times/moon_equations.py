@@ -403,36 +403,6 @@ __A_COEFFS = [
 class Moon:
 	"""
 	A class to compute the position of the Moon in the sky based on given astronomical parameters.
-
-	Attributes:
-		jde (float): The Julian Ephemeris Day.
-		deltaT (float): The difference between Terrestrial Time and Universal Time (ΔT).
-		local_latitude (float): The observer's latitude in degrees.
-		local_longitude (float): The observer's longitude in degrees.
-		deltaPsi (float): The nutation in longitude in degrees.
-		ecliptic (float): The observer's ecliptic in degrees.
-		elev (float): The observer's elevation above sea level in meters.
-		lunar_nutation (tuple): Nutation parameters for the Moon.
-		true_longitude (float): The true longitude of the Moon in degrees.
-		true_latitude (float): The true latitude of the Moon in degrees.
-		geocentric_distance (float): The distance from the Earth to the Moon in kilometers.
-		apparent_longitude (float): The apparent longitude of the Moon in degrees.
-		right_ascension (float): The right ascension of the Moon in degrees.
-		declination (float): The declination of the Moon in degrees.
-		eh_parallax (float): The equatorial horizontal parallax of the Moon in degrees.
-		local_hour_angle (float): The local hour angle of the Moon in degrees.
-		top_ascension (float): The topocentric right ascension of the Moon in degrees.
-		top_declination (float): The topocentric declination of the Moon in degrees.
-		top_local_hour_angle (float): The topocentric local hour angle in degrees.
-		altitude (float): The altitude of the Moon above the horizon in degrees.
-		azimuth (float): The azimuth angle of the Moon in degrees.
-
-	Methods:
-		`calculate()`: Computes various positional attributes of the Moon, including its right ascension, declination, altitude, and azimuth.
-
-	Notes:
-		- All attributes after `elev` are only computed and available after the `calculate()` method is called.
-		- The `calculate()` method is called automatically by the `moonpos()` method.
     """
 
 	jde: float
@@ -512,19 +482,19 @@ class Moon:
 
 	def _compute_topocentric(self):
 		top_ra, top_dec = ce.correct_ra_dec(
-			self.right_ascension.decimal_degrees.decimal,
-			self.declination.decimal,
-			self.local_hour_angle.decimal,
-			self.eh_parallax.decimal,
-			self.local_latitude.decimal,
-			self.elevation.in_unit(DistanceUnits.KILOMETRE)
+			self.right_ascension,
+			self.declination,
+			self.local_hour_angle,
+			self.eh_parallax,
+			self.local_latitude,
+			self.elevation
 		)
 
 		top_lha = (te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400).decimal +
-					self.local_longitude.decimal - top_ra) % 360
+					self.local_longitude.decimal - top_ra.decimal_degrees.decimal) % 360
 
-		object.__setattr__(self, 'topocentric_ascension', RightAscension(top_ra / 15))
-		object.__setattr__(self, 'top_declination', Angle(top_dec))
+		object.__setattr__(self, 'topocentric_ascension', top_ra)
+		object.__setattr__(self, 'top_declination', top_dec)
 		object.__setattr__(self, 'top_local_hour_angle', Angle(top_lha))
 
 	def _compute_horizontal_coordinates(self):
@@ -619,11 +589,13 @@ def moon_nutation(jde: float) -> Tuple[float, float, float]:
 
 	return (fundamental_arguments, sum_l, sum_b, sum_r)
 
-def moonpos(observer_date: DateTimeInfo, observer: ObserverInfo, deltaPsi: float, ecliptic: float) -> Moon:
+def moonpos(observer_date: DateTimeInfo, observer: ObserverInfo, deltaPsi: Angle, ecliptic: Angle) -> Moon:
 	"""
 	Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 47 of *Astronomical Algorthims* for more information.
 
 	Parameters:
+		observer_date (DateTimeInfo): The date and time of the observer.
+		observer (ObserverInfo): The observer's coordinates and elevation.
 
 	Returns:
 		Moon (obj): A `Moon` object that contains various attributes that describe its position. 
@@ -786,12 +758,12 @@ def moon_illumination(sun_dec: Angle, sun_ra: Angle, moon_dec: Angle, moon_ra: A
 	Calculate the fraction of the Moon illuminated for a given date. See Chapter 48 of *Astronomical Algorithms* for more information.
 
 	Parameters:
-		sun_dec (float): The Sun's declination (°).
-		sun_ra (float): The Sun's Right Ascension (°).
-		moon_dec (float): The Moon's declination (°).
-		moon_ra (float): The Moon's Right Ascension (°).
-		sun_earth_distance (float): The Sun-Earth distance (AU).
-		moon_earth_distance (float): The Moon-Earth distance (AU).
+		sun_dec (Angle): The Sun's declination.
+		sun_ra (Angle): The Sun's Right Ascension.
+		moon_dec (Angle): The Moon's declination.
+		moon_ra (Angle): The Moon's Right Ascension.
+		sun_earth_distance (Distance): The Sun-Earth distance.
+		moon_earth_distance (Distance): The Moon-Earth distance.
 
 	Returns:
 		float: The fraction of the Moon illuminated.
@@ -810,10 +782,11 @@ def moon_illumination(sun_dec: Angle, sun_ra: Angle, moon_dec: Angle, moon_ra: A
 
 def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> datetime:
 	"""
-	Calculate the time of the moon transit for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
+	Calculate transit of the moon (specifically culmination) for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
 	Parameters:
-		...
+		observer_date (DateTimeInfo): The date and time of the observer.
+		observer (ObserverInfo): The observer's coordinates and elevation.
 
 	Returns:
 		datetime: The time of moonset.
@@ -873,7 +846,9 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 	Calculate the time of moonset for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
 	Parameters:
-		...
+		observer_date (DateTimeInfo): The date and time of the observer.
+		observer (ObserverInfo): The observer's coordinates and elevation.
+		rise_or_set (str): Specify whether to find the moonrise or moonset time. Default is 'set'.
 
 	Returns:
 		datetime: The time of moonset.
@@ -974,11 +949,12 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
     Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 
     Parameters:
-        ...
+        observer_date (DateTimeInfo): The date and time of the observer.
+		observer (ObserverInfo): The observer's coordinates and elevation.
         rise_or_set (str): Find either the setting or rising option. Default is set to 'set'.
 
     Returns:
-        datetime: The date and time of the moon event. If the moon event is not found (does not set or rise), returns `np.inf`.
+        datetime: The date and time of the moon event. If the moon event is not found (does not set or rise), returns `math.inf`.
 
     Raises:
         ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
@@ -988,7 +964,7 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 		raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
 
 	if observer_date.utc_offset == 0:
-			temp_utc_offset = np.floor(observer.longitude.decimal / 15) - 1
+			temp_utc_offset = math.floor(observer.longitude.decimal / 15) - 1
 	else:
 		temp_utc_offset = observer_date.utc_offset * -1
 
@@ -997,7 +973,7 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 
 	i = 1
 	while(True):
-		if temp_moonset == np.inf:
+		if temp_moonset == math.inf:
 			return datetime.min
 		
 		temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_offset)).timetuple().tm_yday
@@ -1018,11 +994,11 @@ def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt
 	Calculate the visibility of the Moon's crescent for a given date and observer coordinates.
 
 	Parameters:
-		sun_az (float): The Sun's azimuth (°).
-		sun_alt (float): The Sun's altitude (°).
-		moon_az (float): The Moon's azimuth (°).
-		moon_alt (float): The Moon's altitude (°).
-		moon_pi (float): The Moon's parallax (°).
+		sun_az (Angle): The Sun's azimuth.
+		sun_alt (Angle): The Sun's altitude.
+		moon_az (Angle): The Moon's azimuth.
+		moon_alt (Angle): The Moon's altitude.
+		moon_pi (Angle): The Moon's parallax.
 		criterion (int): The criterion of visibility calculation to use (0 or 1). Default is 0 which uses Odeh, 2006. When set to 1, it uses HMNAO TN No. 69 (a.k.a. Yallop, 1997).
 	
 	Returns:
@@ -1046,13 +1022,13 @@ def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt
 	return q_value
 
 # Classification according to Odeh, 2006 or HMNAO TN No.69
-def classify_visibility(q: float, criterion: int = 0) -> str:
+def classify_visibility(q: float, criterion: int = 1) -> str:
 	"""
 	Classify the visibility of the Moon's crescent based on the given q value.
 
 	Parameters:
 		q (float): The q value.
-		criterion (int): The criterion of visibility classification to use (0 or 1). Default is 0 which uses Odeh, 2006. When set to 1, it uses HMNAO TN No. 69 (a.k.a. Yallop, 1997).
+		criterion (int): The criterion of visibility classification to use (0 or 1). Default is 1. When set to 1, it uses HMNAO TN No. 69 (a.k.a. Yallop, 1997).
 
 	Returns:
 		str: The classification of the Moon's crescent visibility.

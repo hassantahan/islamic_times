@@ -17,16 +17,13 @@ adjustments for extreme latitudes.
 - [PrayTimes.org - Prayer Times Calculation Methods](http://praytimes.org/wiki/Calculation_Methods)
 """
 
+import warnings
+from typing import List
 from islamic_times.dataclasses import *
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
-from islamic_times import calculation_equations as ce
 from datetime import datetime, timedelta
 from dataclasses import replace
-import numpy as np
-import warnings
-from typing import List
-
 
 ##### Prayer Methods #####
 # Source: http://praytimes.org/wiki/Calculation_Methods
@@ -66,33 +63,8 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
         fajr_angle=Angle(16), isha_angle=Angle(14), maghrib_angle=Angle(4), midnight_type=1
     )
 ]
-
 """
-This dictionary maps prayer time calculation methods to their respective identifiers
-and angle values.
-
-### Structure:
-`DEFAULT_PRAYER_METHODS` is a dictionary where:
-
-- Key (`str`): The name of the prayer calculation method.
-- Value (`Tuple[PrayerNames, PrayerAngles]`):
-    • PrayerNames (`Tuple[str, ...]`): A tuple of one or more method identifiers.
-    • PrayerAngles (`Tuple[int, int, int, int]`): A fixed tuple of four numerical values:
-        \t1. Fajr angle (degrees)
-        \t2. Isha angle (degrees)
-        \t3. Maghrib angle (degrees)
-        \t4. Midnight type (0 → sunset to sunrise, 1 → sunset to Fajr)
-
-### Example:
-```python
-{
-    "Muslim World League (MWL)": (("MWL", "MUSLIM WORLD LEAGUE"), (18, 17, 0, 0)),
-    "Islamic Society of North America (ISNA)": (("ISNA", "ISLAMIC SOCIETY OF NORTH AMERICA"), (15, 15, 0, 0)),
-}
-```
-
-### Reference:
-    http://praytimes.org/wiki/Calculation_Methods
+Reference: http://praytimes.org/wiki/Calculation_Methods
 """
 
 # Used to calculate islamic midnight
@@ -123,27 +95,26 @@ def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angl
 # Type 1: Ḥanafī definition
 def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 1) -> datetime:
     """
-    Computes the **ʿaṣr prayer time** based on the observer's **shadow ratio**.
+    Computes the ʿaṣr prayer time based on the observer's shadow ratio.
 
     The ʿaṣr prayer time is determined based on the length of an object's shadow 
     relative to its height. Two methodologies exist:
-    - **Standard Method (`t=1`)**: Shadow is equal to the object's height.
-    - **Ḥanafī Method (`t=2`)**: Shadow is **twice** the object's height.
+    - Standard Method (`t=1`): Shadow is equal to the object's height.
+    - Ḥanafī Method (`t=2`): Shadow is **twice** the object's height.
 
     Parameters:
         noon (datetime): Time of ẓuhr/solar noon/sun transit/sun culmination.
-        lat (float): Observer's latitude.
-        dec (float): Sun's **declination** at the given time.
+        lat (Angle): Observer's latitude.
+        dec (Angle): Sun's declination.
         ts (int, optional): ʿaṣr calculation method:
             - 1 (Standard) → Shadow ratio of 1:1.
             - 2 (Hanafi) → Shadow ratio of 2:1.  
 
     Returns:
-        float/np.inf: Number of hours after solar noon when ʿaṣr occurs, or ʿaṣr cannot be calculated due to extreme solar geometry.
+        float/math.inf: Number of hours after solar noon when ʿaṣr occurs, or ʿaṣr cannot be calculated due to extreme solar geometry.
 
     Notes:
-    - **If the sun never reaches the required shadow ratio**, the function returns **infinity (`np.inf`)**.
-    - This condition occurs in **polar regions** during certain seasons.
+        - If the sun never reaches the required shadow ratio, the function returns `math.inf`.
     """
 
     temp_num = math.sin(math.atan2(1, ts + math.tan(lat.radians - dec.radians))) - math.sin(lat.radians) * math.sin(dec.radians)
@@ -155,7 +126,7 @@ def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 1) -> datetime:
     if temp_num > temp_denom:
         raise ArithmeticError("ʿAṣr time cannot be calculated because the sun's geometry at the given date and coordintes does not satisfy the shadow ratio.")
     else:
-        asr_hours = 1 / 15 * np.rad2deg(np.arccos(temp_num / temp_denom))
+        asr_hours = 1 / 15 * math.degrees(math.acos(temp_num / temp_denom))
     
     return noon + timedelta(hours=asr_hours)
 
@@ -177,7 +148,7 @@ def extreme_latitudes(prayer_list: List[datetime]):
     """
 
     for prayer in prayer_list:
-        if prayer == np.inf:
+        if prayer == math.inf:
             warnings.warn(f"Extreme latitude warning. Prayer times at this latitude are not well established.")
             prayer = "The observer is at a latitude such that the sun does not reach the given angle for the prayer."
 
@@ -191,44 +162,17 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     different methodologies for Fajr, Maghrib, Isha, ʿAṣr, and Islamic midnight.
 
     Parameters:
-    	jde (float): Julian Ephemeris Date (JDE) for the calculation.
-    	deltaT (float): Difference between Terrestrial Time (TT) and Universal Time (UT).
-    	latitude (float): Observer's latitude in decimal degrees.
-    	longitude (float): Observer's longitude in decimal degrees.
-        elevation (float): Observer's elevation above sea level in metres.
-    	utc_offset (float): Difference between local time and UTC (in hours).
-    	prayer_times_parameters (Tuple[float, float, float, int, int]):
-            - Fajr angle (degrees).
-            - Maghrib angle (degrees).
-            - Isha angle (degrees, or `inf for Makkah method).
-            - Asr method (0 = Standard, 1 = Hanafi).
-            - Midnight method (0 = Sunset to Sunrise, 1 = Sunset to Fajr).
-        sunrise:
-    	is_ramadan (bool, optional): If `True`, applies the special **Makkah ʿishāʾ method** for Ramadan. Defaults to `False`.
+    	observer_date (DateTimeInfo): The date and time of the observer.
+        observer (ObserverInfo): The observer's coordinates and elevation.
+        sun_info (SunInfo): The sun's position data (sunrise, sunset, solar noon).
+        method (PrayerMethod): The prayer calculation method to use.
 
     Returns:
-        dict: A dictionary of computed prayer times, where each value is either:\n- A `datetime` object (valid prayer time).\n- A `str` message (`"Does not exist."` or `"ʿAṣr time cannot be calculated."`).
+        PrayerTimes: An object containing the calculated prayer times.
 
     Notes:
-    - If the sun does not satisfy the required angle for a prayer time, the function returns `"Does not exist."`.
-    - The **Makkah method** sets **Isha time** as **one hour after Maghrib (two hours in Ramadan)**.
-    - **Islamic midnight** is determined based on either:
-        	midnight_type=0`: Midpoint between sunset and sunrise.
-        	midnight_type=1`: Midpoint between sunset and the next day''s Fajr.
+    - If the sun does not satisfy the required angle for a prayer time, the function returns `"Does not exist."`. Later updates will allow for different approaches.
     """
-
-    # # Extract parameters
-    # fajr_angle, maghrib_angle, isha_angle, asr_type, midnight_type = prayer_times_parameters
-
-    # # See if suntimes passed, calculate if not
-    # if sunrise == None:
-    #     sunrise = se.find_proper_suntime(date, latitude, longitude, elevation, utc_offset, 'rise')
-    
-    # if sun_transit == None:
-    #     sun_transit = se.find_sun_transit(date, latitude, longitude, elevation, utc_offset)
-    
-    # if sunset == None:
-    #     sunset = se.find_proper_suntime(date, latitude, longitude, elevation, utc_offset, 'set')
 
     # Calculate fajr
     fajr_dt = se.find_proper_suntime(observer_date, observer, 'rise', method.fajr_angle)
@@ -267,7 +211,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
         else:
             midnight_dt = te.time_midpoint(sun_info.sunset, find_tomorrow_time(observer_date, observer))
     except ValueError as e:
-        midnight_dt = np.inf
+        midnight_dt = math.inf
 
 
     prayer_list = [
@@ -282,7 +226,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     ]
 
     # Deal with locations at extreme latitudes
-    if any(p == np.inf for p in prayer_list):
+    if any(p == math.inf for p in prayer_list):
         prayer_list = extreme_latitudes(prayer_list)
 
     return PrayerTimes(

@@ -171,48 +171,13 @@ __SUN_NUTATION_COEFFICIENTS = [
 class Sun:
     '''
     A class to compute the position of the Sky in the sky based on given astronomical parameters.
-
-    Attributes:
-        jde (float): The Julian Ephemeris Day.
-        deltaT (float): The difference between Terrestrial Time and Universal Time (ΔT).
-        local_latitude (float): The observer's latitude in degrees.
-        local_longitude (float): The observer's longitude in degrees.
-        temperature (float): The observer's ambient temperature in degrees Celcius.
-        pressure (float): The observer's ambient pressure in kPa.
-        mean_longitude (float): The mean longitude of the Sun in degrees.
-        mean_anomaly (float): The mean anomaly of the Sun in degrees.
-        earth_orbit_eccentricity (float): The eccentricity of Earth's orbit.
-        sun_centre (float): The Sun's equation of center in degrees.
-        true_longitude (float): The Sun's true longitude in degrees.
-        true_anomaly (float): The Sun's true anomaly in degrees.
-        geocentric_distance (float): The distance from the Earth to the Sun in Astronomical Units (AU).
-        omega (float): The longitude of the ascending node of the Moon's orbit in degrees.
-        apparent_longitude (float): The apparent longitude of the Sun in degrees.
-        nutation (Tuple[float, float]): Nutation in longitude and obliquity in degrees.
-        delta_obliquity (float): Change in Earth's obliquity due to nutation.
-        mean_obliquity (float): The mean obliquity of the ecliptic in degrees.
-        true_obliquity (float): The true obliquity of the ecliptic in degrees.
-        true_right_ascension (float): The true right ascension of the Sun in degrees.
-        true_declination (float): The true declination of the Sun in degrees.
-        apparent_right_ascension (float): The apparent right ascension of the Sun in degrees.
-        apparent_declination (float): The apparent declination of the Sun in degrees.
-        local_hour_angle (float): The local hour angle of the Sun in degrees.
-        eh_parallax (float): The equatorial horizontal parallax of the Sun in degrees.
-        topocentric_ascension (float): The topocentric right ascension of the Sun in degrees.
-        topocentric_declination (float): The topocentric declination of the Sun in degrees.
-        topocentric_local_hour_angle (float): The topocentric local hour angle in degrees.
-        altitude (float): The altitude of the Sun above the horizon in degrees.
-        azimuth (float): The azimuth angle of the Sun in degrees.
-
-    Notes:
-        - All attributes after `elev` are only computed and available after the `calculate()` method is called.
-        - The `calculate()` method is called automatically by the `sunpos()` method.
     '''
         
     jde: float
     deltaT: float
     local_latitude: Angle
     local_longitude: Angle
+    elevation: Distance
     temperature: float = 10
     pressure: float = 101
 
@@ -314,7 +279,7 @@ class Sun:
 
     def _compute_hour_angles(self):
         gha = te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400).decimal
-        nut_dms = ce.decimal_to_dms(self.nutation[0].decimal)
+        nut_dms = self.nutation[0].dms
         st_corr = (nut_dms[2] + nut_dms[1] * 60 + nut_dms[0] * 3600) * math.cos(self.true_obliquity.radians) / 15
         gha_corrected = gha + st_corr / 240
 
@@ -323,12 +288,19 @@ class Sun:
 
     def _compute_topocentric(self):
         parallax = math.degrees(math.asin(math.sin(math.radians(8.794 / 3600)) / self.geocentric_distance.value))
-        top_ra, top_dec = ce.correct_ra_dec(self.apparent_right_ascension.decimal_degrees.decimal, self.apparent_declination.decimal, self.local_hour_angle.decimal, parallax, self.local_latitude.decimal, 76)
+        top_ra, top_dec = ce.correct_ra_dec(
+            self.apparent_right_ascension, 
+            self.apparent_declination, 
+            self.local_hour_angle, 
+            Angle(parallax), 
+            self.local_latitude, 
+            self.elevation    
+        )
 
         object.__setattr__(self, 'eh_parallax', Angle(parallax))
-        object.__setattr__(self, 'topocentric_ascension', RightAscension(top_ra / 15))
-        object.__setattr__(self, 'topocentric_declination', Angle(top_dec))
-        object.__setattr__(self, 'topocentric_local_hour_angle', Angle((self.greenwich_hour_angle.decimal + self.local_longitude.decimal - top_ra) % 360))
+        object.__setattr__(self, 'topocentric_ascension', top_ra)
+        object.__setattr__(self, 'topocentric_declination', top_dec)
+        object.__setattr__(self, 'topocentric_local_hour_angle', Angle((self.greenwich_hour_angle.decimal + self.local_longitude.decimal - top_ra.decimal_degrees.decimal) % 360))
 
     def _compute_horizontal_coordinates(self):
         alt_rad = math.asin(
@@ -358,7 +330,7 @@ def oblique_eq(jde: float) -> Angle:
         jde (float): The Julian Ephemeris Day.
 
     Returns:
-        float: The obliquity of the ecliptic in degrees.
+        Angle: The obliquity of the ecliptic.
     '''
     u = ((jde - te.J2000) / te.JULIAN_CENTURY) / 100
 
@@ -378,7 +350,7 @@ def sun_nutation(jde: float) -> Tuple[Angle, Angle]:
         jde (float): The Julian Ephemeris Day.
 
     Returns:
-        tuple (Tuple[float, float]): The nutation in longitude and obliquity.
+        tuple (Tuple[Angle, Angle]): The nutation in longitude and obliquity.
     '''
 
     # Precompute time variables
@@ -415,6 +387,8 @@ def sunpos(observer_date: DateTimeInfo, observer: ObserverInfo) -> Sun:
     Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 25 of the *Astronomical Algorthims* for more information.
 
     Parameters:
+        observer_date (DateTimeInfo): The date and time of the observer.
+        observer (ObserverInfo): The observer's coordinates and elevation.
 
     Returns:
         Sun (obj): A `Sun` object that contains various attributes that describe its position. 
@@ -424,10 +398,11 @@ def sunpos(observer_date: DateTimeInfo, observer: ObserverInfo) -> Sun:
     '''
     
     the_sun = Sun(
-        observer_date.jde,
-        observer_date.deltaT,
-        observer.latitude,
-        observer.longitude
+        jde=observer_date.jde,
+        deltaT=observer_date.deltaT,
+        local_latitude=observer.latitude,
+        local_longitude=observer.longitude,
+        elevation=observer.elevation
     )
     
     return the_sun
@@ -458,10 +433,11 @@ def equation_of_time(deltaPsi: float, L0: float, epsilon: float, alpha: float) -
 
 def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> datetime:
     """
-    Calculate the times of sunrise, sunset, and its transit for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
+    Calculate the transit of the sun (specifically culmination) for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
     Parameters:
-        ...
+        observer_date (DateTimeInfo): The date and time of the observer.
+        observer (ObserverInfo): The observer's coordinates and elevation.
 
     Returns:
         datetime: The time of moonset.
@@ -509,16 +485,16 @@ def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> dat
                                                                                         
     return sun_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 
-# TODO: Move to Angle
 def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime:
     """
     Calculate either the sunrise or the sunset time for a given date and observer coordinates.
     This function computes only the requested event (sunrise or sunset) without calculating both.
     
     Parameters:
-        ...
+        observer_date (DateTimeInfo): The date and time of the observer.
+        observer (ObserverInfo): The observer's coordinates and elevation.
         rise_or_set (str): 'rise' or 'sunrise' to calculate sunrise; 'set' or 'sunset' to calculate sunset.
-        angle (float): The standard altitude of the sun (default is 5/6°).
+        angle (Angle): The standard altitude of the sun (default is 5/6°).
         
     Returns:
         datetime: The computed time of the requested event (sunrise or sunset).
@@ -607,11 +583,13 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
     Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 
     Parameters:
+        observer_date (DateTimeInfo): The date and time of the observer.
+        observer (ObserverInfo): The observer's coordinates and elevation.
         rise_or_set (str): Find either the setting or rising option.
-        angle (float): Find the time when the sun reaches the given angle above or below the observer's horizon (controlled by `rise_or_set`) (°). Default is 50 arcminutes (0.8333°) for visible sunset/sunrise.
+        angle (Angle): Find the time when the sun reaches the given angle above or below the observer's horizon (controlled by `rise_or_set`). Default is 50 arcminutes (0.8333°) for visible sunset/sunrise.
 
     Returns:
-        datetime: The date and time of the sun event. If the sun event is not found (does not set or rise), returns `np.inf`.
+        datetime: The date and time of the sun event. If the sun event is not found (does not set or rise), returns `math.inf`.
 
     Raises:
         ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
@@ -621,7 +599,7 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
         raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
 
     if observer_date.utc_offset == 0:
-        temp_utc_offset = np.floor(observer.longitude.decimal / 15) - 1
+        temp_utc_offset = math.floor(observer.longitude.decimal / 15) - 1
     else:
         temp_utc_offset = observer_date.utc_offset * -1
 
@@ -630,8 +608,8 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 
     i = 1
     while(True):
-        if temp_suntime == np.inf:
-            return np.inf
+        if temp_suntime == math.inf:
+            return math.inf
         
         temp_suntime_doy = (temp_suntime + timedelta(hours=temp_utc_offset)).timetuple().tm_yday
         if (temp_suntime_doy < date_doy and temp_suntime.year == observer_date.date.year) or ((temp_suntime + timedelta(hours=temp_utc_offset)).year < observer_date.date.year):

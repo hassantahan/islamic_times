@@ -81,7 +81,7 @@ class ITLocation:
     - Prayer times calculation methods: [PrayTimes Wiki](http://praytimes.org/wiki/Calculation_Methods)
     """
 
-    # TODO
+    # TODO: I might want to add slots to save memory and freeze the class
     # __slots__ = ()
 
     def __init__(self, latitude: float = 51.477928,
@@ -196,7 +196,14 @@ class ITLocation:
         """ Determine UTC offset in hours based on location if needed.
 
         Parameters:
-            find_local_tz (bool): Controls whether or not to use the timezonefinder library to fine the timezone of the observer
+            find_local_tz (bool): Controls whether or not to use the timezonefinder library to fine the timezone of the observer.
+            date (datetime): The date and time to be used for the calculation.
+
+        Returns:
+            timezone | None: The timezone object representing the UTC offset.
+
+        Notes:  
+        - `find_local_tz` is set to `False` by default because the timezonefinder library is computationally expensive.
         """
         # Find UTC Offset According to Lat/Long datetime
         # This is very computationally expensive
@@ -343,7 +350,7 @@ class ITLocation:
 
         Parameters:
             method_key (str): The name of the prayer calculation method (e.g., 'JAFARI', 'ISNA', etc.). Defaults to 'JAFARI'.
-            asr_type (int): 
+            asr_type (int): The ʿaṣr calculation type 0 for standard, 1 for Ḥanafī. Default is set to 0.
 
         Raises:
             ValueError: If the method is not among the supported options.
@@ -399,6 +406,7 @@ class ITLocation:
 
         Raises:
             ValueError: If any provided angle is not a positive number.
+            TypeError: If any provided angle is not a number.
 
         Notes:
             - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
@@ -425,19 +433,19 @@ class ITLocation:
         Sets the calculation method for Asr prayer.
 
         Options:
-            - `0`: Shadow ratio of 1:1 (majority method).
-            - `1`: Shadow ratio of 2:1 (Hanafi method).
+        - `0`: Shadow ratio of 1:1 (majority method).
+        - `1`: Shadow ratio of 2:1 (Hanafi method).
 
         Parameters:
-            asr_type (int): The Asr calculation type.
+            asr_type (int): The ʿaṣr calculation type. 0 for standard, 1 for Ḥanafī. Default is set to 0.
 
         Raises:
             ValueError: If `asr_type` is not 0 or 1.
 
         Notes:
-            - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
-            - `self.method` is set to 'Custom' after calling this method.
-            - Call `set_prayer_method()` to reset to a predefined method.
+        - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
+        - `self.method` is set to 'Custom' after calling this method.
+        - Call `set_prayer_method()` to reset to a predefined method.
         """
 
         if asr_type in (0, 1):
@@ -460,8 +468,8 @@ class ITLocation:
         Sets the calculation method for Islamic midnight.
 
         Options:
-            - `0`: Midpoint between sunset and sunrise (majority method).
-            - `1`: Midpoint between sunset and Fajr (Jaʿfarī method).
+        - `0`: Midpoint between sunset and sunrise (majority method).
+        - `1`: Midpoint between sunset and Fajr (Jaʿfarī method).
 
         Parameters:
             midnight_type (int): The midnight calculation type.
@@ -495,13 +503,15 @@ class ITLocation:
         Returns observer's date and time information.
 
         Returns:
-            dict: 
-            Dictionary containing:
-                - 'latitude': Observer latitude (°).
-                - 'longitude': Observer longitude (°).
-                - 'elevation': Observer elevation above sea level (m).
-                - 'pressure': Observer ambient pressure (kPa).
-                - 'temperature': Observer ambient temperature (℃).
+            ObserverInfo: Information about the observer's location and conditions.
+
+        Notes:
+        - The returned object contains:
+            - **latitude** (*Angle*): Latitude of the observer
+            - **longitude** (*Angle*): Longitude of the observer
+            - **elevation** (*Distance*): Elevation of the observer
+            - **temperature** (*float*): Temperature of the observer
+            - **pressure** (*float*): Pressure of the observer
         """
 
         return self.observer_info
@@ -512,15 +522,19 @@ class ITLocation:
         Returns observer's date and time information.
 
         Returns:
-            dict: Dictionary containing:
-                - 'gregorian': Gregorian date (str)
-                - 'hijri': Islamic (Hijri) date (str)
-                - 'time': Local time (str)
-                - 'timezone': Time zone (str)
-                - 'utc_offset': UTC offset (str)
-                - 'jd': Julian Date (float)
-                - 'eq_of_time': Equation of time (float)
-                - 'deltaT': Delta T in seconds (float)
+            DateTimeInfo: Information about the observer's date and time.
+
+        Notes:
+        - The returned object contains:
+            - **date** (*datetime*): The observer's date and time
+            - **hijri** (*IslamicDateInfo*): Islamic date information
+                - **hijri_year** (*int*): Hijri year
+                - **hijri_month** (*int*): Hijri month
+                - **hijri_day** (*int*): Hijri day
+                - **hijri_month_name** (*str*): Hijri month name
+                - **hijri_day_name** (*str*): Hijri day name
+            - **jd** (*float*): Julian Date
+            - **deltaT** (*float*): Delta T value
         """
 
         can_print = self.auto_calculate or not self.datetime_modified
@@ -536,16 +550,17 @@ class ITLocation:
         Returns calculated prayer times.
 
         Returns:
-            dict: Dictionary containing:
-                - 'method'
-                - 'fajr'
-                - 'sunrise'
-                - 'zuhr'
-                - 'asr'
-                - 'sunset'
-                - 'maghrib'
-                - 'isha'
-                - 'midnight'
+            PrayerTimes: Dictionary containing prayer times.
+
+        Notes:
+        - The returned object contains:
+            - **fajr** (*datetime*): Fajr prayer time
+            - **sunrise** (*datetime*): Sunrise time
+            - **dhuhr** (*datetime*): Dhuhr prayer time
+            - **asr** (*datetime*): Asr prayer time
+            - **maghrib** (*datetime*): Maghrib prayer time
+            - **isha** (*datetime*): Isha prayer time
+            - **midnight** (*datetime*): Islamic midnight time
         """
 
         can_print: bool = self.auto_calculate or not self.prayers_modified
@@ -561,10 +576,13 @@ class ITLocation:
         Returns observer's distance and direction to Mecca.
 
         Returns:
-            dict: Dictionary containing:
-                - 'distance': Distance to Mecca (km)
-                - 'angle': Qibla direction (°)
-                - 'cardinal': Cardinal direction (str)
+            MeccaInfo: Information about the distance and direction to Mecca.
+        
+        Notes:
+        - The returned object contains:
+            - **distance** (*Distance*): Distance to Mecca
+            - **angle** (*Angle*): Angle to Mecca
+            - **cardinal** (*str*): Cardinal direction to Mecca
         """
 
         mecca_distance, mecca_direction = ce.haversine(self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, te.MECCA_LAT, te.MECCA_LONG)
@@ -582,14 +600,17 @@ class ITLocation:
         Returns properties and position of the Sun.
 
         Returns:
-            dict (Dict[str, float | str]): Dictionary containing:
-                - 'sunset': Sunrise time (str)
-                - 'sun_transit': Sun transit (culmination) time (str)
-                - 'sunset': Sunset time (str)
-                - 'declination': The angular distance of the Sun perpendicular to the celestial equator using the true equinox of date (°)
-                - 'right_ascension': The angular distance of the Sun eastward along the celestial equator from the vernal equinox to the hour circle passing through the Sun using the true equinox of date (HMS format)
-                - 'altitude': The angle between the Sun and the observer's local horizon accounting for atmospheric refraction (°)
-                - 'azimuth': The angle of the Sun around the horizon measured from true north (°)
+            SunInfo: Information about the Sun's position and properties.
+
+        Notes:
+        - The returned object contains:
+            - **sunrise** (*datetime*): Sunrise time.
+            - **sun_transit** (*datetime*): Solar noon time.
+            - **sunset** (*datetime*): Sunset time.
+            - **apparent_declination** (*Angle*): Sun's declination angle.
+            - **apparent_right_ascension** (*RigthAscension*): Sun's right ascension.
+            - **apparent_altitude** (*Angle*): Sun's altitude angle.
+            - **true_azimuth** (*Angle*): Sun's azimuth angle.
         """
 
         can_print = self.auto_calculate or not self.datetime_modified
@@ -605,16 +626,19 @@ class ITLocation:
         Returns properties and position of the Moon.
 
         Returns:
-            dict: Dictionary containing:
-                - 'moonset': Moonrise time (str)
-                - 'moon_transit': Moon transit (culmination) time (str)
-                - 'moonset': Moonset time (str)
-                - 'declination': The angular distance of the Moon perpendicular to the celestial equator using the true equinox of date (°)
-                - 'right_ascension': The angular distance of the Moon eastward along the celestial equator from the vernal equinox to the hour circle passing through the Moon using the true equinox of date (HMS format)
-                - 'altitude': The angle between the Moon and the observer's local horizon accounting for atmospheric refraction (°)
-                - 'azimuth': The angle of the Moon around the horizon measured from true north (°)
-                - 'parallax': Equitorial horizontal parallax (′)
-                - 'illumination': Percentage of illumination (%)
+            MoonInfo: Information about the Moon's position and properties.
+
+        Notes:
+        - The returned object contains:
+            - **moonrise** (*datetime*): Moonrise time.
+            - **moon_transit** (*datetime*): Moon transit time.
+            - **moonset** (*datetime*): Moonset time.
+            - **topocentric_declination** (*Angle*): Moon's declination angle.
+            - **topocentric_right_ascension** (*RightAscension*): Moon's right ascension.
+            - **apparent_altitude** (*Angle*): Moon's altitude angle.
+            - **true_azimuth** (*Angle*): Moon's azimuth angle.
+            - **parallax** (*Angle*): Moon's parallax angle.
+            - **illumination** (*float*): Moon's illumination percentage.
         """
 
         can_print = self.auto_calculate or not self.datetime_modified
@@ -768,7 +792,7 @@ class ITLocation:
                 test_nm_moonset = me.find_proper_moontime(test_observer_dateinfo, self.observer_info, 'set')
 
             # For extreme latitudes where the moonset or sunset don't exist:
-            if np.abs(self.observer_info.latitude.decimal) > 62:
+            if abs(self.observer_info.latitude.decimal) > 62:
                 if test_nm_sunset == datetime.min and test_nm_moonset == datetime.min:
                     # Moonset and sunset don't exist
                     v = -997

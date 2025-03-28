@@ -9,7 +9,7 @@ import math
 import numpy as np
 from typing import Tuple
 from islamic_times.time_equations import EARTH_RADIUS_KM
-from islamic_times.dataclasses import Angle, RightAscension
+from islamic_times.dataclasses import Angle, RightAscension, Distance, DistanceUnits
 
 def sin(angle: float) -> float:
     '''sin(x) function that auto-converts the argument from degrees to radians before evaluating.
@@ -19,7 +19,7 @@ def sin(angle: float) -> float:
     Returns:
         float: The tangent of the angle.
     '''
-    return np.sin(np.deg2rad(angle))
+    return np.sin(np.radians(angle))
 
 def cos(angle: float) -> float:
     '''cos(x) function that auto-converts the argument from degrees to radians before evaluating.
@@ -30,60 +30,7 @@ def cos(angle: float) -> float:
     Returns:
         float: The cosine of the angle.
     '''
-    return np.cos(np.deg2rad(angle))
-
-def tan(angle: float) -> float:
-    '''tan(x) function that auto-converts the argument from degrees to radians before evaluating.
-    
-    Parameters:
-        angle (float): The angle in degrees.
-
-    Returns:
-        float: The tangent of the angle.
-    '''
-    return np.tan(np.deg2rad(angle))
-
-def decimal_to_dms(decimal_deg: float) -> Tuple[int, int, float]:
-    '''Convert a degree value from degrees decimal to degrees-minutes-seconds.
-    
-    Parameters:
-        decimal_deg (float): The angle in degrees.
-
-    Returns:
-        tuple (Tuple[int, int, float]): The angle in degrees-minutes-seconds.
-    '''
-    degrees = int(decimal_deg)
-    minutes = int((decimal_deg - degrees) * 60)
-    seconds = np.round((decimal_deg - degrees - minutes / 60) * 3600, 2)
-
-    return (degrees, minutes, seconds)
-
-def decimal_to_hms(decimal_degrees: float) -> Tuple[int, int, float]:
-    '''Convert a degree value from degrees decimal to hours-minutes-seconds.
-    
-    Parameters:
-        decimal_degrees (float): The angle in degrees.
-
-    Returns:
-        tuple (Tuple[int, int, float]): The angle in hours-minutes-seconds.
-    '''
-    hours = int(decimal_degrees / 15)
-    minutes = int((decimal_degrees / 15 - hours) * 60)
-    seconds = (decimal_degrees / 15 - hours - minutes / 60) * 3600
-    return (hours , round(minutes), seconds)
-
-def hms_to_decimal(hour_angle: Tuple[int, int, float]) -> float:
-    '''Convert a degree value from hours-minutes-seconds to degrees decimal.
-
-    Parameters:
-        hour_angle (Tuple[int, int, float]): The angle in hours-minutes-seconds.
-
-    Returns:
-        float: The angle in degrees.
-    '''
-    degree = hour_angle[0] + hour_angle[1] / 60 + hour_angle[2] / 3600
-    degree *= 15
-    return degree
+    return np.cos(np.radians(angle))
 
 def calculate_angle_diff(azimuth1: float, altitude1: float, azimuth2: float, altitude2: float) -> float:
     '''Difference between two angles in a radial coordinate system using the haversine formula. 
@@ -104,11 +51,11 @@ def calculate_angle_diff(azimuth1: float, altitude1: float, azimuth2: float, alt
     delta_azimuth = azimuth2 - azimuth1
     delta_altitude = altitude2 - altitude1
 
-    a = np.sin(delta_altitude / 2)**2 + np.cos(altitude1) * np.cos(altitude2) * np.sin(delta_azimuth / 2)**2
-    c = 2 * np.atan2(np.sqrt(a), np.sqrt(1 - a))
+    a = math.sin(delta_altitude / 2)**2 + math.cos(altitude1) * math.cos(altitude2) * math.sin(delta_azimuth / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     # Convert the angle difference from radians to degrees
-    angle_diff = np.degrees(c)
+    angle_diff = math.degrees(c)
     
     return angle_diff
 
@@ -126,14 +73,14 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> Tuple[float
     Returns:
         tuple (Tuple[float, float]): The great-circle distance (km) and initial bearing (°).
     '''
-    c = np.deg2rad(calculate_angle_diff(lon1, lat1, lon2, lat2))
+    c = math.radians(calculate_angle_diff(lon1, lat1, lon2, lat2))
     distance = EARTH_RADIUS_KM * c  # Earth radius in km
 
     # Calculate course angle
     lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
-    y = np.sin(lon2 - lon1) * np.cos(lat2)
-    x = np.cos(lat1) * np.sin(lat2) - np.sin(lat1) * np.cos(lat2) * np.cos(lon2 - lon1)
-    course_angle = np.degrees(np.atan2(y, x))
+    y = math.sin(lon2 - lon1) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(lon2 - lon1)
+    course_angle = math.degrees(math.atan2(y, x))
 
     return distance, course_angle
 
@@ -198,44 +145,53 @@ def interpolation(n: float, y1: float, y2: float, y3: float) -> float:
     return (value + 360) % 360
 
 # Fixing RA and Dec for apparency pg. 279
-def correct_ra_dec(ra: float, dec: float, lha: float, parallax: float, lat: float, elev: float, dist: float = EARTH_RADIUS_KM) -> Tuple[float, float]:
+def correct_ra_dec(ra: RightAscension, dec: Angle, lha: Angle, parallax: Angle, lat: Angle, elev: Distance, dist: Distance = Distance(EARTH_RADIUS_KM, DistanceUnits.KILOMETRE)) -> Tuple[RightAscension, Angle]:
 	'''
 	Correct the Moon's Right Ascension and Declination for apparent position. See Chapter 40 of *Astronomical Algorthims* for more information.
 
 	Parameters:
-		ra (float): The Moon's Right Ascension (°).
-		dec (float): The Moon's Declination (°).
-		lha (float): The Local Hour Angle (°).
-		parallax (float): The Moon's parallax (°).
-		lat (float): The observer's latitude (°).
-		elev (float): The observer's elevation above sea level (m).
-		dist (float): The observer's distance from the celestial body, usually the Moon or the Sun (km).
+		ra (RightAscension): The Moon's Right Ascension.
+		dec (Angle): The Moon's Declination.
+		lha (Angle): The Local Hour Angle.
+		parallax (Angle): The Moon's parallax.
+		lat (Angle): The observer's latitude.
+		elev (Distance): The observer's elevation above sea level.
+		dist (float): The observer's distance from the celestial body, usually the Moon or the Sun.
 
 	Returns:
-		tuple (Tuple[float, float]): The topocentric Right Ascension and Declination (°).
+		tuple (Tuple[RightAscension, Angle]): The topocentric Right Ascension and Declination.
 	'''
-	a: float = dist
-	f: float = 1 / 298.257
+	a: float = dist.value
+	f: float = 1 / 298.257223563
 	b: float = a * (1 - f)
 
-	elev /= 1000
+	u: Angle = Angle(math.degrees(math.atan2(b / a * math.tan(lat.radians), 1)))
+	p_sin_psi_prime: float = b / a * math.sin(u.radians) + elev.in_unit(DistanceUnits.KILOMETRE) / dist.in_unit(DistanceUnits.KILOMETRE) * math.sin(lat.radians)
+	p_cos_psi_prime: float = math.cos(u.radians) + elev.in_unit(DistanceUnits.KILOMETRE) / dist.in_unit(DistanceUnits.KILOMETRE) * math.cos(lat.radians)
 
-	u: float = np.rad2deg(np.arctan2(b / a * tan(lat), 1))
-	p_sin_psi_prime: float = b / a * sin(u) + elev / dist * sin(lat)
-	p_cos_psi_prime: float = cos(u) + elev / dist * cos(lat)
+	temp_num: float = -1 * p_cos_psi_prime * math.sin(parallax.radians) * math.sin(lha.radians)
+	temp_denom: float = math.cos(dec.radians) - p_cos_psi_prime * math.sin(parallax.radians) * math.cos(lha.radians)
+	deltaA: Angle = Angle(math.degrees(math.atan2(temp_num, temp_denom)))
 
-	temp_num: float = -1 * p_cos_psi_prime * sin(parallax) * sin(lha)
-	temp_denom: float = cos(dec) - p_cos_psi_prime * sin(parallax) * cos(lha)
-	deltaA: float = np.rad2deg(np.arctan2(temp_num, temp_denom))
+	temp_num: float = (math.sin(dec.radians) - p_sin_psi_prime * math.sin(parallax.radians)) * math.cos(deltaA.radians)
 
-	temp_num: float = (sin(dec) - p_sin_psi_prime * sin(parallax)) * cos(deltaA)
-
-	ascension_prime: float = ra + deltaA
-	declination_prime: float = np.rad2deg(np.arctan2(temp_num, temp_denom))
+	ascension_prime: RightAscension = RightAscension((ra.decimal_degrees.decimal + deltaA.decimal) / 15)
+	declination_prime: Angle = Angle(math.degrees(math.atan2(temp_num, temp_denom)))
 
 	return (ascension_prime, declination_prime)
 
 def geocentric_horizontal_coordinates(observer_latitude: Angle, body_declination: Angle, body_lha: Angle) -> Tuple[Angle, Angle]:
+    """
+    Calculate the geocentric horizontal coordinates (altitude and azimuth) of a celestial body.
+
+    Parameters:
+        observer_latitude (Angle): The latitude of the observer.
+        body_declination (Angle): The declination of the celestial body.
+        body_lha (Angle): The local hour angle of the celestial body.
+
+    Returns:
+        tuple (Tuple[Angle, Angle]): The geocentric altitude and azimuth of the celestial body.
+    """
     f = 1 / 298.257223563
     tan_phi = (1 - f) ** 2 * math.tan(observer_latitude.radians)
     observer_geocentric_latitude = Angle(math.degrees(math.atan2(tan_phi, 1)))
