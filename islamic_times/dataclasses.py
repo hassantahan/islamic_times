@@ -1,5 +1,23 @@
+"""
+Contents:
+    - Angle: Represents angles in decimal degrees with DMS and radians conversion.
+    - RightAscension: Handles right ascension values and their conversions.
+    - DistanceUnit & DistanceUnits: Define distance units and conversion utilities.
+    - Distance: Represents physical distances with conversion support.
+    - ObserverInfo: Stores observer's geographical and environmental parameters.
+    - IslamicDateInfo: Stores and formats Islamic (Hijri) calendar information.
+    - DateTimeInfo: Combines Gregorian, Islamic, Julian date, and delta-T data.
+    - PrayerMethod: Encapsulates parameters for prayer time calculation methods.
+    - Prayer: Represents a single prayer time and its calculation context.
+    - PrayerTimes: Aggregates all prayer times for a given day.
+    - MeccaInfo: Provides Qibla direction and distance.
+    - SunInfo: Stores information about solar positions and events.
+    - MoonInfo: Stores information about lunar positions, events, and illumination.
+"""
+
+
 import math
-from typing import Tuple, ClassVar, List
+from typing import Tuple, ClassVar
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -7,10 +25,23 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Angle:
+    """
+    Represents an angle in decimal degrees.
+
+    Provides utilities for conversion to degrees-minutes-seconds (DMS) format and radians.
+
+    Attributes:
+        decimal (float): The angle in decimal degrees.
+    """
+
     decimal: float
 
     @property
     def dms(self) -> Tuple[int, int, float]:
+        """
+        Returns:
+            Tuple[int, int, float]: The angle in (degrees, minutes, seconds).
+        """
         degrees = int(self.decimal)
         abs_decimal = abs(self.decimal)
         minutes_full = (abs_decimal - abs(degrees)) * 60
@@ -20,9 +51,17 @@ class Angle:
 
     @property
     def radians(self) -> float:
+        """
+        Returns:
+            float: The angle in radians.
+        """
         return math.radians(self.decimal)
 
     def dms_str(self) -> str:
+        """
+        Returns:
+            str: The angle formatted as a DMS string.
+        """
         d, m, s = self.dms
         return f"{d:+04}\u00b0 {m:02}\u2032 {s:05.2f}\u2033"
 
@@ -31,10 +70,22 @@ class Angle:
 
 @dataclass(frozen=True, slots=True)
 class RightAscension:
+    """
+    Represents Right Ascension (RA) in decimal hours.
+
+    Provides utilities to convert RA to HMS, DMS, degrees, and radians.
+
+    Attributes:
+        decimal_hours (float): Right ascension in decimal hours.
+    """
     decimal_hours: float
 
     @property
     def hms(self) -> Tuple[int, int, float]:
+        """
+        Returns:
+            Tuple[int, int, float]: RA in (hours, minutes, seconds).
+        """
         hours = int(self.decimal_hours)
         minutes_full = (self.decimal_hours - hours) * 60
         minutes = int(minutes_full)
@@ -42,15 +93,27 @@ class RightAscension:
         return (hours, minutes, seconds)
 
     def hms_str(self) -> str:
+        """
+        Returns
+            str: Pretty formatted RA in HMS format
+        """
         h, m, s = self.hms
         return f"{h:02}h {m:02}m {s:05.2f}s"
 
     @property
     def decimal_degrees(self) -> Angle:
+        """
+        Returns:
+            Angle: RA converted to degrees.
+        """
         return Angle(self.decimal_hours * 15)
     
     @property
     def radians(self) -> float:
+        """
+        Returns:
+            float: RA converted to radians.
+        """
         return self.decimal_degrees.radians
 
     @property
@@ -71,11 +134,31 @@ class RightAscension:
 
 @dataclass(frozen=True, slots=True)
 class DistanceUnit:
+    """
+    Represents a unit of distance and provides conversion to other distance units.
+
+    Attributes:
+        name (str): The unit's full name.
+        symbol (str): The unit's symbol.
+        to_m_factor (float): The conversion factor to meters.
+    """
+
     name: str
     symbol: str
     to_m_factor: float
 
     def convert_to(self, value: float, target_unit: 'DistanceUnit') -> float:
+        """
+        Converts a value from this unit to another.
+
+        Args:
+            value (float): Value in this unit.
+            target_unit (DistanceUnit): Target unit.
+
+        Returns:
+            float: Converted value in target unit.
+        """
+
         value_in_m = value * self.to_m_factor
         return value_in_m / target_unit.to_m_factor
 
@@ -83,6 +166,7 @@ class DistanceUnit:
         return self.symbol
 
 class DistanceUnits:
+    """Standard distance units used throughout the application."""
     METRE = DistanceUnit("meter", "m", 1)
     KILOMETRE = DistanceUnit("kilometer", "km", 1_000)
     AU = DistanceUnit("astronomical unit", "AU", 149_597_870_691)
@@ -92,13 +176,38 @@ class DistanceUnits:
 
 @dataclass(frozen=True, slots=True)
 class Distance:
+    """
+    Represents a physical distance with unit conversion utilities.
+
+    Attributes:
+        value (float): The numerical value.
+        unit (DistanceUnit): The distance unit.
+    """
     value: float
     unit: DistanceUnit = DistanceUnits.METRE
 
     def in_unit(self, target_unit: DistanceUnit) -> float:
+        """
+        Converts the distance into another unit.
+
+        Args:
+            target_unit (DistanceUnit): Target unit.
+
+        Returns:
+            float: Converted distance value.
+        """
         return self.unit.convert_to(self.value, target_unit)
 
     def to(self, target_unit: DistanceUnit) -> 'Distance':
+        """
+        Converts and returns a new Distance object with the specified unit.
+
+        Args:
+            target_unit (DistanceUnit): Target unit.
+
+        Returns:
+            Distance: New Distance object.
+        """
         return Distance(self.in_unit(target_unit), target_unit)
 
     def __str__(self):
@@ -113,6 +222,17 @@ class Distance:
 
 @dataclass(frozen=True, slots=True)
 class ObserverInfo:
+    """
+    Contains geographical and environmental information of the observer.
+
+    Attributes:
+        latitude (Angle): Observer's latitude.
+        longitude (Angle): Observer's longitude.
+        elevation (Distance): Observer's elevation.
+        pressure (float): Atmospheric pressure in kPa.
+        temperature (float): Temperature in Celsius.
+    """
+
     latitude: Angle
     longitude: Angle
     elevation: Distance
@@ -129,6 +249,15 @@ class ObserverInfo:
 
 @dataclass(frozen=True, slots=True)
 class IslamicDateInfo:
+    """
+    Stores information about the Islamic (Hijri) date.
+
+    Attributes:
+        hijri_year (int): Hijri year.
+        hijri_month (int): Hijri month.
+        hijri_day (int): Hijri day.
+    """
+
     ISLAMIC_MONTHS: ClassVar[dict[int, str]] = {
         1: 'Muḥarram',
         2: 'Ṣaffar',
@@ -169,6 +298,16 @@ class IslamicDateInfo:
 
 @dataclass(frozen=True, slots=True)
 class DateTimeInfo:
+    """
+    Represents Gregorian and Islamic date-time information along with JD and ΔT.
+
+    Attributes:
+        date (datetime): Gregorian date and time.
+        jd (float): Julian Date.
+        deltaT (float): Difference TT - UT in seconds.
+        hijri (IslamicDateInfo | None): Islamic date information.
+    """
+
     date: datetime
     jd: float
     deltaT: float
@@ -212,6 +351,18 @@ class DateTimeInfo:
 
 @dataclass(frozen=True, slots=True)
 class PrayerMethod:
+    """
+    Describes a prayer time calculation method.
+
+    Attributes:
+        name (str): Method name.
+        fajr_angle (Angle): Fajr twilight angle.
+        isha_angle (Angle): Isha twilight angle.
+        keys (Tuple [str, ...] | None): Optional method identifiers.
+        maghrib_angle (Angle): Maghrib angle (if applicable).
+        asr_type (int): Asr shadow factor type.
+        midnight_type (int): Midnight definition type.
+    """
     name: str
     fajr_angle: Angle
     isha_angle: Angle
@@ -222,6 +373,14 @@ class PrayerMethod:
 
 @dataclass(frozen=True, slots=True)
 class Prayer:
+    """
+    Represents a single prayer time.
+
+    Attributes:
+        name (str): Name of the prayer.
+        time (datetime | str | float): Time of the prayer or status.
+        method (PrayerMethod): The method used for calculation.
+    """
     name: str
     time: datetime | str | float
     method: PrayerMethod
@@ -239,6 +398,21 @@ class Prayer:
 
 @dataclass(frozen=True, slots=True)
 class PrayerTimes:
+    """
+    Holds all calculated prayer times for a day.
+
+    Attributes:
+        method (PrayerMethod): Prayer calculation method.
+        fajr (Prayer): Fajr prayer.
+        sunrise (Prayer): Sunrise.
+        zuhr (Prayer): Ẓuhr prayer.
+        asr (Prayer): ʿAṣr prayer.
+        sunset (Prayer): Sunset.
+        maghrib (Prayer): Maghrib prayer.
+        isha (Prayer): ʿishāʾ prayer.
+        midnight (Prayer): Midnight marker.
+    """
+
     method: PrayerMethod
     fajr: Prayer
     sunrise: Prayer
@@ -263,6 +437,15 @@ class PrayerTimes:
 
 @dataclass(frozen=True, slots=True)
 class MeccaInfo:
+    """
+    Represents the Qibla direction and distance towards Mecca.
+
+    Attributes:
+        distance (Distance): Distance to Mecca.
+        angle (Angle): Azimuth angle towards Mecca.
+        cardinal (str): Cardinal direction.
+    """
+
     distance: Distance
     angle: Angle
     cardinal: str
@@ -274,6 +457,19 @@ class MeccaInfo:
 
 @dataclass(frozen=True, slots=True)
 class SunInfo:
+    """
+    Contains Sun position and event information.
+
+    Attributes:
+        sunrise (datetime): Sunrise time.
+        sun_transit (datetime): Solar transit (culmination) time.
+        sunset (datetime): Sunset time.
+        apparent_declination (Angle): Apparent declination.
+        apparent_right_ascension (RightAscension): Apparent right ascension.
+        apparent_altitude (Angle): Apparent altitude.
+        true_azimuth (Angle): True azimuth.
+    """
+
     sunrise: datetime
     sun_transit: datetime
     sunset: datetime
@@ -294,6 +490,21 @@ class SunInfo:
 
 @dataclass(frozen=True, slots=True)
 class MoonInfo:
+    """
+    Contains Moon position, transit, and illumination information.
+
+    Attributes:
+        moonrise (datetime): Moonrise time.
+        moon_transit (datetime): Moon's upper transit time.
+        moonset (datetime): Moonset time.
+        topocentric_declination (Angle): Topocentric declination.
+        topocentric_right_ascension (RightAscension): Topocentric right ascension.
+        apparent_altitude (Angle): Apparent altitude.
+        true_azimuth (Angle): True azimuth.
+        parallax (Angle): Lunar parallax.
+        illumination (float): Illuminated fraction (0 to 1).
+    """
+
     moonrise: datetime
     moon_transit: datetime
     moonset: datetime
