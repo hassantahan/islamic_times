@@ -16,11 +16,12 @@ References:
   - Standard astronomical formulas for time conversion.
 """
 
-from datetime import datetime, time
-from typing import Dict, List, Tuple
+import math
 import pytz
+from typing import Tuple, Dict
+from datetime import datetime, time
 from timezonefinder import TimezoneFinder
-import numpy as np
+from islamic_times.dataclasses import Angle
 
 # Constants used in astronomical calculations.
 J2000: float                = 2451545.0
@@ -72,7 +73,7 @@ def fraction_of_day(date: datetime) -> float:
 
 # Taken from pg. 88 of AA 
 # (DOES NOT TAKE JDE)
-def greenwich_mean_sidereal_time(julian_day: float) -> float:
+def greenwich_mean_sidereal_time(julian_day: float) -> Angle:
     '''Compute the Greenwich Mean Sidereal Time (GMST) in degrees for a given Julian Day.
 
     Parameters:
@@ -88,7 +89,7 @@ def greenwich_mean_sidereal_time(julian_day: float) -> float:
     theta_zero = 280.46061837 + 360.98564736629 * (julian_day - J2000) + \
                  0.000387933 * t2 - t3 / 38710000
 
-    return theta_zero % 360
+    return Angle(theta_zero % 360)
 
 # Look to Jean Meeus' "Astronomical Algorithms"
 def gregorian_to_jd(date: datetime, zone: float = 0) -> float:
@@ -109,10 +110,10 @@ def gregorian_to_jd(date: datetime, zone: float = 0) -> float:
         y -= 1
         m += 12
     
-    a = int(np.floor(y / 100))
-    b = 2 - a + int(np.floor(a / 4))
+    a = int(math.floor(y / 100))
+    b = 2 - a + int(math.floor(a / 4))
 
-    jd = int(np.floor(365.25 * (y + 4716))) + int(np.floor(30.6001 * (m + 1))) + day + b - 1524.5 - zone / 24
+    jd = int(math.floor(365.25 * (y + 4716))) + int(math.floor(30.6001 * (m + 1))) + day + b - 1524.5 - zone / 24
     return jd
 
 # Look to Jean Meeus' "Astronomical Algorithms" pg. 
@@ -136,13 +137,13 @@ def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
     if z < 2299161:
         a = z
     else:
-        alpha = int(np.floor((z - 1867216.25) / 36524.25))
-        a = z + 1 + alpha - int(np.floor(alpha / 4))
+        alpha = int(math.floor((z - 1867216.25) / 36524.25))
+        a = z + 1 + alpha - int(math.floor(alpha / 4))
 
     b = a + 1524
-    c = int(np.floor((b - 122.1) / 365.25))
-    d = int(np.floor(365.25 * c))
-    e = int(np.floor((b - d) / 30.6001))
+    c = int(math.floor((b - 122.1) / 365.25))
+    d = int(math.floor(365.25 * c))
+    e = int(math.floor((b - d) / 30.6001))
 
     day = b - d - int(30.6001 * e) + f
     if e < 14:
@@ -155,17 +156,17 @@ def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
         year = c - 4715
 
     # calculate hours, minutes, and seconds
-    f_day = day - int(np.floor(day))
+    f_day = day - int(math.floor(day))
     hour = f_day * 24
-    minute = (hour - int(np.floor(hour))) * 60
-    second = (minute - int(np.floor(minute))) * 60
-    microsec = (second - int(np.floor(second))) * 1000000
+    minute = (hour - int(math.floor(hour))) * 60
+    second = (minute - int(math.floor(minute))) * 60
+    microsec = (second - int(math.floor(second))) * 1000000
 
     return datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(microsec))
 
 # Look to Jean Meeus' "Astronomical Algorithms"
 # TODO: In the Islamic calendar, new days start after sunset not at midnight, so maybe a fix for this?
-def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> List[int]:
+def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tuple[int, int, int]:
     '''Convert a Gregorian date to a Hijri (Islamic) date.
 
     Parameters:
@@ -248,7 +249,7 @@ def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> List
         i_day = 30
     i_year = h
 
-    return [i_year, i_month, i_day]
+    return (i_year, i_month, i_day)
 
 def get_islamic_month(month: int) -> str:
     '''Retrieve the Islamic month name for a given month number.
@@ -381,7 +382,7 @@ def time_midpoint(datetime1: datetime, datetime2: datetime) -> datetime:
     Returns:
         datetime: The midpoint datetime
     '''
-    if datetime1 == np.inf or datetime2 == np.inf:
+    if datetime1 == math.inf or datetime2 == math.inf:
         raise ValueError
 
     # Calculate the difference

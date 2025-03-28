@@ -19,8 +19,9 @@ References:
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
+from islamic_times.dataclasses import *
 from datetime import datetime, timedelta
-from dataclasses import dataclass
+from dataclasses import dataclass, replace, field
 from typing import List, Tuple
 import numpy as np
 import math
@@ -397,92 +398,127 @@ __A_COEFFS = [
 	0.000035,	0.000023
 ]
 
-@dataclass
+# TODO: Move to Angle, Distance, etc.
+@dataclass(frozen=True, slots=True)
 class Moon:
 	"""
 	A class to compute the position of the Moon in the sky based on given astronomical parameters.
-
-	Attributes:
-		jde (float): The Julian Ephemeris Day.
-		deltaT (float): The difference between Terrestrial Time and Universal Time (ΔT).
-		local_latitude (float): The observer's latitude in degrees.
-		local_longitude (float): The observer's longitude in degrees.
-		deltaPsi (float): The nutation in longitude in degrees.
-		ecliptic (float): The observer's ecliptic in degrees.
-		elev (float): The observer's elevation above sea level in meters.
-		lunar_nutation (tuple): Nutation parameters for the Moon.
-		true_longitude (float): The true longitude of the Moon in degrees.
-		true_latitude (float): The true latitude of the Moon in degrees.
-		geocentric_distance (float): The distance from the Earth to the Moon in kilometers.
-		apparent_longitude (float): The apparent longitude of the Moon in degrees.
-		right_ascension (float): The right ascension of the Moon in degrees.
-		declination (float): The declination of the Moon in degrees.
-		eh_parallax (float): The equatorial horizontal parallax of the Moon in degrees.
-		local_hour_angle (float): The local hour angle of the Moon in degrees.
-		top_ascension (float): The topocentric right ascension of the Moon in degrees.
-		top_declination (float): The topocentric declination of the Moon in degrees.
-		top_local_hour_angle (float): The topocentric local hour angle in degrees.
-		altitude (float): The altitude of the Moon above the horizon in degrees.
-		azimuth (float): The azimuth angle of the Moon in degrees.
-
-	Methods:
-		`calculate()`: Computes various positional attributes of the Moon, including its right ascension, declination, altitude, and azimuth.
-
-	Notes:
-		- All attributes after `elev` are only computed and available after the `calculate()` method is called.
-		- The `calculate()` method is called automatically by the `moonpos()` method.
     """
 
 	jde: float
 	deltaT: float
-	local_latitude: float
-	local_longitude: float
-	deltaPsi: float
-	ecliptic: float
-	elev: float
+	local_latitude: Angle
+	local_longitude: Angle
+	elevation: Distance
+	deltaPsi: Angle
+	ecliptic: Angle
 
-	def calculate(self):
-		# Calculation nutations
-		self.lunar_nutation = moon_nutation(self.jde)
+	lunar_nutation: Tuple = field(init=False)
+	true_longitude: Angle = field(init=False)
+	true_latitude: Angle = field(init=False)
+	geocentric_distance: Distance = field(init=False)
+	apparent_longitude: Angle = field(init=False)
+	right_ascension: RightAscension = field(init=False)
+	declination: Angle = field(init=False)
+	eh_parallax: Angle = field(init=False)
+	local_hour_angle: Angle = field(init=False)
+	topocentric_ascension: RightAscension = field(init=False)
+	top_declination: Angle = field(init=False)
+	top_local_hour_angle: Angle = field(init=False)
+	true_altitude: Angle = field(init=False)
+	true_azimuth: Angle = field(init=False)
+	apparent_altitude: Angle = field(init=False)
 
-		# Rect Coordinates + Distance
-		self.true_longitude = self.lunar_nutation[0][4] + self.lunar_nutation[1] / 10 ** 6
-		self.true_latitude = self.lunar_nutation[2] / 10 ** 6
-		self.geocentric_distance = 385000.56 + self.lunar_nutation[3] / 10 ** 3
+	def __post_init__(self):
+		self._compute_nutation()
+		self._compute_position()
+		self._compute_equatorial()
+		self._compute_local_hour_angle()
+		self._compute_topocentric()
+		self._compute_horizontal_coordinates()
 
-		# Apparent longitude
-		self.apparent_longitude = self.true_longitude + self.deltaPsi
+	def _compute_nutation(self):
+		object.__setattr__(self, 'lunar_nutation', moon_nutation(self.jde))
 
-		# Place in the sky (pg. 93)
-		self.right_ascension = (np.rad2deg(np.atan2((ce.sin(self.apparent_longitude) * ce.cos(self.ecliptic) - ce.tan(self.true_latitude) * ce.sin(self.ecliptic)), ce.cos(self.apparent_longitude)))) % 360
-		self.declination = np.rad2deg(np.asin(ce.sin(self.true_latitude) * ce.cos(self.ecliptic) + ce.cos(self.true_latitude) * ce.sin(self.ecliptic) * ce.sin(self.apparent_longitude)))
-		self.eh_parallax = np.rad2deg(np.arcsin(te.EARTH_RADIUS_KM / self.geocentric_distance))
+	def _compute_position(self):
+		lon = self.lunar_nutation[0][4] + self.lunar_nutation[1] / 1e6
+		lat = self.lunar_nutation[2] / 1e6
+		dist = 385000.56 + self.lunar_nutation[3] / 1e3
 
-		# Local Hour Angle Calculations (pg. 88 & 92)
-		mean_greenwich_sidereal_time = te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400)
-		st_correction = ce.decimal_to_dms(self.deltaPsi)[2] * ce.cos(self.ecliptic) / 15
-		app_greenwich_sidereal_time = mean_greenwich_sidereal_time + (st_correction / 3600)
-		self.local_hour_angle = (app_greenwich_sidereal_time - -1 * self.local_longitude - self.right_ascension) % 360
+		object.__setattr__(self, 'true_longitude', Angle(lon))
+		object.__setattr__(self, 'true_latitude', Angle(lat))
+		object.__setattr__(self, 'geocentric_distance', Distance(dist, DistanceUnits.KILOMETRE))
+		object.__setattr__(self, 'apparent_longitude', Angle(lon + self.deltaPsi.decimal))
 
-		# # Modify RA and Declination to their topocentric equivalents
-		self.top_ascension, self.top_declination = ce.correct_ra_dec(self.right_ascension, self.declination, self.local_hour_angle, self.eh_parallax, self.local_latitude, self.elev / 1000)
-		self.top_local_hour_angle = (app_greenwich_sidereal_time - -1 * self.local_longitude - self.top_ascension) % 360
+	def _compute_equatorial(self):
+		ra = math.atan2(
+			math.sin(math.radians(self.apparent_longitude.decimal)) * math.cos(self.ecliptic.radians) -
+			math.tan(math.radians(self.true_latitude.decimal)) * math.sin(self.ecliptic.radians),
+			math.cos(math.radians(self.apparent_longitude.decimal))
+		)
 
-		# Topocentric Altitude and Azimuth calculations
-		self.altitude = np.rad2deg(np.asin(ce.sin(self.local_latitude) * ce.sin(self.top_declination) + ce.cos(self.local_latitude) * ce.cos(self.top_declination)* ce.cos(self.top_local_hour_angle)))
-		# self.azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(self.top_declination) * ce.sin(self.top_local_hour_angle), ce.sin(self.top_declination) * ce.cos(self.local_latitude) - ce.cos(self.top_declination) * ce.sin(self.local_latitude) * ce.cos(self.top_local_hour_angle))) % 360
+		dec = math.asin(
+			math.sin(math.radians(self.true_latitude.decimal)) * math.cos(self.ecliptic.radians) +
+			math.cos(math.radians(self.true_latitude.decimal)) * math.sin(self.ecliptic.radians) *
+			math.sin(math.radians(self.apparent_longitude.decimal))
+		)
 
-		# # Geocentric Altitude & Azimuth calculations (disabled)
-		# self.altitude = np.rad2deg(np.asin(ce.sin(self.local_latitude) * ce.sin(self.declination) + ce.cos(self.local_latitude) * ce.cos(self.declination)* ce.cos(self.local_hour_angle)))
-		self.azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(self.declination) * ce.sin(self.local_hour_angle), ce.sin(self.declination) * ce.cos(self.local_latitude) - ce.cos(self.declination) * ce.sin(self.local_latitude) * ce.cos(self.local_hour_angle))) % 360
+		parallax = math.degrees(math.asin(
+			math.sin(math.radians(8.794 / 3600)) / (self.geocentric_distance.in_unit(DistanceUnits.AU))
+		))
 
-		# Correct for atmospheric refraction (taken from https://en.wikipedia.org/wiki/Atmospheric_refraction)
-		refraction = 1.02 / (ce.tan(self.altitude + 10.3 / (self.altitude + 5.11))) + 0.0019279 - 0.000034 * self.elev
-		self.altitude += refraction / 60
+		object.__setattr__(self, 'right_ascension', RightAscension(math.degrees(ra) % 360 / 15))
+		object.__setattr__(self, 'declination', Angle(math.degrees(dec)))
+		object.__setattr__(self, 'eh_parallax', Angle(parallax))
 
-		# # Correct for parallax (was used for geocentric altitude calculations)
-		# parallax_correction = -np.rad2deg(np.deg2rad(self.eh_parallax) * ce.cos(self.altitude))
-		# self.altitude += parallax_correction
+	def _compute_local_hour_angle(self):
+		gst = te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400).decimal
+		arcsec = self.deltaPsi.dms[2]  # arcseconds directly from DMS
+		st_corr = arcsec * math.cos(self.ecliptic.radians) / 15
+		app_gst = gst + (st_corr / 3600)
+		lha = (app_gst + self.local_longitude.decimal - self.right_ascension.decimal_degrees.decimal) % 360
+
+		object.__setattr__(self, 'local_hour_angle', Angle(lha))
+
+	def _compute_topocentric(self):
+		top_ra, top_dec = ce.correct_ra_dec(
+			self.right_ascension,
+			self.declination,
+			self.local_hour_angle,
+			self.eh_parallax,
+			self.local_latitude,
+			self.elevation
+		)
+
+		top_lha = (te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400).decimal +
+					self.local_longitude.decimal - top_ra.decimal_degrees.decimal) % 360
+
+		object.__setattr__(self, 'topocentric_ascension', top_ra)
+		object.__setattr__(self, 'top_declination', top_dec)
+		object.__setattr__(self, 'top_local_hour_angle', Angle(top_lha))
+
+	def _compute_horizontal_coordinates(self):
+		alt = math.asin(
+			math.sin(self.local_latitude.radians) * math.sin(self.top_declination.radians) +
+			math.cos(self.local_latitude.radians) * math.cos(self.top_declination.radians) *
+			math.cos(self.top_local_hour_angle.radians)
+		)
+
+		az = math.atan2(
+			-math.cos(self.top_declination.radians) * math.sin(self.top_local_hour_angle.radians),
+			math.sin(self.top_declination.radians) * math.cos(self.local_latitude.radians) -
+			math.cos(self.top_declination.radians) * math.sin(self.local_latitude.radians) *
+			math.cos(self.top_local_hour_angle.radians)
+		)
+
+		alt_deg = math.degrees(alt)
+		az_deg = math.degrees(az) % 360
+
+		refraction = 1.02 / math.tan(math.radians(alt_deg + 10.3 / (alt_deg + 5.11))) + 0.0019279 - 0.000034 * self.elevation.value
+
+		object.__setattr__(self, 'true_altitude', Angle(alt_deg))
+		object.__setattr__(self, 'true_azimuth', Angle(az_deg))
+		object.__setattr__(self, 'apparent_altitude', Angle(alt_deg + refraction / 60))
 
 # Chapter 47
 def moon_nutation(jde: float) -> Tuple[float, float, float]:
@@ -553,18 +589,13 @@ def moon_nutation(jde: float) -> Tuple[float, float, float]:
 
 	return (fundamental_arguments, sum_l, sum_b, sum_r)
 
-def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, deltaPsi: float, ecliptic: float, elev: float) -> Moon:
+def moonpos(observer_date: DateTimeInfo, observer: ObserverInfo, deltaPsi: Angle, ecliptic: Angle) -> Moon:
 	"""
 	Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 47 of *Astronomical Algorthims* for more information.
 
 	Parameters:
-		jde (float): The Julian Ephemeris Day.
-		deltaT (float): The difference between Terrestrial Time and Universal Time (ΔT).
-		local_latitude (float): The observer's latitude (°).
-		local_longitude (float): The observer's longitude (°).
-		deltaPsi (float): The nutation in longitude (°).
-		ecliptic (float): The observer's ecliptic (°).
-		elev (float): The observer's elevation above sea level (m).
+		observer_date (DateTimeInfo): The date and time of the observer.
+		observer (ObserverInfo): The observer's coordinates and elevation.
 
 	Returns:
 		Moon (obj): A `Moon` object that contains various attributes that describe its position. 
@@ -574,15 +605,14 @@ def moonpos(jde: float, deltaT: float, local_latitude: float, local_longitude: f
 	"""
 
 	the_moon = Moon(
-		jde,
-		deltaT,
-		local_latitude,
-		local_longitude,
-		deltaPsi,
-		ecliptic,
-		elev
+		jde=observer_date.jde,
+		deltaT=observer_date.deltaT,
+		local_latitude=observer.latitude,
+		local_longitude=observer.longitude,
+		elevation=observer.elevation,
+		deltaPsi=deltaPsi,
+		ecliptic=ecliptic
 	)
-	the_moon.calculate()
 
 	return the_moon
 
@@ -723,192 +753,208 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 	return moon_phases
 
 # Refer to Chapter 48 of AA
-def moon_illumination(sun_dec: float, sun_ra: float, moon_dec: float, moon_ra: float, sun_earth_distance: float, moon_earth_distance: float) -> float:
+def moon_illumination(sun_dec: Angle, sun_ra: Angle, moon_dec: Angle, moon_ra: Angle, sun_earth_distance: Distance, moon_earth_distance: Distance) -> float:
 	"""
 	Calculate the fraction of the Moon illuminated for a given date. See Chapter 48 of *Astronomical Algorithms* for more information.
 
 	Parameters:
-		sun_dec (float): The Sun's declination (°).
-		sun_ra (float): The Sun's Right Ascension (°).
-		moon_dec (float): The Moon's declination (°).
-		moon_ra (float): The Moon's Right Ascension (°).
-		sun_earth_distance (float): The Sun-Earth distance (AU).
-		moon_earth_distance (float): The Moon-Earth distance (AU).
+		sun_dec (Angle): The Sun's declination.
+		sun_ra (Angle): The Sun's Right Ascension.
+		moon_dec (Angle): The Moon's declination.
+		moon_ra (Angle): The Moon's Right Ascension.
+		sun_earth_distance (Distance): The Sun-Earth distance.
+		moon_earth_distance (Distance): The Moon-Earth distance.
 
 	Returns:
 		float: The fraction of the Moon illuminated.
 	"""
 	# Eqs. 48.2
-	cos_psi = ce.sin(sun_dec) * ce.sin(moon_dec) + ce.cos(sun_dec) * ce.cos(moon_dec) * ce.cos(sun_ra - moon_ra)
-	psi = np.rad2deg(np.arccos(cos_psi))
-	sin_psi = ce.sin(psi)
+	cos_psi: float = math.sin(sun_dec.radians) * math.sin(moon_dec.radians) + math.cos(sun_dec.radians) * math.cos(moon_dec.radians) * math.cos(sun_ra.radians - moon_ra.radians)
+	psi: Angle = Angle(math.degrees(math.acos(cos_psi)))
+	sin_psi: float = math.sin(psi.radians)
 	
 	# Eq. 48.3
-	phase_angle = np.rad2deg(np.arctan2(sun_earth_distance * sin_psi, moon_earth_distance - sun_earth_distance * cos_psi))
+	phase_angle = Angle(math.degrees(math.atan2(sun_earth_distance.to(DistanceUnits.AU).value * sin_psi, moon_earth_distance.to(DistanceUnits.AU).value - sun_earth_distance.to(DistanceUnits.AU).value * cos_psi)))
 	
 	# Eq. 48.1
-	fraction_illuminated = (1 + ce.cos(phase_angle)) / 2
+	fraction_illuminated = (1 + math.cos(phase_angle.radians)) / 2
 	return fraction_illuminated
 
-def find_moon_transit(date: datetime, lat: float, long: float, elev: float, utc_offset: float) -> datetime:
+def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> datetime:
 	"""
-	Calculate the time of the moon transit for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
+	Calculate transit of the moon (specifically culmination) for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
 	Parameters:
-		date (datetime): The date to calculate the moonset for.
-		lat (float): The observer's latitude (°).
-		long (float): The observer's longitude (°).
-		elev (float): The observer's elevation above sea level (m).
-		utc_offset (float): The observer's difference from UTC (hours).
+		observer_date (DateTimeInfo): The date and time of the observer.
+		observer (ObserverInfo): The observer's coordinates and elevation.
 
 	Returns:
 		datetime: The time of moonset.
 	"""
 
 	# First find the Year Month Day at UT 0h from JDE
-	ymd = datetime(date.year, date.month, date.day)
-	new_jd = te.gregorian_to_jd(date) - te.fraction_of_day(date)
+	ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
+	new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
 	new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
-	new_jde = new_jd + new_deltaT / 86400
 
 	# Calculate new moon params with the new_jd
 	moon_params: List[Moon] = []
 	for i in range(3):
-		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_offset)
+		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
 		delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-		sun_params = se.sunpos(new_jde + i - 1, delT_temp, lat, long)
+		sun_params = se.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer)
 		delPsi = sun_params.delta_obliquity
-		moon_params.append(moonpos(new_jde + i - 1, delT_temp, lat, long, delPsi, sun_params.true_obliquity, elev))
+		moon_params.append(
+							moonpos(
+								replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp),
+								observer, delPsi, sun_params.true_obliquity
+							)
+						)
 
-	# GMST
-	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
+	# Greenwich Mean Sidereal Time (GMST)
+	sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
 
-	# Transit
-	m0 = (moon_params[1].right_ascension - long - sidereal_time) / 360
+	# Transit approximation (m0)
+	m0 = (moon_params[1].topocentric_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
 
-	# Minor corrective steps thru iteration
+	# Iteratively refine transit time
 	for _ in range(3):
-		little_theta_zero = (sidereal_time + 360.985647 * m0) % 360
+		little_theta_zero = Angle((sidereal_time.decimal + 360.985647 * m0) % 360)
 		n = m0 + new_deltaT / 86400
-		interpolated_moon_ra = ce.interpolation(n, 
-										  moon_params[0].right_ascension, 
-										  moon_params[1].right_ascension, 
-										  moon_params[2].right_ascension)
-		lunar_local_hour_angle = (little_theta_zero - (-long) - interpolated_moon_ra) % 360
 
-		m0 -= lunar_local_hour_angle / 360
+		interpolated_moon_ra = RightAscension(ce.interpolation(n,
+												moon_params[0].topocentric_ascension.decimal_degrees.decimal,
+												moon_params[1].topocentric_ascension.decimal_degrees.decimal,
+												moon_params[2].topocentric_ascension.decimal_degrees.decimal) / 15
+											)
 
-	# Compute final moonset time by adding days to base date
+		lunar_local_hour_angle = Angle((little_theta_zero.decimal - (-observer.longitude.decimal) - interpolated_moon_ra.decimal_degrees.decimal) % 360)
+
+		m0 -= lunar_local_hour_angle.decimal / 360
+
+	# Normalize m0 to [0,1]
 	m0 %= 1
-	moon_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=utc_offset)
 
-	return moon_transit_dt
+	# Compute final transit datetime
+	moon_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=observer_date.utc_offset)
+
+	return moon_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 
 # Refer to Chapter 15 of AA
-def moonrise_or_moonset(date: datetime, lat: float, long: float, elev: float, utc_offset: float, rise_or_set: str = 'set') -> datetime:
+def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set') -> datetime:
 	"""
 	Calculate the time of moonset for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
 	Parameters:
-		date (datetime): The date to calculate the moonset for.
-		lat (float): The observer's latitude (°).
-		long (float): The observer's longitude (°).
-		elev (float): The observer's elevation above sea level (m).
-		utc_offset (float): The observer's difference from UTC (hours).
+		observer_date (DateTimeInfo): The date and time of the observer.
+		observer (ObserverInfo): The observer's coordinates and elevation.
+		rise_or_set (str): Specify whether to find the moonrise or moonset time. Default is 'set'.
 
 	Returns:
 		datetime: The time of moonset.
 	"""
 
+	# Validate the input
 	if rise_or_set not in ['rise', 'set', 'moonrise', 'moonset']:
 		raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
 
 	# First find the Year Month Day at UT 0h from JDE
-	ymd = datetime(date.year, date.month, date.day)
-	new_jd = te.gregorian_to_jd(date) - te.fraction_of_day(date)
+	ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
+	new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
 	new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
-	new_jde = new_jd + new_deltaT / 86400
 
 	# Calculate new moon params with the new_jd
 	moon_params: List[Moon] = []
 	for i in range(3):
-		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_offset)
+		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
 		delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-		sun_params = se.sunpos(new_jde + i - 1, delT_temp, lat, long)
+		sun_params = se.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer)
 		delPsi = sun_params.delta_obliquity
-		moon_params.append(moonpos(new_jde + i - 1, delT_temp, lat, long, delPsi, sun_params.true_obliquity, elev))
+		moon_params.append(
+						moonpos(
+							replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp),
+							observer, delPsi, sun_params.true_obliquity
+						)
+					)
 
-	# Find H0
-	h_zero = 0.7275 * moon_params[1].eh_parallax - 0.566667
-	cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(moon_params[1].declination)) / (ce.cos(lat) * ce.cos(moon_params[1].declination))
-	
+	# Compute H0: the hour angle corresponding to the Moon's apparent altitude for rise/set
+	h_zero: Angle = Angle(0.7275 * moon_params[1].eh_parallax.decimal - 0.566667)
+
+	cosH_zero: float = (math.sin(h_zero.radians) - math.sin(observer.latitude.radians) * math.sin(moon_params[1].declination.radians)) / (
+		math.cos(observer.latitude.radians) * math.cos(moon_params[1].declination.radians))
+
+	# Moon never rises or sets
 	if abs(cosH_zero) < 1:
-		H_zero = np.rad2deg(np.arccos(cosH_zero))
+		H_zero = Angle(math.degrees(math.acos(cosH_zero)))
 	else:
-		return np.inf
+		return math.inf
 
-	# No moonset/rise
-	if np.isnan(H_zero):
-		return np.inf
+	if math.isnan(H_zero.decimal):
+		return math.inf
 
-	# GMST
-	sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
+	# Greenwich Mean Sidereal Time (GMST)
+	sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
 
-	# Transit
-	m0 = (moon_params[1].right_ascension - long - sidereal_time) / 360
+	# Compute transit
+	m0: float = (moon_params[1].topocentric_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
 
-	# Choose which event to compute.
-	event = rise_or_set.lower()
-	if event in ['rise', 'sunrise']:
-		# Initial estimate for sunrise.
-		m_event = m0 - H_zero / 360
+	# Choose rise or set
+	if rise_or_set in ['rise', 'moonrise']:
+		m_event = m0 - H_zero.decimal / 360
 	else:
-		# Initial estimate for sunset.
-		m_event = m0 + H_zero / 360
+		m_event = m0 + H_zero.decimal / 360
 
-	# Minor corrective steps thru iteration
+	# Iteratively refine the result
 	for _ in range(3):
-		little_theta_zero = (sidereal_time + 360.985647 * m_event) % 360
-		n = m_event + new_deltaT / 86400
-		interpolated_moon_dec = ce.interpolation(n, 
-										   moon_params[0].declination, 
-										   moon_params[1].declination, 
-										   moon_params[2].declination)
-		
-		interpolated_moon_ra = ce.interpolation(n, 
-										  moon_params[0].right_ascension, 
-										  moon_params[1].right_ascension, 
-										  moon_params[2].right_ascension)
-		
-		lunar_local_hour_angle = (little_theta_zero - (-long) - interpolated_moon_ra) % 360
+		theta_event: Angle = Angle((sidereal_time.decimal + 360.985647 * m_event) % 360)
+		n_event: float = m_event + new_deltaT / 86400
 
-		moon_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(interpolated_moon_dec) +
-										ce.cos(lat) * ce.cos(interpolated_moon_dec) *
-										ce.cos(lunar_local_hour_angle)))
-		
-		deltaM = (moon_alt - h_zero) / (360 * ce.cos(interpolated_moon_dec) * ce.cos(lat) * ce.sin(lunar_local_hour_angle))
+		# Interpolated declination and right ascension
+		interp_dec: Angle = Angle(ce.interpolation(n_event,
+										moon_params[0].top_declination.decimal,
+										moon_params[1].top_declination.decimal,
+										moon_params[2].top_declination.decimal)
+									)
+
+		interp_ra = RightAscension(ce.interpolation(n_event,
+										moon_params[0].topocentric_ascension.decimal_degrees.decimal,
+										moon_params[1].topocentric_ascension.decimal_degrees.decimal,
+										moon_params[2].topocentric_ascension.decimal_degrees.decimal) / 15
+									)
+
+		# Local hour angle
+		local_hour_angle = Angle((theta_event.decimal - (-observer.longitude.decimal) - interp_ra.decimal_degrees.decimal) % 360)
+
+		# Altitude of the Moon
+		moon_alt = Angle(math.degrees(math.asin(
+			math.sin(observer.latitude.radians) * math.sin(interp_dec.radians) +
+			math.cos(observer.latitude.radians) * math.cos(interp_dec.radians) *
+			math.cos(local_hour_angle.radians)
+		)))
+
+		# Correction to m_event
+		deltaM = (moon_alt.decimal - h_zero.decimal) / (
+			360 * math.cos(interp_dec.radians) * math.cos(observer.latitude.radians) * math.sin(local_hour_angle.radians))
+
 		m_event += deltaM
 
-	# Compute final moonset time by adding days to base date
-	moon_event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=utc_offset)
+	# Compute final moonrise or moonset time
+	event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=observer_date.utc_offset)
 
-	return moon_event_dt
+	return event_dt
 
 # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
-def find_proper_moontime(true_date: datetime, latitude: float, longitude: float, elevation: float, utc_offset: float, rise_or_set: str = 'set') -> datetime:
+def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set') -> datetime:
 	"""
     Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 
     Parameters:
-        true_date (datetime): The reference date.
-        latitude (float): Observer latitude (°).
-        longitude (float): Observer longitude (°).
-        elevation (float): Observer elevation from sea level (m).
-        utc_offset (float): Observer offset from UTC (hours).
+        observer_date (DateTimeInfo): The date and time of the observer.
+		observer (ObserverInfo): The observer's coordinates and elevation.
         rise_or_set (str): Find either the setting or rising option. Default is set to 'set'.
 
     Returns:
-        datetime: The date and time of the moon event. If the moon event is not found (does not set or rise), returns `np.inf`.
+        datetime: The date and time of the moon event. If the moon event is not found (does not set or rise), returns `math.inf`.
 
     Raises:
         ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
@@ -917,71 +963,72 @@ def find_proper_moontime(true_date: datetime, latitude: float, longitude: float,
 	if rise_or_set not in ['rise', 'set', 'moonrise', 'moonset']:
 		raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
 
-	if utc_offset == 0:
-			temp_utc_offset = np.floor(longitude / 15) - 1
+	if observer_date.utc_offset == 0:
+			temp_utc_offset = math.floor(observer.longitude.decimal / 15) - 1
 	else:
-		temp_utc_offset = utc_offset * -1
+		temp_utc_offset = observer_date.utc_offset * -1
 
-	temp_moonset = moonrise_or_moonset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set)
-	date_doy = true_date.timetuple().tm_yday
+	temp_moonset: datetime = moonrise_or_moonset(observer_date, observer, rise_or_set)
+	date_doy = observer_date.date.timetuple().tm_yday
 
 	i = 1
 	while(True):
-		if temp_moonset == np.inf:
+		if temp_moonset == math.inf:
 			return datetime.min
 		
 		temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_offset)).timetuple().tm_yday
-		if (temp_moonset_doy < date_doy and temp_moonset.year == true_date.year) or ((temp_moonset + timedelta(hours=temp_utc_offset)).year < true_date.year):
-			temp_moonset = moonrise_or_moonset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set)
+		if (temp_moonset_doy < date_doy and temp_moonset.year == observer_date.date.year) or ((temp_moonset + timedelta(hours=temp_utc_offset)).year < observer_date.date.year):
+			temp_moonset = moonrise_or_moonset(
+										replace(observer_date, date=observer_date.date + timedelta(days=i)), 
+										observer, rise_or_set
+									)
 			i += 1
 		else: 
-			return temp_moonset
+			return temp_moonset.replace(tzinfo=observer_date.date.tzinfo)
 
 # Visibility calculations either:
 # Criterion 0: Odeh, 2006
 # Criterion 1: HMNAO TN No. 69, a.k.a. Yallop, 1997
-def calculate_visibility(sun_az: float, sun_alt: float, moon_az: float, moon_alt: float, moon_pi: float, criterion: int = 0) -> float:
+def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt: Angle, moon_pi: Angle, criterion: int = 0) -> float:
 	"""
 	Calculate the visibility of the Moon's crescent for a given date and observer coordinates.
 
 	Parameters:
-		sun_az (float): The Sun's azimuth (°).
-		sun_alt (float): The Sun's altitude (°).
-		moon_az (float): The Moon's azimuth (°).
-		moon_alt (float): The Moon's altitude (°).
-		moon_pi (float): The Moon's parallax (°).
+		sun_az (Angle): The Sun's azimuth.
+		sun_alt (Angle): The Sun's altitude.
+		moon_az (Angle): The Moon's azimuth.
+		moon_alt (Angle): The Moon's altitude.
+		moon_pi (Angle): The Moon's parallax.
 		criterion (int): The criterion of visibility calculation to use (0 or 1). Default is 0 which uses Odeh, 2006. When set to 1, it uses HMNAO TN No. 69 (a.k.a. Yallop, 1997).
 	
 	Returns:
 		float: The visibility of the Moon's crescent.
 	"""
 
-	daz = abs(sun_az - moon_az)
-	arcv = abs(sun_alt - moon_alt)
-	arcl = np.rad2deg(np.arccos(ce.cos(daz) * ce.cos(arcv)))
+	daz = Angle(abs(sun_az.decimal - moon_az.decimal))
+	arcv = Angle(abs(sun_alt.decimal - moon_alt.decimal))
+	arcl = Angle(math.degrees(math.acos(math.cos(daz.radians) * math.cos(arcv.radians))))
 
-	moon_pi_min = 60 * moon_pi
+	semi_diameter = 0.27245 * (moon_pi.decimal * 60)
+	semi_diameter_prime = semi_diameter * (1 + math.sin(moon_alt.radians) * math.sin(moon_pi.radians))
 
-	semi_diameter = 0.27245 * moon_pi_min
-	semi_diameter_prime = semi_diameter * (1 + ce.sin(moon_alt) * ce.sin(moon_pi_min / 60))
-
-	w_prime = semi_diameter_prime * (1 - ce.cos(arcl))
+	w_prime = semi_diameter_prime * (1 - math.cos(arcl.radians))
 
 	if criterion == 0:
-		q_value = (arcv - (-0.1018 * w_prime ** 3 + 0.7319 * w_prime ** 2 - 6.3226 * w_prime + 7.1651))
+		q_value = (arcv.decimal - (-0.1018 * w_prime ** 3 + 0.7319 * w_prime ** 2 - 6.3226 * w_prime + 7.1651))
 	else:
-		q_value = (arcv - (11.8371 - 6.3226 * w_prime + 0.7319 * w_prime ** 2 - 0.1018 * w_prime ** 3)) / 10
+		q_value = (arcv.decimal - (11.8371 - 6.3226 * w_prime + 0.7319 * w_prime ** 2 - 0.1018 * w_prime ** 3)) / 10
 
 	return q_value
 
 # Classification according to Odeh, 2006 or HMNAO TN No.69
-def classify_visibility(q: float, criterion: int = 0) -> str:
+def classify_visibility(q: float, criterion: int = 1) -> str:
 	"""
 	Classify the visibility of the Moon's crescent based on the given q value.
 
 	Parameters:
 		q (float): The q value.
-		criterion (int): The criterion of visibility classification to use (0 or 1). Default is 0 which uses Odeh, 2006. When set to 1, it uses HMNAO TN No. 69 (a.k.a. Yallop, 1997).
+		criterion (int): The criterion of visibility classification to use (0 or 1). Default is 1. When set to 1, it uses HMNAO TN No. 69 (a.k.a. Yallop, 1997).
 
 	Returns:
 		str: The classification of the Moon's crescent visibility.

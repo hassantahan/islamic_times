@@ -16,10 +16,11 @@ References:
 import math
 import numpy as np
 from typing import List, Tuple
-from dataclasses import dataclass
 from datetime import datetime, timedelta
-from islamic_times import calculation_equations as ce
+from dataclasses import dataclass, replace, field
 from islamic_times import time_equations as te
+from islamic_times import calculation_equations as ce
+from islamic_times.dataclasses import *
 
 __OBLIQUITY_TERMS = [
     -4680.93,
@@ -170,125 +171,158 @@ __SUN_NUTATION_COEFFICIENTS = [
 class Sun:
     '''
     A class to compute the position of the Sky in the sky based on given astronomical parameters.
-
-    Attributes:
-        jde (float): The Julian Ephemeris Day.
-        deltaT (float): The difference between Terrestrial Time and Universal Time (ΔT).
-        local_latitude (float): The observer's latitude in degrees.
-        local_longitude (float): The observer's longitude in degrees.
-        temperature (float): The observer's ambient temperature in degrees Celcius.
-        pressure (float): The observer's ambient pressure in kPa.
-        mean_longitude (float): The mean longitude of the Sun in degrees.
-        mean_anomaly (float): The mean anomaly of the Sun in degrees.
-        earth_orbit_eccentricity (float): The eccentricity of Earth's orbit.
-        sun_centre (float): The Sun's equation of center in degrees.
-        true_longitude (float): The Sun's true longitude in degrees.
-        true_anomaly (float): The Sun's true anomaly in degrees.
-        geocentric_distance (float): The distance from the Earth to the Sun in Astronomical Units (AU).
-        omega (float): The longitude of the ascending node of the Moon's orbit in degrees.
-        apparent_longitude (float): The apparent longitude of the Sun in degrees.
-        nutation (Tuple[float, float]): Nutation in longitude and obliquity in degrees.
-        delta_obliquity (float): Change in Earth's obliquity due to nutation.
-        mean_obliquity (float): The mean obliquity of the ecliptic in degrees.
-        true_obliquity (float): The true obliquity of the ecliptic in degrees.
-        true_right_ascension (float): The true right ascension of the Sun in degrees.
-        true_declination (float): The true declination of the Sun in degrees.
-        apparent_right_ascension (float): The apparent right ascension of the Sun in degrees.
-        apparent_declination (float): The apparent declination of the Sun in degrees.
-        local_hour_angle (float): The local hour angle of the Sun in degrees.
-        eh_parallax (float): The equatorial horizontal parallax of the Sun in degrees.
-        topocentric_ascension (float): The topocentric right ascension of the Sun in degrees.
-        topocentric_declination (float): The topocentric declination of the Sun in degrees.
-        topocentric_local_hour_angle (float): The topocentric local hour angle in degrees.
-        altitude (float): The altitude of the Sun above the horizon in degrees.
-        azimuth (float): The azimuth angle of the Sun in degrees.
-
-    Methods:
-        `calculate()`: Computes various positional attributes of the Sun, including its right ascension, declination, altitude, and azimuth.
-
-    Notes:
-        - All attributes after `elev` are only computed and available after the `calculate()` method is called.
-        - The `calculate()` method is called automatically by the `sunpos()` method.
     '''
         
     jde: float
     deltaT: float
-    local_latitude: float
-    local_longitude: float
+    local_latitude: Angle
+    local_longitude: Angle
+    elevation: Distance
     temperature: float = 10
     pressure: float = 101
 
-    def calculate(self):
-        t = (self.jde - te.J2000) / te.JULIAN_MILLENNIUM
-        t2 = t ** 2
-        t3 = t ** 3
-        t4 = t ** 4
-        t5 = t ** 5
+    # Derived fields
+    t: float = field(init=False)
 
-        # Coordinates
-        self.mean_longitude: float = (280.4664567 + (360007.6982779 * t) + (0.03032028 * t2) + (t3 / 49931) - (t4 / 15300) - (t5 / 2000000)) % 360
-        self.mean_anomaly: float = (357.52911 + 359990.50340 * t - 0.001603 * t2 - t3 / 30000) % 360
+    # Orbital elements
+    mean_longitude: Angle = field(init=False)
+    mean_anomaly: Angle = field(init=False)
+    earth_orbit_eccentricity: float = field(init=False)
+    sun_centre: Angle = field(init=False)
+    true_longitude: Angle = field(init=False)
+    true_anomaly: Angle = field(init=False)
+    geocentric_distance: Distance = field(init=False)
 
-        self.earth_oribit_eccentricity: float = 0.016708634 - 0.00042037 * t - 0.000001267 * t2
-        
-        self.sun_centre: float = (1.914602 - 0.04817 * t - 0.000014 * t2) * ce.sin(self.mean_anomaly) + \
-                            (0.019993 - 0.000101 * t) * ce.sin(2 * self.mean_anomaly) + \
-                            0.000289 * ce.sin(3 * self.mean_anomaly)
+    # Nutation and obliquity
+    omega: Angle = field(init=False)
+    apparent_longitude: Angle = field(init=False)
+    nutation: Tuple[Angle, Angle] = field(init=False)
+    delta_obliquity: Angle = field(init=False)
+    mean_obliquity: Angle = field(init=False)
+    true_obliquity: Angle = field(init=False)
 
-        self.true_longitude: float = self.mean_longitude + self.sun_centre
-        self.true_anomaly: float = self.mean_anomaly + self.sun_centre
+    # Apparent coordinates
+    true_right_ascension: RightAscension = field(init=False)
+    true_declination: Angle = field(init=False)
+    apparent_right_ascension: RightAscension = field(init=False)
+    apparent_declination: Angle = field(init=False)
 
-        self.geocentric_distance: float = (1.000001018 * (1 - self.earth_oribit_eccentricity ** 2)) / (1 + (self.earth_oribit_eccentricity * ce.cos(self.true_anomaly)))
-        self.omega: float = 125.04452 - 19341.36261 * t + 0.020708 * t2 + t3 / 45000
+    # Hour angles
+    greenwich_hour_angle: Angle = field(init=False)
+    local_hour_angle: Angle = field(init=False)
 
-        self.apparent_longitude: float = self.true_longitude - 0.00569 - 0.00478 * ce.sin(self.omega)
+    # Topocentric quantities
+    eh_parallax: Angle = field(init=False)
+    topocentric_ascension: RightAscension = field(init=False)
+    topocentric_declination: Angle = field(init=False)
+    topocentric_local_hour_angle: Angle = field(init=False)
 
-        # TODO: Chapter 26 for referencing to J2000.0 standard
+    # Horizontal coordinates
+    true_altitude: Angle = field(init=False)
+    true_azimuth: Angle = field(init=False)
+    apparent_altitude: Angle = field(init=False)
 
-        self.nutation: Tuple[float, float] = sun_nutation(self.jde)
-        self.delta_obliquity: float = self.nutation[1]
-        self.mean_obliquity: float = oblique_eq(self.jde)
-        self.true_obliquity: float = self.mean_obliquity + self.delta_obliquity
+    def __post_init__(self):
+        self._compute_time()
+        self._compute_orbital_elements()
+        self._compute_nutation_and_obliquity()
+        self._compute_apparent_coordinates()
+        self._compute_hour_angles()
+        self._compute_topocentric()
+        self._compute_horizontal_coordinates()
 
-        # True Right ascension (RA) & declination calculations
-        self.true_right_ascension: float = (np.rad2deg(np.arctan2(ce.cos(self.mean_obliquity) * ce.sin(self.true_longitude), ce.cos(self.true_longitude)))) % 360
-        self.true_declination: float = np.rad2deg(np.arcsin(ce.sin(self.mean_obliquity) * ce.sin(self.true_longitude)))
+    def _compute_time(self):
+        object.__setattr__(self, 't', (self.jde - te.J2000) / te.JULIAN_MILLENNIUM)
 
-        # Adjust RA and declination to find their apparents
-        self.apparent_right_ascension: float = (np.rad2deg(np.arctan2(ce.cos(self.true_obliquity + 0.00256 * ce.cos(self.omega)) * ce.sin(self.apparent_longitude), ce.cos(self.apparent_longitude)))) % 360
-        self.apparent_declination: float = np.rad2deg(np.arcsin(ce.sin(self.true_obliquity + 0.00256 * ce.cos(self.omega)) * ce.sin(self.apparent_longitude)))
+    def _compute_orbital_elements(self):
+        t, t2, t3, t4, t5 = self.t, self.t**2, self.t**3, self.t**4, self.t**5
+        mean_long = (280.4664567 + 360007.6982779 * t + 0.03032028 * t2 + t3 / 49931 - t4 / 15300 - t5 / 2000000) % 360
+        mean_anom = (357.52911 + 359990.50340 * t - 0.001603 * t2 - t3 / 30000) % 360
+        ecc = 0.016708634 - 0.00042037 * t - 0.000001267 * t2
+        sun_center_val = ((1.914602 - 0.04817 * t - 0.000014 * t2) * ce.sin(mean_anom) +
+                          (0.019993 - 0.000101 * t) * ce.sin(2 * mean_anom) +
+                          0.000289 * ce.sin(3 * mean_anom))
+        true_long = mean_long + sun_center_val
+        true_anom = mean_anom + sun_center_val
+        geo_dist = (1.000001018 * (1 - ecc ** 2)) / (1 + ecc * ce.cos(true_anom))
 
-        greenwich_hour_angle: float = te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400) % 360
-        nutation_in_longitude_dms = ce.decimal_to_dms(self.nutation[0])
-        
-        # Make correction for the apparent sidereal time according to pg. 88
-        st_correction: float = (nutation_in_longitude_dms[2] + nutation_in_longitude_dms[1] * 60 + nutation_in_longitude_dms[0] * 3600) * ce.cos(self.true_obliquity) / 15
-        greenwich_hour_angle += (st_correction / 240)
+        object.__setattr__(self, 'mean_longitude', Angle(mean_long))
+        object.__setattr__(self, 'mean_anomaly', Angle(mean_anom))
+        object.__setattr__(self, 'earth_orbit_eccentricity', ecc)
+        object.__setattr__(self, 'sun_centre', Angle(sun_center_val))
+        object.__setattr__(self, 'true_longitude', Angle(true_long))
+        object.__setattr__(self, 'true_anomaly', Angle(true_anom))
+        object.__setattr__(self, 'geocentric_distance', Distance(geo_dist, DistanceUnits.AU))
 
-        # Local Hour angle is then simply the GHA minus the apparent RA adjusted for the local longitude
-        self.local_hour_angle: float = (greenwich_hour_angle + self.local_longitude - self.apparent_right_ascension) % 360
+    def _compute_nutation_and_obliquity(self):
+        omega_val = 125.04452 - 19341.36261 * self.t + 0.020708 * self.t**2 + self.t**3 / 45000
+        nut_long, nut_obl = sun_nutation(self.jde)
+        mean_obl = oblique_eq(self.jde)
 
-        # Topocentric R.A., Declination, and LHA
-        self.eh_parallax = np.rad2deg(np.arcsin(ce.sin(8.794 / 3600) / self.geocentric_distance))
-        self.topocentric_ascension, self.topocentric_declination = ce.correct_ra_dec(self.apparent_right_ascension, self.apparent_declination, self.local_hour_angle, self.eh_parallax, self.local_latitude, 76)
-        self.topocentric_local_hour_angle = (greenwich_hour_angle + self.local_longitude - self.topocentric_ascension) % 360
+        object.__setattr__(self, 'omega', Angle(omega_val))
+        object.__setattr__(self, 'apparent_longitude', Angle(self.true_longitude.decimal - 0.00569 - 0.00478 * ce.sin(omega_val)))
+        object.__setattr__(self, 'nutation', (nut_long, nut_obl))
+        object.__setattr__(self, 'delta_obliquity', nut_obl)
+        object.__setattr__(self, 'mean_obliquity', mean_obl)
+        object.__setattr__(self, 'true_obliquity', Angle(mean_obl.decimal + nut_obl.decimal))
 
-        self.altitude = np.rad2deg(np.arcsin(ce.sin(self.local_latitude) * ce.sin(self.topocentric_declination) + ce.cos(self.local_latitude) * ce.cos(self.topocentric_declination) * ce.cos(self.topocentric_local_hour_angle))) 
-        self.azimuth = np.rad2deg(np.arctan2(-1 * ce.cos(self.topocentric_declination) * ce.sin(self.topocentric_local_hour_angle), ce.sin(self.topocentric_declination) * ce.cos(self.local_latitude) \
-                                          - ce.cos(self.topocentric_declination) * ce.sin(self.local_latitude) * ce.cos(self.topocentric_local_hour_angle))) % 360
+    def _compute_apparent_coordinates(self):
+        ra = math.atan2(math.cos(self.mean_obliquity.radians) * math.sin(self.true_longitude.radians), math.cos(self.true_longitude.radians))
+        dec = math.asin(math.sin(self.mean_obliquity.radians) * math.sin(self.true_longitude.radians))
+        app_ra = math.atan2(math.cos(self.true_obliquity.radians + 0.00256 * math.cos(self.omega.radians)) * math.sin(self.apparent_longitude.radians), math.cos(self.apparent_longitude.radians))
+        app_dec = math.asin(math.sin(self.true_obliquity.radians + 0.00256 * math.cos(self.omega.radians)) * math.sin(self.apparent_longitude.radians))
 
-        # # Geocentric Altitude & Azimuth calculations (disabled)
-        # self.altitude: float = np.rad2deg(np.arcsin(ce.sin(self.local_latitude) * ce.sin(self.true_declination) + ce.cos(self.local_latitude) * ce.cos(self.true_declination) * ce.cos(self.local_hour_angle))) 
-        # self.azimuth: float = np.rad2deg(np.arctan2(-1 * ce.cos(self.true_declination) * ce.sin(self.local_hour_angle), ce.sin(self.true_declination) * ce.cos(self.local_latitude) - ce.cos(self.true_declination) \
-        #                                             * ce.sin(self.local_latitude) * ce.cos(self.local_hour_angle))) % 360
-        
-        # # Correct for atmospheric refraction (taken from https://en.wikipedia.org/wiki/Atmospheric_refraction)
-        # # Currently disabled
-        # refraction = 1.02 / ce.tan(altitude + 10.3 / (altitude + 5.11)) * pressure / 101 * 283 / (273 + temperature)
-        # self.altitude += refraction / 60
+        object.__setattr__(self, 'true_right_ascension', RightAscension(math.degrees(ra) % 360 / 15))
+        object.__setattr__(self, 'true_declination', Angle(math.degrees(dec)))
+        object.__setattr__(self, 'apparent_right_ascension', RightAscension(math.degrees(app_ra) % 360 / 15))
+        object.__setattr__(self, 'apparent_declination', Angle(math.degrees(app_dec)))
+
+    def _compute_hour_angles(self):
+        gha = te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400).decimal
+        nut_dms = self.nutation[0].dms
+        st_corr = (nut_dms[2] + nut_dms[1] * 60 + nut_dms[0] * 3600) * math.cos(self.true_obliquity.radians) / 15
+        gha_corrected = gha + st_corr / 240
+
+        object.__setattr__(self, 'greenwich_hour_angle', Angle(gha_corrected % 360))
+        object.__setattr__(self, 'local_hour_angle', Angle((gha_corrected + self.local_longitude.decimal - self.apparent_right_ascension.decimal_degrees.decimal) % 360))
+
+    def _compute_topocentric(self):
+        parallax = math.degrees(math.asin(math.sin(math.radians(8.794 / 3600)) / self.geocentric_distance.value))
+        top_ra, top_dec = ce.correct_ra_dec(
+            self.apparent_right_ascension, 
+            self.apparent_declination, 
+            self.local_hour_angle, 
+            Angle(parallax), 
+            self.local_latitude, 
+            self.elevation    
+        )
+
+        object.__setattr__(self, 'eh_parallax', Angle(parallax))
+        object.__setattr__(self, 'topocentric_ascension', top_ra)
+        object.__setattr__(self, 'topocentric_declination', top_dec)
+        object.__setattr__(self, 'topocentric_local_hour_angle', Angle((self.greenwich_hour_angle.decimal + self.local_longitude.decimal - top_ra.decimal_degrees.decimal) % 360))
+
+    def _compute_horizontal_coordinates(self):
+        alt_rad = math.asin(
+            math.sin(self.local_latitude.radians) * math.sin(self.topocentric_declination.radians) +
+            math.cos(self.local_latitude.radians) * math.cos(self.topocentric_declination.radians) * math.cos(self.topocentric_local_hour_angle.radians)
+        )
+        az_rad = math.atan2(
+            -math.cos(self.topocentric_declination.radians) * math.sin(self.topocentric_local_hour_angle.radians),
+            math.sin(self.topocentric_declination.radians) * math.cos(self.local_latitude.radians) -
+            math.cos(self.topocentric_declination.radians) * math.sin(self.local_latitude.radians) * math.cos(self.topocentric_local_hour_angle.radians)
+        )
+        true_alt = math.degrees(alt_rad)
+        true_az = math.degrees(az_rad) % 360
+
+        refraction = 1.02 / math.tan(math.radians(true_alt + 10.3 / (true_alt + 5.11))) * self.pressure / 101 * 283 / (273 + self.temperature)
+
+        object.__setattr__(self, 'true_altitude', Angle(true_alt))
+        object.__setattr__(self, 'true_azimuth', Angle(true_az))
+        object.__setattr__(self, 'apparent_altitude', Angle(true_alt + refraction / 60))
 
 # Chapter 22
-def oblique_eq(jde: float) -> float:
+def oblique_eq(jde: float) -> Angle:
     '''
     Calculate the obliquity of the ecliptic for a given Julian Ephemeris Day. See Chapter 22 of *Astronomical Algorthims* for more information.
 
@@ -296,7 +330,7 @@ def oblique_eq(jde: float) -> float:
         jde (float): The Julian Ephemeris Day.
 
     Returns:
-        float: The obliquity of the ecliptic in degrees.
+        Angle: The obliquity of the ecliptic.
     '''
     u = ((jde - te.J2000) / te.JULIAN_CENTURY) / 100
 
@@ -305,10 +339,10 @@ def oblique_eq(jde: float) -> float:
     powers = np.power(u, np.arange(1, len(__OBLIQUITY_TERMS) + 1))
     eps += np.dot(__OBLIQUITY_TERMS, powers) / 3600
 
-    return eps
+    return Angle(eps)
 
 # Chapter 22
-def sun_nutation(jde: float) -> Tuple[float, float]:
+def sun_nutation(jde: float) -> Tuple[Angle, Angle]:
     '''
     Calculate the sun's nutation for a given Julian Ephemeris Day. See Chapter 22 of *Astronomical Algorthims* for more information.
 
@@ -316,7 +350,7 @@ def sun_nutation(jde: float) -> Tuple[float, float]:
         jde (float): The Julian Ephemeris Day.
 
     Returns:
-        tuple (Tuple[float, float]): The nutation in longitude and obliquity.
+        tuple (Tuple[Angle, Angle]): The nutation in longitude and obliquity.
     '''
 
     # Precompute time variables
@@ -345,20 +379,16 @@ def sun_nutation(jde: float) -> Tuple[float, float]:
     deltaPsi = dp / (3600.0 * 10000.0)
     deltaEpsilon = de / (3600.0 * 10000.0)
 
-    return (deltaPsi, deltaEpsilon)
+    return (Angle(deltaPsi), Angle(deltaEpsilon))
 
 # Chapter 25
-def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: float, temperature: float = 10, pressure: float = 101) -> Sun:
+def sunpos(observer_date: DateTimeInfo, observer: ObserverInfo) -> Sun:
     '''
     Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 25 of the *Astronomical Algorthims* for more information.
 
     Parameters:
-        jde (float): The Julian Ephemeris Day.
-        deltaT (float): The difference between Terrestrial Dynamical Time and Universal Time (ΔT = TT - UT1) in seconds.
-        local_latitude (float): The observer's latitude in degrees.
-        local_longitude (float): The observer's longitude in degrees.
-        temperature (float): The observer's temperature in degrees Celsius.
-        pressure (float): The observer's pressure in kPa.
+        observer_date (DateTimeInfo): The date and time of the observer.
+        observer (ObserverInfo): The observer's coordinates and elevation.
 
     Returns:
         Sun (obj): A `Sun` object that contains various attributes that describe its position. 
@@ -368,14 +398,13 @@ def sunpos(jde: float, deltaT: float, local_latitude: float, local_longitude: fl
     '''
     
     the_sun = Sun(
-        jde,
-        deltaT,
-        local_latitude,
-        local_longitude
+        jde=observer_date.jde,
+        deltaT=observer_date.deltaT,
+        local_latitude=observer.latitude,
+        local_longitude=observer.longitude,
+        elevation=observer.elevation
     )
-
-    the_sun.calculate()
-
+    
     return the_sun
 
 def equation_of_time(deltaPsi: float, L0: float, epsilon: float, alpha: float) -> float:
@@ -402,99 +431,70 @@ def equation_of_time(deltaPsi: float, L0: float, epsilon: float, alpha: float) -
 
     return E
 
-def solar_hour_angle(latitude: float, declination: float, angle: float = 5 / 6) -> float:
-    '''
-    Calculate the solar hour angle for a given latitude, solar declination, and angle. The angle is the zenith angle of the sun at the horizon. The default value is 0.8333° representing visible sunset.
-
-    Parameters:
-        latitude (float): The observer's latitude in degrees.
-        declination (float): The solar declination in degrees.
-        angle (float): The zenith angle of the sun at the horizon. Default is 0.8333° (5/6) representing visible sunset/sunrise.
-
-    Returns:
-        float: The solar hour angle in degrees, but 'np.inf' if the angle is not possible to achieve.
-    '''
-    dec = np.deg2rad(declination)
-    lat = np.deg2rad(latitude)
-    ang  =np.deg2rad(angle)
-
-    num =  np.sin(-1 * ang) - np.sin(lat) * np.sin(dec)
-    denom = np.cos(lat) * np.cos(dec)
-
-    # At extreme latitudes at different times of the year, some angles are not possible to achieve
-    # TODO: Warnings
-    ratio = np.clip(num / denom, -1, 1)
-
-    if ratio == 1 or ratio == -1:
-        return np.inf
-    else:
-        return np.rad2deg(np.arccos(ratio))
-
-def find_sun_transit(date: datetime, lat: float, long: float, elev: float, utc_offset: float, angle: float = 5 / 6) -> Tuple[datetime, datetime, datetime]:
+def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> datetime:
     """
-    Calculate the times of sunrise, sunset, and its transit for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
+    Calculate the transit of the sun (specifically culmination) for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
     Parameters:
-        date (datetime): The date to calculate the moonset for.
-        lat (float): The observer's latitude (°).
-        long (float): The observer's longitude (°).
-        elev (float): The observer's elevation above sea level (m).
-        utc_offset (float): The observer's difference from UTC (hours).
+        observer_date (DateTimeInfo): The date and time of the observer.
+        observer (ObserverInfo): The observer's coordinates and elevation.
 
     Returns:
         datetime: The time of moonset.
     """
 
     # First find the Year Month Day at UT 0h from JDE
-    ymd = datetime(date.year, date.month, date.day)
-    new_jd = te.gregorian_to_jd(date) - te.fraction_of_day(date)
+    ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
+    new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
     new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
-    new_jde = new_jd + new_deltaT / 86400
 
     # Calculate new sun params with the new_jd
     sun_params: List[Sun] = []
     for i in range(3):
-        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_offset)
+        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
         delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-        sun_params.append(sunpos(new_jde + i - 1, delT_temp, lat, long))
+        sun_params.append(
+                        sunpos(
+                            replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), 
+                            observer
+                        )
+                    )
 
     # GMST
-    sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
+    sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
 
     # Compute m0 and m2 without wrapping
     # Transit
-    m0 = (sun_params[1].topocentric_ascension - long - sidereal_time) / 360
+    m0: float = (sun_params[1].topocentric_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
 
     # Minor corrective steps thru iteration
     for _ in range(3):
-        little_theta_zero = (sidereal_time + 360.985647 * m0) % 360
+        little_theta_zero: Angle = Angle((sidereal_time.decimal + 360.985647 * m0) % 360)
         n = m0 + new_deltaT / 86400
-        interpolated_sun_ra = ce.interpolation(n, sun_params[0].topocentric_ascension, 
-                                                sun_params[1].topocentric_ascension, 
-                                                sun_params[2].topocentric_ascension)
+        interpolated_sun_ra = RightAscension(ce.interpolation(n, sun_params[0].topocentric_ascension.decimal_degrees.decimal, 
+                                                sun_params[1].topocentric_ascension.decimal_degrees.decimal, 
+                                                sun_params[2].topocentric_ascension.decimal_degrees.decimal) / 15
+                                            )
 
-        solar_local_hour_angle = (little_theta_zero - (-long) - interpolated_sun_ra) % 360
-        m0 -= solar_local_hour_angle / 360
+        solar_local_hour_angle: Angle = Angle((little_theta_zero.decimal - (-observer.longitude.decimal) - interpolated_sun_ra.decimal_degrees.decimal) % 360)
+        m0 -= solar_local_hour_angle.decimal / 360
 
     # Compute final rise, transit, and set time by adding days to base date
     m0 %= 1
-    sun_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=utc_offset)
+    sun_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=observer_date.utc_offset)
                                                                                         
-    return sun_transit_dt
+    return sun_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 
-def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_offset: float, rise_or_set: str, angle: float = 5/6) -> datetime:
+def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime:
     """
     Calculate either the sunrise or the sunset time for a given date and observer coordinates.
     This function computes only the requested event (sunrise or sunset) without calculating both.
     
     Parameters:
-        date (datetime): The date for which to calculate the event.
-        lat (float): Observer's latitude in degrees.
-        long (float): Observer's longitude in degrees.
-        elev (float): Observer's elevation above sea level in meters.
-        utc_offset (float): The observer's time difference from UTC in hours.
+        observer_date (DateTimeInfo): The date and time of the observer.
+        observer (ObserverInfo): The observer's coordinates and elevation.
         rise_or_set (str): 'rise' or 'sunrise' to calculate sunrise; 'set' or 'sunset' to calculate sunset.
-        angle (float): The standard altitude of the sun (default is 5/6°).
+        angle (Angle): The standard altitude of the sun (default is 5/6°).
         
     Returns:
         datetime: The computed time of the requested event (sunrise or sunset).
@@ -506,86 +506,90 @@ def sunrise_or_sunset(date: datetime, lat: float, long: float, elev: float, utc_
     if rise_or_set not in ['rise', 'set', 'sunrise', 'sunset']:
         raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
 
-    # Base date at UT 0h and associated Julian day calculations.
-    ymd = datetime(date.year, date.month, date.day)
-    new_jd = te.gregorian_to_jd(date) - te.fraction_of_day(date)
+    # First find the Year Month Day at UT 0h from JDE
+    ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
+    new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
     new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
-    new_jde = new_jd + new_deltaT / 86400
 
-    # Calculate sun parameters for three consecutive days.
+    # Calculate new sun params with the new_jd
     sun_params: List[Sun] = []
     for i in range(3):
-        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, utc_offset)
+        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
         delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-        sun_params.append(sunpos(new_jde + i - 1, delT_temp, lat, long))
+        sun_params.append(
+                        sunpos(
+                            replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), 
+                            observer
+                        )
+                    )
 
     # Compute H0: the hour angle corresponding to the desired altitude.
-    h_zero = -angle
-    cosH_zero = (ce.sin(h_zero) - ce.sin(lat) * ce.sin(sun_params[1].topocentric_declination)) / (
-                ce.cos(lat) * ce.cos(sun_params[1].topocentric_declination))
+    h_zero: Angle = Angle(-angle)
+    cosH_zero: float = (math.sin(h_zero.radians) - math.sin(observer.latitude.radians) * math.sin(sun_params[1].topocentric_declination.radians)) / (
+                math.cos(observer.latitude.radians) * math.cos(sun_params[1].topocentric_declination.radians))
     
     if abs(cosH_zero) < 1:
-        H_zero = np.rad2deg(np.arccos(cosH_zero))
+        H_zero = Angle(math.degrees(math.acos(cosH_zero)))
     else:
-        return np.inf
+        return math.inf
 
     # Compute Greenwich Mean Sidereal Time (GMST) at new_jd.
-    sidereal_time = te.greenwich_mean_sidereal_time(new_jd)
+    sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
 
     # Compute the transit estimate m0.
-    m0 = (sun_params[1].topocentric_ascension - long - sidereal_time) / 360
+    m0: float = (sun_params[1].topocentric_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
 
     # Choose which event to compute.
     event = rise_or_set.lower()
     if event in ['rise', 'sunrise']:
         # Initial estimate for sunrise.
-        m_event = m0 - H_zero / 360
+        m_event: float = m0 - H_zero.decimal / 360
     else:
         # Initial estimate for sunset.
-        m_event = m0 + H_zero / 360
+        m_event: float = m0 + H_zero.decimal / 360
 
     # Iteratively refine m0 (transit) and m_event (rise or set).
     # We use three iterations which are typically sufficient.
     for _ in range(3):
         # --- Update the event (sunrise or sunset) estimate ---
-        theta_event = (sidereal_time + 360.985647 * m_event) % 360
-        n_event = m_event + new_deltaT / 86400
-        interp_dec_event = ce.interpolation(n_event,
-                                            sun_params[0].topocentric_declination,
-                                            sun_params[1].topocentric_declination,
-                                            sun_params[2].topocentric_declination)
-        interp_ra_event = ce.interpolation(n_event,
-                                           sun_params[0].topocentric_ascension,
-                                           sun_params[1].topocentric_ascension,
-                                           sun_params[2].topocentric_ascension)
-        local_hour_angle_event = (theta_event - (-long) - interp_ra_event) % 360
-        sun_alt = np.rad2deg(np.arcsin(ce.sin(lat) * ce.sin(interp_dec_event) +
-                                       ce.cos(lat) * ce.cos(interp_dec_event) *
-                                       ce.cos(local_hour_angle_event)))
+        theta_event: Angle = Angle((sidereal_time.decimal + 360.985647 * m_event) % 360)
+        n_event: float = m_event + new_deltaT / 86400
+        interp_dec_event = Angle(ce.interpolation(n_event,
+                                            sun_params[0].topocentric_declination.decimal,
+                                            sun_params[1].topocentric_declination.decimal,
+                                            sun_params[2].topocentric_declination.decimal))
+        
+        interp_ra_event = RightAscension(ce.interpolation(n_event,
+                                            sun_params[0].topocentric_ascension.decimal_degrees.decimal,
+                                            sun_params[1].topocentric_ascension.decimal_degrees.decimal,
+                                            sun_params[2].topocentric_ascension.decimal_degrees.decimal) / 15
+                                        )
+        
+        local_hour_angle_event = Angle((theta_event.decimal - (-observer.longitude.decimal) - interp_ra_event.decimal_degrees.decimal) % 360)
+        sun_alt = Angle(math.degrees(math.asin(math.sin(observer.latitude.radians) * math.sin(interp_dec_event.radians) +
+                                        math.cos(observer.latitude.radians) * math.cos(interp_dec_event.radians) *
+                                       math.cos(local_hour_angle_event.radians))))
         
         # Correct m_event using the difference between computed altitude and desired h_zero.
-        deltaM = (sun_alt - h_zero) / (360 * ce.cos(interp_dec_event) * ce.cos(lat) * ce.sin(local_hour_angle_event))
+        deltaM = (sun_alt.decimal - h_zero.decimal) / (360 * math.cos(interp_dec_event.radians) * math.cos(observer.latitude.radians) * math.sin(local_hour_angle_event.radians))
         m_event += deltaM
 
     # Convert the fractional day to a datetime object, adjusting for the UTC offset.
-    event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=utc_offset)
+    event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=observer_date.utc_offset)
     return event_dt
 
-def find_proper_suntime(true_date: datetime, latitude: float, longitude: float, elevation: float, utc_offset: float, rise_or_set: str, angle: float = 5 / 6) -> datetime:
+def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime:
     """
     Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 
     Parameters:
-        true_date (datetime): The reference date.
-        latitude (float): Observer latitude (°).
-        longitude (float): Observer longitude (°).
-        elevation (float): Observer elevation from sea level (m).
-        utc_offset (float): Observer offset from UTC (hours).
+        observer_date (DateTimeInfo): The date and time of the observer.
+        observer (ObserverInfo): The observer's coordinates and elevation.
         rise_or_set (str): Find either the setting or rising option.
-        angle (float): Find the time when the sun reaches the given angle above or below the observer's horizon (controlled by `rise_or_set`) (°). Default is 50 arcminutes (0.8333°) for visible sunset/sunrise.
+        angle (Angle): Find the time when the sun reaches the given angle above or below the observer's horizon (controlled by `rise_or_set`). Default is 50 arcminutes (0.8333°) for visible sunset/sunrise.
 
     Returns:
-        datetime: The date and time of the sun event. If the sun event is not found (does not set or rise), returns `np.inf`.
+        datetime: The date and time of the sun event. If the sun event is not found (does not set or rise), returns `math.inf`.
 
     Raises:
         ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
@@ -594,22 +598,25 @@ def find_proper_suntime(true_date: datetime, latitude: float, longitude: float, 
     if rise_or_set not in ['rise', 'set', 'sunrise', 'sunset']:
         raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
 
-    if utc_offset == 0:
-        temp_utc_offset = np.floor(longitude / 15) - 1
+    if observer_date.utc_offset == 0:
+        temp_utc_offset = math.floor(observer.longitude.decimal / 15) - 1
     else:
-        temp_utc_offset = utc_offset * -1
+        temp_utc_offset = observer_date.utc_offset * -1
 
-    temp_suntime = sunrise_or_sunset(true_date, latitude, longitude, elevation, utc_offset, rise_or_set, angle)
-    date_doy = true_date.timetuple().tm_yday
+    temp_suntime = sunrise_or_sunset(observer_date, observer, rise_or_set, angle.decimal)
+    date_doy = observer_date.date.timetuple().tm_yday
 
     i = 1
     while(True):
-        if temp_suntime == np.inf:
-            return np.inf
+        if temp_suntime == math.inf:
+            return math.inf
         
         temp_suntime_doy = (temp_suntime + timedelta(hours=temp_utc_offset)).timetuple().tm_yday
-        if (temp_suntime_doy < date_doy and temp_suntime.year == true_date.year) or ((temp_suntime + timedelta(hours=temp_utc_offset)).year < true_date.year):
-            temp_suntime = sunrise_or_sunset(true_date + timedelta(days=i), latitude, longitude, elevation, utc_offset, rise_or_set, angle)
+        if (temp_suntime_doy < date_doy and temp_suntime.year == observer_date.date.year) or ((temp_suntime + timedelta(hours=temp_utc_offset)).year < observer_date.date.year):
+            temp_suntime = sunrise_or_sunset(
+                                    replace(observer_date, date=observer_date.date + timedelta(days=i)), 
+                                    observer, rise_or_set, angle.decimal
+                                )
             i += 1
         else: 
-            return temp_suntime
+            return temp_suntime.replace(tzinfo=observer_date.date.tzinfo)
