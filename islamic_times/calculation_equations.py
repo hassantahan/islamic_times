@@ -5,9 +5,11 @@ This module provides functions for angle normalization, trigonometric operations
 and conversions between different angle representations.
 """
 
+import math
 import numpy as np
 from typing import Tuple
 from islamic_times.time_equations import EARTH_RADIUS_KM
+from islamic_times.dataclasses import Angle, RightAscension
 
 def sin(angle: float) -> float:
     '''sin(x) function that auto-converts the argument from degrees to radians before evaluating.
@@ -232,3 +234,22 @@ def correct_ra_dec(ra: float, dec: float, lha: float, parallax: float, lat: floa
 	declination_prime: float = np.rad2deg(np.arctan2(temp_num, temp_denom))
 
 	return (ascension_prime, declination_prime)
+
+def geocentric_horizontal_coordinates(observer_latitude: Angle, body_declination: Angle, body_lha: Angle) -> Tuple[Angle, Angle]:
+    f = 1 / 298.257223563
+    tan_phi = (1 - f) ** 2 * math.tan(observer_latitude.radians)
+    observer_geocentric_latitude = Angle(math.degrees(math.atan2(tan_phi, 1)))
+
+    # Geocentric Alt 
+    body_geo_alt: Angle = Angle(math.degrees(math.asin(
+                    math.sin(observer_geocentric_latitude.radians) * math.sin(body_declination.radians) + 
+                    math.cos(observer_geocentric_latitude.radians) * math.cos(body_declination.radians) * math.cos(body_lha.radians)
+                )))
+    
+    # Geocentric Az
+    cos_az = (math.sin(body_declination.radians) - math.sin(body_geo_alt.radians) * math.sin(observer_geocentric_latitude.radians)) / \
+                (math.cos(body_geo_alt.radians) * math.cos(observer_geocentric_latitude.radians))
+    sin_az = (-1 * math.cos(body_declination.radians) * math.sin(body_lha.radians)) / (math.cos(body_geo_alt.radians))
+    body_geo_az: Angle = Angle(math.degrees(math.atan2(sin_az, cos_az)) % 360)
+
+    return (body_geo_alt, body_geo_az)

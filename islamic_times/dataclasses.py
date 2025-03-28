@@ -1,10 +1,11 @@
-from typing import Tuple
+import math
+from typing import Tuple, ClassVar, List
 from datetime import datetime
 from dataclasses import dataclass
 
 # === Helper Classes ===
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Angle:
     decimal: float
 
@@ -17,15 +18,18 @@ class Angle:
         seconds = (minutes_full - minutes) * 60
         return (degrees, minutes, seconds)
 
+    @property
+    def radians(self) -> float:
+        return math.radians(self.decimal)
+
     def dms_str(self) -> str:
         d, m, s = self.dms
         return f"{d:+04}\u00b0 {m:02}\u2032 {s:05.2f}\u2033"
 
     def __str__(self):
-        return f"{self.decimal:+07.3f}\u00b0 ({self.dms_str()})"
+        return f"{self.decimal:+08.3f}\u00b0\t\t({self.dms_str()})"
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RightAscension:
     decimal_hours: float
 
@@ -42,8 +46,12 @@ class RightAscension:
         return f"{h:02}h {m:02}m {s:05.2f}s"
 
     @property
-    def decimal_degrees(self) -> float:
-        return self.decimal_hours * 15
+    def decimal_degrees(self) -> Angle:
+        return Angle(self.decimal_hours * 15)
+    
+    @property
+    def radians(self) -> float:
+        return self.decimal_degrees.radians
 
     @property
     def dms(self) -> Tuple[int, int, float]:
@@ -59,10 +67,9 @@ class RightAscension:
         return f"{d:+04}\u00b0 {m:02}\u2032 {s:05.2f}\u2033"
 
     def __str__(self):
-        return f"{self.hms_str()} ({self.dms_str()})"
+        return f"{self.hms_str()}\t\t({self.decimal_degrees})"
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DistanceUnit:
     name: str
     symbol: str
@@ -75,7 +82,6 @@ class DistanceUnit:
     def __str__(self):
         return self.symbol
 
-
 class DistanceUnits:
     METRE = DistanceUnit("meter", "m", 1)
     KILOMETRE = DistanceUnit("kilometer", "km", 1_000)
@@ -84,8 +90,7 @@ class DistanceUnits:
     MILE = DistanceUnit("mile", "mi", 1_609.3445)
     FOOT = DistanceUnit("foot", "ft", 0.3048)
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Distance:
     value: float
     unit: DistanceUnit = DistanceUnits.METRE
@@ -106,30 +111,68 @@ class Distance:
 
 # === Data Classes ===
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ObserverInfo:
-    latitude: float
-    longitude: float
-    elevation: float
-    pressure: float
-    temperature: float
+    latitude: Angle
+    longitude: Angle
+    elevation: Distance
+    pressure: float = 10
+    temperature: float = 101.325
 
     def __str__(self):
         return ("Observer Parameters\n"
-                f"\tLatitude:\t\t\t{self.latitude}\n"
-                f"\tLongitude:\t\t\t{self.longitude}\n"
-                f"\tElevation:\t\t\t{self.elevation}\n"
-                f"\tPressure:\t\t\t{self.pressure}\n"
-                f"\tTemperature:\t\t{self.temperature}")
+                f"\tLatitude:\t\t{self.latitude.decimal:09.6f}\u00b0\n"
+                f"\tLongitude:\t\t{self.longitude.decimal:09.6f}\u00b0\n"
+                f"\tElevation:\t\t{self.elevation}\n"
+                f"\tPressure:\t\t{self.pressure} kPa\n"
+                f"\tTemperature:\t\t{self.temperature:+06.2f}°C")
 
+@dataclass(frozen=True, slots=True)
+class IslamicDateInfo:
+    ISLAMIC_MONTHS: ClassVar[dict[int, str]] = {
+        1: 'Muḥarram',
+        2: 'Ṣaffar',
+        3: 'Rabīʿ al-Awwal',
+        4: 'Rabīʿ al-Thānī',
+        5: 'Jumādā al-Ūlā',
+        6: 'Jumādā al-Thāniyah',
+        7: 'Rajab',
+        8: 'Shaʿbān',
+        9: 'Ramaḍān',
+        10: 'Shawwāl',
+        11: 'Dhū al-Qaʿdah',
+        12: 'Dhū al-Ḥijjah',
+    }
+    ISLAMIC_DAYS: ClassVar[dict[str, str]] = {
+            'Sunday': 'al-Aḥad',
+            'Monday': 'al-Ithnayn',
+            'Tuesday': 'al-Thulāthāʾ',
+            'Wednesday': 'al-Arbiʿāʾ',
+            'Thursday': 'al-Khamīs',
+            'Friday': 'al-Jumuʿah',
+            'Saturday': 'al-Sabt',
+        }
 
-@dataclass(frozen=True)
+    hijri_year: int
+    hijri_month: int
+    hijri_day: int
+
+    @property
+    def hijri_month_name(self) -> str:
+        return self.ISLAMIC_MONTHS[self.hijri_month]
+    
+    def hijri_day_of_week_name(self, day_of_week: str) -> str:
+        return self.ISLAMIC_DAYS[day_of_week]
+    
+    def full_date(self, day_of_week: str) -> str:
+        return f"{self.hijri_day_of_week_name(day_of_week)}, {self.hijri_day} {self.hijri_month_name}, {self.hijri_year}"
+
+@dataclass(frozen=True, slots=True)
 class DateTimeInfo:
     date: datetime
-    hijri: str
     jd: float
-    eq_of_time: float
     deltaT: float
+    hijri: IslamicDateInfo | None = None
 
     @property
     def gregorian_date(self) -> str:
@@ -141,11 +184,15 @@ class DateTimeInfo:
     
     @property
     def timezone(self) -> str:
-        return self.date.timetz()
+        return self.date.timetz().tzname()
     
     @property
     def utc_offset(self) -> float:
-        return self.date.utcoffset().total_seconds() / 3600
+        return self.date.utcoffset().total_seconds() / 3600 * -1
+    
+    @property
+    def jde(self) -> float:
+        return self.jd + self.deltaT / 86400
     
     def format_utc_offset(self) -> str:
         '''String formatting for UTC Offsets.'''
@@ -157,40 +204,64 @@ class DateTimeInfo:
     def __str__(self):
         return ("Time & Date\n"
                 f"\tGregorian Date:\t\t{self.gregorian_date}\n"
-                f"\tIslamic Date:\t\t{self.hijri}\n"
-                f"\t24h-Time:\t\t\t{self.clock}\n"
-                f"\tTime Zone:\t\t\t{self.timezone} {self.format_utc_offset()}\n"
-                f"\tLocal JD:\t\t\t{self.jd}\n"
-                f"\tEquation of Time:\t{self.eq_of_time} minutes\n"
-                f"\tEstimated ΔT:\t\t{self.deltaT}s")
+                f"\tIslamic Date:\t\t{self.hijri.full_date(self.date.strftime("%A"))}\n"
+                f"\t24h-Time:\t\t{self.clock}\n"
+                f"\tTime Zone:\t\t{self.timezone} {self.format_utc_offset()}\n"
+                f"\tLocal JD:\t\t{self.jd}\n"
+                f"\tEstimated ΔT:\t\t{self.deltaT:.2f} s")
 
+@dataclass(frozen=True, slots=True)
+class PrayerMethod:
+    name: str
+    fajr_angle: Angle
+    isha_angle: Angle
+    keys: Tuple[str, ...] | None = None
+    maghrib_angle: Angle = Angle(0)
+    asr_type: int = 0
+    midnight_type: int = 0
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
+class Prayer:
+    name: str
+    time: datetime | str | float
+    method: PrayerMethod
+
+    @property
+    def time_str(self) -> str:
+        if self.time == math.inf:
+            return "Does not exist."
+        elif isinstance(self.time, datetime):
+            return self.time.strftime("%X %d-%m-%Y")
+        elif isinstance(self.time, str):
+            return self.time
+        else:
+            return str(self.time)
+
+@dataclass(frozen=True, slots=True)
 class PrayerTimes:
-    method: str
-    fajr: str
-    sunrise: str
-    zuhr: str
-    asr: str
-    sunset: str
-    maghrib: str
-    isha: str
-    midnight: str
+    method: PrayerMethod
+    fajr: Prayer
+    sunrise: Prayer
+    zuhr: Prayer
+    asr: Prayer
+    sunset: Prayer
+    maghrib: Prayer
+    isha: Prayer
+    midnight: Prayer
 
     def __str__(self):
         return ("Prayer Times at Observer Timezone\n"
-                f"\tMethod:\t\t\t{self.method}\n"
-                f"\tFajr:\t\t\t{self.fajr}\n"
-                f"\tSunrise:\t\t\t{self.sunrise}\n"
-                f"\tZ\u0323uhr:\t\t\t {self.zuhr}\n"
-                f"\tʿAṣr:\t\t\t{self.asr}\n"
-                f"\tSunset:\t\t\t{self.sunset}\n"
-                f"\tMaghrib:\t\t\t{self.maghrib}\n"
-                f"\tʿIsh\u0101ʾ:\t\t\t{self.isha}\n"
-                f"\tMidnight:\t\t\t{self.midnight}")
+                f"\tMethod:\t\t\t{self.method.name}\n"
+                f"\t{self.fajr.name}:\t\t\t{self.fajr.time_str}\n"
+                f"\t{self.sunrise.name}:\t\t{self.sunrise.time_str}\n"
+                f"\t{self.zuhr.name}:\t\t\t{self.zuhr.time_str}\n"
+                f"\t{self.asr.name}:\t\t\t{self.asr.time_str}\n"
+                f"\t{self.sunset.name}:\t\t\t{self.sunset.time_str}\n"
+                f"\t{self.maghrib.name}:\t\t{self.maghrib.time_str}\n"
+                f"\t{self.isha.name}:\t\t\t{self.isha.time_str}\n"
+                f"\t{self.midnight.name}:\t\t{self.midnight.time_str}")
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MeccaInfo:
     distance: Distance
     angle: Angle
@@ -198,51 +269,49 @@ class MeccaInfo:
 
     def __str__(self):
         return ("Mecca\n"
-                f"\tDistance:\t\t\t{self.distance}\n"
-                f"\tDirection:\t\t\t{self.cardinal} ({self.angle.decimal:.2f}\u00b0)")
+                f"\tDistance:\t\t{self.distance.value:.0f} {self.distance.unit}\n"
+                f"\tDirection:\t\t{self.cardinal}\t\t\t({self.angle})")
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SunInfo:
-    sunrise: str
-    sun_transit: str
-    sunset: str
-    declination: Angle
-    right_ascension: RightAscension
-    altitude: Angle
-    azimuth: Angle
+    sunrise: datetime
+    sun_transit: datetime
+    sunset: datetime
+    apparent_declination: Angle
+    apparent_right_ascension: RightAscension
+    apparent_altitude: Angle
+    true_azimuth: Angle
 
     def __str__(self):
         return ("The Sun\n"
-                f"\tSunrise:\t\t\t{self.sunrise}\n"
-                f"\tSun Transit:\t\t{self.sun_transit}\n"
-                f"\tSunset:\t\t\t{self.sunset}\n"
-                f"\tApp. Declination:\t{self.declination}\n"
-                f"\tApp. Right Ascension:\t{self.right_ascension}\n"
-                f"\tAltitude:\t\t\t{self.altitude}\n"
-                f"\tAzimuth:\t\t\t{self.azimuth}")
+                f"\tSunrise:\t\t{self.sunrise.strftime("%X %d-%m-%Y")}\n"
+                f"\tSun Transit:\t\t{self.sun_transit.strftime("%X %d-%m-%Y")}\n"
+                f"\tSunset:\t\t\t{self.sunset.strftime("%X %d-%m-%Y")}\n"
+                f"\tApp. Declination:\t{self.apparent_declination}\n"
+                f"\tApp. Right Ascension:\t{self.apparent_right_ascension}\n"
+                f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
+                f"\tApp. Azimuth:\t\t{self.true_azimuth}")
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MoonInfo:
     moonrise: datetime
     moon_transit: datetime
     moonset: datetime
-    declination: Angle
-    right_ascension: RightAscension
-    altitude: Angle
-    azimuth: Angle
+    topocentric_declination: Angle
+    topocentric_right_ascension: RightAscension
+    apparent_altitude: Angle
+    true_azimuth: Angle
     parallax: Angle
     illumination: float
 
     def __str__(self):
         return ("The Moon\n"
-                f"\tMoonrise:\t\t\t{self.moonrise.strftime("%X %d-%m-%Y")}\n"
+                f"\tMoonrise:\t\t{self.moonrise.strftime("%X %d-%m-%Y")}\n"
                 f"\tMoon Transit:\t\t{self.moon_transit.strftime("%X %d-%m-%Y")}\n"
-                f"\tMoonset:\t\t\t{self.moonset.strftime("%X %d-%m-%Y")}\n"
-                f"\tDeclination:\t\t{self.declination}\n"
-                f"\tRight Ascension:\t{self.right_ascension}\n"
-                f"\tAltitude:\t\t\t{self.altitude}\n"
-                f"\tAzimuth:\t\t\t{self.azimuth}\n"
-                f"\tParallax:\t\t\t{self.parallax}\n"
-                f"\tIllumination:\t\t{self.illumination}%")
+                f"\tMoonset:\t\t{self.moonset.strftime("%X %d-%m-%Y")}\n"
+                f"\tTop. Declination:\t{self.topocentric_declination}\n"
+                f"\tTop. Right Ascension:\t{self.topocentric_right_ascension}\n"
+                f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
+                f"\tAzimuth:\t\t{self.true_azimuth}\n"
+                f"\tParallax:\t\t{self.parallax}\n"
+                f"\tIllumination:\t\t{self.illumination * 100:.2f}%")

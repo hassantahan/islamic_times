@@ -17,7 +17,8 @@ References:
 """
 
 from datetime import datetime, time
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
+from islamic_times.dataclasses import Angle
 import pytz
 from timezonefinder import TimezoneFinder
 import numpy as np
@@ -72,7 +73,7 @@ def fraction_of_day(date: datetime) -> float:
 
 # Taken from pg. 88 of AA 
 # (DOES NOT TAKE JDE)
-def greenwich_mean_sidereal_time(julian_day: float) -> float:
+def greenwich_mean_sidereal_time(julian_day: float) -> Angle:
     '''Compute the Greenwich Mean Sidereal Time (GMST) in degrees for a given Julian Day.
 
     Parameters:
@@ -88,7 +89,7 @@ def greenwich_mean_sidereal_time(julian_day: float) -> float:
     theta_zero = 280.46061837 + 360.98564736629 * (julian_day - J2000) + \
                  0.000387933 * t2 - t3 / 38710000
 
-    return theta_zero % 360
+    return Angle(theta_zero % 360)
 
 # Look to Jean Meeus' "Astronomical Algorithms"
 def gregorian_to_jd(date: datetime, zone: float = 0) -> float:
@@ -165,7 +166,7 @@ def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
 
 # Look to Jean Meeus' "Astronomical Algorithms"
 # TODO: In the Islamic calendar, new days start after sunset not at midnight, so maybe a fix for this?
-def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> List[int]:
+def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tuple[int, int, int]:
     '''Convert a Gregorian date to a Hijri (Islamic) date.
 
     Parameters:
@@ -248,7 +249,7 @@ def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> List
         i_day = 30
     i_year = h
 
-    return [i_year, i_month, i_day]
+    return (i_year, i_month, i_day)
 
 def get_islamic_month(month: int) -> str:
     '''Retrieve the Islamic month name for a given month number.
