@@ -835,11 +835,15 @@ class ITLocation:
             nm_sun_params = se.sunpos(best_time_dateinfo, self.observer_info)
             nm_moon_params = me.moonpos(best_time_dateinfo, self.observer_info, nm_sun_params.delta_obliquity, nm_sun_params.true_obliquity)
 
-            sun_geo_alt, sun_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_sun_params.apparent_declination, nm_sun_params.local_hour_angle)
-            moon_geo_alt, moon_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_moon_params.declination, nm_moon_params.local_hour_angle)
-
-            # Visibility is now calculated
-            v = me.calculate_visibility(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, criterion)
+            # Calculate visibilities
+            if criterion == 1:
+                # Yallop uses geocentric horizontal coordinates
+                sun_geo_alt, sun_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_sun_params.apparent_declination, nm_sun_params.local_hour_angle)
+                moon_geo_alt, moon_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_moon_params.declination, nm_moon_params.local_hour_angle)
+                v = me.calculate_visibility(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, criterion)
+            else:
+                # Odeh uses the apparent (i.e. adjusted for refraction) topocentric horizontal coordinates
+                v = me.calculate_visibility(nm_sun_params.true_azimuth, nm_sun_params.apparent_altitude, nm_moon_params.true_azimuth, nm_moon_params.apparent_altitude, nm_moon_params.eh_parallax, criterion)
 
             visibilities.append(v)
 
