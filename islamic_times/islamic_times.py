@@ -235,11 +235,14 @@ class ITLocation:
         if not isinstance(new_date, datetime):
             raise TypeError(f"'date_time' must be of type `datetime`, but got `{type(new_date).__name__}`.")
 
-        jd = te.gregorian_to_jd(new_date, -1 * new_date.utcoffset().total_seconds() / 3600)
+        if new_date.tzinfo is not None:
+            jd = te.gregorian_to_jd(new_date, -1 * new_date.utcoffset().total_seconds() / 3600)
+        else:
+            jd = te.gregorian_to_jd(new_date)
         deltaT = te.delta_t_approx(new_date.year, new_date.month)
         islamic_dates = te.gregorian_to_hijri(new_date.year, new_date.month, new_date.day)
         self.observer_dateinfo: DateTimeInfo = DateTimeInfo(
-            date=new_date,
+            date=new_date.replace(tzinfo=self.observer_dateinfo.date.tzinfo),
             hijri=IslamicDateInfo(*islamic_dates),
             jd=jd,
             deltaT=deltaT

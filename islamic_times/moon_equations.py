@@ -817,7 +817,7 @@ def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> da
 	sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
 
 	# Transit approximation (m0)
-	m0 = (moon_params[1].topocentric_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
+	m0 = (moon_params[1].right_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
 
 	# Iteratively refine transit time
 	for _ in range(3):
@@ -825,9 +825,9 @@ def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> da
 		n = m0 + new_deltaT / 86400
 
 		interpolated_moon_ra = RightAscension(ce.interpolation(n,
-												moon_params[0].topocentric_ascension.decimal_degrees.decimal,
-												moon_params[1].topocentric_ascension.decimal_degrees.decimal,
-												moon_params[2].topocentric_ascension.decimal_degrees.decimal) / 15
+												moon_params[0].right_ascension.decimal_degrees.decimal,
+												moon_params[1].right_ascension.decimal_degrees.decimal,
+												moon_params[2].right_ascension.decimal_degrees.decimal) / 15
 											)
 
 		lunar_local_hour_angle = Angle((little_theta_zero.decimal - (-observer.longitude.decimal) - interpolated_moon_ra.decimal_degrees.decimal) % 360)
@@ -898,7 +898,7 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 	sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
 
 	# Compute transit
-	m0: float = (moon_params[1].topocentric_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
+	m0: float = (moon_params[1].right_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
 
 	# Choose rise or set
 	if rise_or_set in ['rise', 'moonrise']:
@@ -913,15 +913,15 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 
 		# Interpolated declination and right ascension
 		interp_dec: Angle = Angle(ce.interpolation(n_event,
-										moon_params[0].top_declination.decimal,
-										moon_params[1].top_declination.decimal,
-										moon_params[2].top_declination.decimal)
+										moon_params[0].declination.decimal,
+										moon_params[1].declination.decimal,
+										moon_params[2].declination.decimal)
 									)
 
 		interp_ra = RightAscension(ce.interpolation(n_event,
-										moon_params[0].topocentric_ascension.decimal_degrees.decimal,
-										moon_params[1].topocentric_ascension.decimal_degrees.decimal,
-										moon_params[2].topocentric_ascension.decimal_degrees.decimal) / 15
+										moon_params[0].right_ascension.decimal_degrees.decimal,
+										moon_params[1].right_ascension.decimal_degrees.decimal,
+										moon_params[2].right_ascension.decimal_degrees.decimal) / 15
 									)
 
 		# Local hour angle
