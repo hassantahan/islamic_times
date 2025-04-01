@@ -166,14 +166,14 @@ def correct_ra_dec(ra: RightAscension, dec: Angle, lha: Angle, parallax: Angle, 
 	b: float = a * (1 - f)
 
 	u: Angle = Angle(math.degrees(math.atan2(b / a * math.tan(lat.radians), 1)))
-	p_sin_psi_prime: float = b / a * math.sin(u.radians) + elev.in_unit(DistanceUnits.KILOMETRE) / dist.in_unit(DistanceUnits.KILOMETRE) * math.sin(lat.radians)
-	p_cos_psi_prime: float = math.cos(u.radians) + elev.in_unit(DistanceUnits.KILOMETRE) / dist.in_unit(DistanceUnits.KILOMETRE) * math.cos(lat.radians)
+	p_sin_phi_prime: float = b / a * math.sin(u.radians) + elev.in_unit(DistanceUnits.KILOMETRE) / dist.in_unit(DistanceUnits.KILOMETRE) * math.sin(lat.radians)
+	p_cos_phi_prime: float = math.cos(u.radians) + elev.in_unit(DistanceUnits.KILOMETRE) / dist.in_unit(DistanceUnits.KILOMETRE) * math.cos(lat.radians)
 
-	temp_num: float = -1 * p_cos_psi_prime * math.sin(parallax.radians) * math.sin(lha.radians)
-	temp_denom: float = math.cos(dec.radians) - p_cos_psi_prime * math.sin(parallax.radians) * math.cos(lha.radians)
+	temp_num: float = -1 * p_cos_phi_prime * math.sin(parallax.radians) * math.sin(lha.radians)
+	temp_denom: float = math.cos(dec.radians) - p_cos_phi_prime * math.sin(parallax.radians) * math.cos(lha.radians)
 	deltaA: Angle = Angle(math.degrees(math.atan2(temp_num, temp_denom)))
 
-	temp_num: float = (math.sin(dec.radians) - p_sin_psi_prime * math.sin(parallax.radians)) * math.cos(deltaA.radians)
+	temp_num: float = (math.sin(dec.radians) - p_sin_phi_prime * math.sin(parallax.radians)) * math.cos(deltaA.radians)
 
 	ascension_prime: RightAscension = RightAscension((ra.decimal_degrees.decimal + deltaA.decimal) / 15)
 	declination_prime: Angle = Angle(math.degrees(math.atan2(temp_num, temp_denom)))

@@ -1023,6 +1023,20 @@ def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt
 
 	return q_value
 
+# According to Shaukat (yet to find his paper; reference: https://moonsighting.com/faq_ms.html#Criteria)
+def calculate_visibility_shaukat(sun_az: Angle, sun_long: Angle, moon_long: Angle, moon_lat: Angle, moon_az: Angle, moon_pi: Angle, moon_illumin: float):
+	semi_diameter: float = 0.27245 * (moon_pi.decimal * 60)
+	width: float = 2 * semi_diameter * moon_illumin
+
+	arcv: Angle = Angle(math.degrees(math.acos(
+		(math.cos(moon_long.radians - sun_long.radians) * math.cos(moon_lat.radians)) / \
+		math.cos(sun_az.radians - moon_az.radians)
+	)))
+
+	q_value: float = (arcv.decimal - (11.8371 - 6.3226 * width + 0.7319 * width ** 2 - 0.1018 * width ** 3)) / 10
+
+	return q_value
+
 # Classification according to Odeh, 2006 or HMNAO TN No.69
 def classify_visibility(q: float, criterion: int = 1) -> str:
 	"""
