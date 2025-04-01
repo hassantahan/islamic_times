@@ -21,6 +21,7 @@ from dataclasses import dataclass, replace, field
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
 from islamic_times.dataclasses import *
+import time
 
 __OBLIQUITY_TERMS = [
     -4680.93,
@@ -167,69 +168,70 @@ __SUN_NUTATION_COEFFICIENTS = [
          -3,       0,       0,       0           #  2, -1,  0,  2,  2 
 ]
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Sun:
     '''
     A class to compute the position of the Sky in the sky based on given astronomical parameters.
     '''
         
-    jde: float
-    deltaT: float
-    local_latitude: Angle
-    local_longitude: Angle
-    elevation: Distance
-    temperature: float = 10
-    pressure: float = 101
+    # jde: float
+    # deltaT: float
+    # local_latitude: Angle
+    # local_longitude: Angle
+    # elevation: Distance
+    # temperature: float
+    # pressure: float
 
-    # Derived fields
-    t: float = field(init=False)
+    # # Derived fields
+    # t: float # = field(init=False)
 
     # Orbital elements
-    mean_longitude: Angle = field(init=False)
-    mean_anomaly: Angle = field(init=False)
-    earth_orbit_eccentricity: float = field(init=False)
-    sun_centre: Angle = field(init=False)
-    true_longitude: Angle = field(init=False)
-    true_anomaly: Angle = field(init=False)
-    geocentric_distance: Distance = field(init=False)
+    mean_longitude: Angle # = field(init=False)
+    mean_anomaly: Angle # = field(init=False)
+    earth_orbit_eccentricity: float # = field(init=False)
+    sun_centre: Angle # = field(init=False)
+    true_longitude: Angle # = field(init=False)
+    true_anomaly: Angle # = field(init=False)
+    geocentric_distance: Distance # = field(init=False)
 
     # Nutation and obliquity
-    omega: Angle = field(init=False)
-    apparent_longitude: Angle = field(init=False)
-    nutation: Tuple[Angle, Angle] = field(init=False)
-    delta_obliquity: Angle = field(init=False)
-    mean_obliquity: Angle = field(init=False)
-    true_obliquity: Angle = field(init=False)
+    omega: Angle # = field(init=False)
+    apparent_longitude: Angle # = field(init=False)
+    nutation: Tuple[Angle, Angle] # = field(init=False)
+    delta_obliquity: Angle # = field(init=False)
+    mean_obliquity: Angle # = field(init=False)
+    true_obliquity: Angle # = field(init=False)
 
     # Apparent coordinates
-    true_right_ascension: RightAscension = field(init=False)
-    true_declination: Angle = field(init=False)
-    apparent_right_ascension: RightAscension = field(init=False)
-    apparent_declination: Angle = field(init=False)
+    true_right_ascension: RightAscension # = field(init=False)
+    true_declination: Angle # = field(init=False)
+    apparent_right_ascension: RightAscension # = field(init=False)
+    apparent_declination: Angle # = field(init=False)
 
     # Hour angles
-    greenwich_hour_angle: Angle = field(init=False)
-    local_hour_angle: Angle = field(init=False)
+    greenwich_hour_angle: Angle # = field(init=False)
+    local_hour_angle: Angle # = field(init=False)
 
     # Topocentric quantities
-    eh_parallax: Angle = field(init=False)
-    topocentric_ascension: RightAscension = field(init=False)
-    topocentric_declination: Angle = field(init=False)
-    topocentric_local_hour_angle: Angle = field(init=False)
+    eh_parallax: Angle # = field(init=False)
+    topocentric_ascension: RightAscension # = field(init=False)
+    topocentric_declination: Angle # = field(init=False)
+    topocentric_local_hour_angle: Angle # = field(init=False)
 
     # Horizontal coordinates
-    true_altitude: Angle = field(init=False)
-    true_azimuth: Angle = field(init=False)
-    apparent_altitude: Angle = field(init=False)
+    true_altitude: Angle # = field(init=False)
+    true_azimuth: Angle # = field(init=False)
+    apparent_altitude: Angle # = field(init=False)
 
     def __post_init__(self):
-        self._compute_time()
-        self._compute_orbital_elements()
-        self._compute_nutation_and_obliquity()
-        self._compute_apparent_coordinates()
-        self._compute_hour_angles()
-        self._compute_topocentric()
-        self._compute_horizontal_coordinates()
+        ...
+        # self._compute_time()
+        # self._compute_orbital_elements()
+        # self._compute_nutation_and_obliquity()
+        # self._compute_apparent_coordinates()
+        # self._compute_hour_angles()
+        # self._compute_topocentric()
+        # self._compute_horizontal_coordinates()
 
     def _compute_time(self):
         object.__setattr__(self, 't', (self.jde - te.J2000) / te.JULIAN_MILLENNIUM)
@@ -269,8 +271,8 @@ class Sun:
     def _compute_apparent_coordinates(self):
         ra = math.atan2(math.cos(self.mean_obliquity.radians) * math.sin(self.true_longitude.radians), math.cos(self.true_longitude.radians))
         dec = math.asin(math.sin(self.mean_obliquity.radians) * math.sin(self.true_longitude.radians))
-        app_ra = math.atan2(math.cos(self.true_obliquity.radians + 0.00256 * math.cos(self.omega.radians)) * math.sin(self.apparent_longitude.radians), math.cos(self.apparent_longitude.radians))
-        app_dec = math.asin(math.sin(self.true_obliquity.radians + 0.00256 * math.cos(self.omega.radians)) * math.sin(self.apparent_longitude.radians))
+        app_ra = math.atan2(math.cos(self.true_obliquity.radians + math.radians(0.00256 * math.cos(self.omega.radians))) * math.sin(self.apparent_longitude.radians), math.cos(self.apparent_longitude.radians))
+        app_dec = math.asin(math.sin(self.true_obliquity.radians + math.radians(0.00256 * math.cos(self.omega.radians))) * math.sin(self.apparent_longitude.radians))
 
         object.__setattr__(self, 'true_right_ascension', RightAscension(math.degrees(ra) % 360 / 15))
         object.__setattr__(self, 'true_declination', Angle(math.degrees(dec)))
@@ -396,15 +398,16 @@ def sunpos(observer_date: DateTimeInfo, observer: ObserverInfo) -> Sun:
     Notes: 
     - The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is disabled.
     '''
-    
-    the_sun = Sun(
-        jde=observer_date.jde,
-        deltaT=observer_date.deltaT,
-        local_latitude=observer.latitude,
-        local_longitude=observer.longitude,
-        elevation=observer.elevation
-    )
-    
+    import islamic_times.astro_core as fast_astro
+
+    num = 1_000_000
+    t2 = time.time()
+    for _ in range(num):
+        the_sun: Sun = fast_astro.compute_sun(observer_date.jde, observer_date.deltaT, observer.latitude.decimal, observer.longitude.decimal, observer.elevation.value, observer.temperature, observer.pressure)
+    t3 = time.time()
+
+    print(f"C:\t{(t3 - t2)} s")
+
     return the_sun
 
 def equation_of_time(deltaPsi: float, L0: float, epsilon: float, alpha: float) -> float:
