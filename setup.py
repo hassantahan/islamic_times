@@ -4,16 +4,18 @@ astro_core = Extension(
     name="islamic_times.astro_core",
     sources=[
         "src/astro_core.c",
-        "src/_sun_equations.c",
-        "src/_time_equations.c",
-        "src/_calculation_equations.c"
+        "src/c_sun_equations.c",
+        "src/c_time_equations.c",
+        "src/c_calculation_equations.c",
+        "src/c_datetime.c"
     ],
     include_dirs=[
         "include",
         "C:/Program Files/Python313/include"
     ],
     library_dirs=["C:/Program Files/Python313/libs"],
-    extra_compile_args=["/0x"],
+    extra_compile_args=["/Ox", "/Zi"], #/Od
+    extra_link_args=["/DEBUG"]
 )
 
 setup(

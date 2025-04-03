@@ -1,16 +1,15 @@
 #define PY_SSIZE_T_CLEAN
-#include <Python.h>
-#include "_time_equations.h"
-#include "_calculation_equations.h"
-#include "_sun_equations.h"
 #include "astro_core.h"
+#include "c_time_equations.h"
+#include "c_calculation_equations.h"
+#include "c_sun_equations.h"
 
-PyObject *datetime_datetime = NULL;
 PyObject *SunType = NULL;
 PyObject *AngleType = NULL;
 PyObject *DistanceType = NULL;
 PyObject *DistanceUnitsType = NULL;
 PyObject *RightAscensionType = NULL;
+
 
 /* ============================
    Cleaning up types
@@ -31,9 +30,12 @@ static void cleanup_types(void) {
 
 static PyMethodDef AstroCoreMethods[] = {
     {"greenwich_mean_sidereal_time", py_greenwich_mean_sidereal_time, METH_VARARGS, "Compute GMST give a Julian Day."},
-    {"jd_to_gregorian", py_jd_to_gregorian, METH_VARARGS, "Go from a Julian day to a Gregorian date and time."},
-    {"gregorian_to_jd", py_gregorian_to_jd, METH_VARARGS, "Go from a Gregorian date and time to Julian Day."},
-    {"compute_sun", (PyCFunction)(void(*)(void))py_compute_sun, METH_FASTCALL, "Compute sun parameters"},
+    {"jd_to_gregorian", py_jd_to_gregorian, METH_VARARGS, "Find the Gregorian date and time given a Julian day."},
+    {"gregorian_to_jd", py_gregorian_to_jd, METH_VARARGS, "Find the Julian Day given a Gregorian date and time."},
+    {"delta_t_appox", py_delta_t_approx, METH_VARARGS, "Find the approximate ΔT given a year and month."},
+    {"compute_sun", (PyCFunction)(void(*)(void))py_compute_sun, METH_FASTCALL, "Compute the sun's position and parameters."},
+    {"find_sun_transit", py_find_sun_transit, METH_VARARGS, "Compute the time of the transit of the sunfor the given date."},
+    {"find_proper_suntime", py_find_proper_suntime, METH_VARARGS, "Compute sunrise or sunset for the given date."},
     {NULL, NULL, 0, NULL}  /* Sentinel */
 };
 
@@ -58,15 +60,10 @@ PyMODINIT_FUNC PyInit_astro_core(void) {
     if (m == NULL)
         return NULL;
 
-    PyObject *datetime_module = PyImport_ImportModule("datetime");
-    if (!datetime_module)
-        return NULL;
-
-    datetime_datetime = PyObject_GetAttrString(datetime_module, "datetime");
-    Py_DECREF(datetime_module);
-    if (!datetime_datetime)
-        return NULL;
-
+    // Import and initialize datetime C-API
+    PyDateTime_IMPORT;
+    
+    // islamic_times module imports
     PyObject *mod_sun = PyImport_ImportModule("islamic_times.sun_equations");
     PyObject *mod_dc  = PyImport_ImportModule("islamic_times.dataclasses");
 

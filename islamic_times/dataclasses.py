@@ -214,8 +214,12 @@ class Distance:
         if self.unit == DistanceUnits.METRE:
             return f"{self.value:.2f} {self.unit}"
         else:
-            m_equiv = self.in_unit(DistanceUnits.METRE)
-            return f"{self.value:.2f} {self.unit} ({m_equiv:.2f} m)"
+            if self.unit == DistanceUnits.AU:
+                km_equiv = self.in_unit(DistanceUnits.KILOMETRE)
+                return f"{self.value:.6f} {self.unit} ({km_equiv:.2} km)"
+            else:
+                m_equiv = self.in_unit(DistanceUnits.METRE)
+                return f"{self.value:.2f} {self.unit} ({m_equiv:.2f} m)"
 
 
 # === Data Classes ===
@@ -491,7 +495,7 @@ class SunInfo:
                 f"\tSunset:\t\t\t{self.sunset.strftime("%X %d-%m-%Y")}\n"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tApp. Azimuth:\t\t{self.true_azimuth}\n"
-                f"\tDistance:\t\t{self.geocentric_distance.in_unit(DistanceUnits.KILOMETRE)}\n"
+                f"\tDistance:\t\t{self.geocentric_distance}\n"
                 f"\tApp. Declination:\t{self.apparent_declination}\n"
                 f"\tApp. Right Ascension:\t{self.apparent_right_ascension}\n"
                 f"\tGreenwich Hour Angle:\t{self.greenwich_hour_angle}\n"
@@ -538,7 +542,7 @@ class MoonInfo:
                 f"\tIllumination:\t\t{self.illumination * 100:.2f}%"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tAzimuth:\t\t{self.true_azimuth}\n"
-                f"\tDistance:\t\t{self.geocentric_distance.in_unit(DistanceUnits.KILOMETRE)}\n"
+                f"\tDistance:\t\t{self.geocentric_distance}\n"
                 f"\tParallax:\t\t{self.parallax}\n"
                 f"\tTop. Declination:\t{self.topocentric_declination}\n"
                 f"\tTop. Right Ascension:\t{self.topocentric_right_ascension}\n"

@@ -1,10 +1,7 @@
 #define PY_SSIZE_T_CLEAN
-#include <Python.h>
 #include <math.h>
 #include <string.h>
-#include "astro_core.h"
-#include "_time_equations.h"
-#include "_calculation_equations.h"
+#include "c_sun_equations.h"
 
 /* ================================
    Definitions & Helper Constants
@@ -170,41 +167,6 @@ static const double OBLIQUITY_TERMS[] = {
     5.79,
     2.45
 };
-
-
-/* ================================
-   SunResult Structure
-   ================================ */
-
-typedef struct {
-    double t;
-    double mean_longitude;
-    double mean_anomaly;
-    double earth_orbit_eccentricity;
-    double sun_centre;
-    double true_longitude;
-    double true_anomaly;
-    double geocentric_distance;
-    double omega;
-    double apparent_longitude;
-    double nutation_longitude;
-    double nutation_obliquity;
-    double mean_obliquity;
-    double true_obliquity;
-    double true_right_ascension;
-    double true_declination;
-    double apparent_right_ascension;
-    double apparent_declination;
-    double greenwich_hour_angle;
-    double local_hour_angle;
-    double eh_parallax;
-    double topocentric_ascension;
-    double topocentric_declination;
-    double topocentric_local_hour_angle;
-    double true_altitude;
-    double true_azimuth;
-    double apparent_altitude;
-} SunResult;
 
 
 /* ================================
@@ -399,6 +361,7 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     result->apparent_altitude = result->true_altitude ;//+ refraction_factor / 60;
 }
 
+
 /* ================================
    Python Wrapper Functions
    ================================ */
@@ -424,14 +387,6 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
     compute_sun_result(jde, deltaT, latitude, longitude, elevation, temperature, pressure, &result);
 
     PyObject* sun = PyObject_CallFunctionObjArgs((PyObject *)SunType,
-        // FLOAT(jde),
-        // FLOAT(deltaT),
-        // ANGLE(latitude),
-        // ANGLE(longitude),
-        // DIST(elevation, UNIT("METRE")),
-        // FLOAT(temperature),
-        // FLOAT(pressure),
-        // FLOAT(result.t),
         ANGLE(result.mean_longitude),
         ANGLE(result.mean_anomaly),
         FLOAT(result.earth_orbit_eccentricity),
@@ -464,33 +419,220 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
     return sun;
 }
 
-// Stub for find_sun_transit: 
-// For demonstration, this dummy implementation returns jd + 0.5 days.
-PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
-    double jd, deltaT, longitude;
-    if (!PyArg_ParseTuple(args, "ddd", &jd, &deltaT, &longitude))
-        return NULL;
+/* ================================
+   Sun Transit/Culmination calculations
+   ================================ */
+
+int find_sun_transit(datetime date, double utc_offset, double local_latitude, double local_longitude,
+                    double elevation, double temperature, double pressure, datetime* sun_event) {
+
+    double lat_rad = local_latitude * M_PI / 180;
+    double lon_rad = local_longitude * M_PI / 180;
+    double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
+    double new_deltaT = delta_t_approx(date.year, date.month);
+
+    SunResult sun_params[3];
+    for (int i = 0; i < 3; i++) {
+        datetime temp_date;
+        jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
+        double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
+        double t_jde = (new_jd + i - 1) + t_deltaT / 86400;
+        compute_sun_result(t_jde, t_deltaT, 
+            local_latitude, local_longitude, elevation, temperature, pressure, 
+            &sun_params[i]
+        );
+    }
     
-    double transit_jd = jd + 0.5;  // Dummy calculation
-    return PyFloat_FromDouble(transit_jd);
+    double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
+    
+    for (int i = 0; i < 3; i++) {
+        double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m0);
+        double n_event = m0 + new_deltaT / 86400;
+        double interp_ra_event_deg = angle_interpolation(n_event,
+                                    sun_params[0].apparent_right_ascension,
+                                    sun_params[1].apparent_right_ascension,
+                                    sun_params[2].apparent_right_ascension);
+
+        double lha_event_deg = normalize_angle(theta_event_deg - (-local_longitude) - interp_ra_event_deg);
+        m0 -= lha_event_deg / 360;
+    }
+
+    // Clip to [0, 1]
+    m0 = fmod(m0, 1) + 1;
+
+    // Construct transit datetime
+    sun_event->year = date.year;
+    sun_event->month = date.month;
+    sun_event->day = date.day;
+    sun_event->hour = 0; sun_event->minute = 0; sun_event->second = 0; sun_event->microsecond = 0; 
+    *sun_event = add_days(*sun_event, m0);
+
+    return 0;
 }
 
-// Stub for find_proper_suntime:
-// For demonstration, returns jd + 0.25 for sunrise and jd + 0.75 for sunset.
-PyObject* py_find_proper_suntime(PyObject* self, PyObject* args) {
-    double jd, deltaT, latitude, longitude;
-    const char* event;
-    if (!PyArg_ParseTuple(args, "dddds", &jd, &deltaT, &latitude, &longitude, &event))
+PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
+    double jd, deltaT, latitude, longitude, elevation, temperature, pressure, utc_offset;
+    if (!PyArg_ParseTuple(args, "dddddddd", &jd, &deltaT, &latitude, &longitude, &elevation, &temperature, &pressure, &utc_offset))
         return NULL;
     
-    double suntime = 0.0;
-    if (strcmp(event, "rise") == 0 || strcmp(event, "sunrise") == 0) {
-        suntime = jd + 0.25;
-    } else if (strcmp(event, "set") == 0 || strcmp(event, "sunset") == 0) {
-        suntime = jd + 0.75;
-    } else {
-        PyErr_SetString(PyExc_ValueError, "Invalid event");
+    datetime reference_dt;
+    jd_to_gregorian(jd, utc_offset, &reference_dt);
+    datetime transit_dt;
+    int status = find_sun_transit(reference_dt, utc_offset, latitude, longitude,
+                                    elevation, temperature, pressure, &transit_dt);
+
+    if (status == 0)
+        return datetime_to_pydatetime(transit_dt);
+    else
         return NULL;
+}
+
+/* ================================
+   Sunrise and Sunset calculations
+   ================================ */
+
+int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, double local_longitude,
+                        double elevation, double temperature, double pressure, char event_type, double angle_deg, datetime* sun_event) {
+    
+    double lat_rad = local_latitude * M_PI / 180;
+    double lon_rad = local_longitude * M_PI / 180;
+    double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
+    double new_deltaT = delta_t_approx(date.year, date.month);
+
+    SunResult sun_params[3];
+    for (int i = 0; i < 3; i++) {
+        datetime temp_date;
+        jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
+        double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
+        double t_jde = (new_jd + i - 1) + t_deltaT / 86400;
+        compute_sun_result(t_jde, t_deltaT, 
+            local_latitude, local_longitude, elevation, temperature, pressure, 
+            &sun_params[i]
+        );
     }
-    return PyFloat_FromDouble(suntime);
+
+    double h_zero_rad = -angle_deg * M_PI / 180;
+    double cosH_zero = (sin(h_zero_rad) - sin(lat_rad) * sin(sun_params[1].apparent_declination * M_PI / 180)) / \
+                        (cos(lat_rad) * cos(sun_params[1].apparent_declination * M_PI / 180));
+
+    double H_zero_rad, H_zero_deg;
+    if (cosH_zero < 1.0 && cosH_zero > -1.0) {
+        H_zero_rad = acos(cosH_zero);
+        H_zero_deg = H_zero_rad * 180 / M_PI;
+    }
+    else
+        return -1;
+    
+    double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
+
+    double m_event;
+    if (event_type == 'r')
+        m_event = m0 - H_zero_deg / 360;
+    else if (event_type == 's')
+        m_event = m0 + H_zero_deg / 360;
+    else
+        return -2;
+    
+    for (int i = 0; i < 3; i++) {
+        double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m_event);
+        double n_event = m_event + new_deltaT / 86400;
+        double interp_dec_event_rad = angle_interpolation(n_event,
+                                    sun_params[0].apparent_declination,
+                                    sun_params[1].apparent_declination,
+                                    sun_params[2].apparent_declination) * M_PI / 180;
+        double interp_ra_event_deg = angle_interpolation(n_event,
+                                    sun_params[0].apparent_right_ascension,
+                                    sun_params[1].apparent_right_ascension,
+                                    sun_params[2].apparent_right_ascension);
+
+        double lha_event_rad = normalize_angle(theta_event_deg - (-local_longitude) - interp_ra_event_deg) * M_PI / 180;
+        double sun_alt_deg = asin(sin(lat_rad) * sin(interp_dec_event_rad) + 
+                                cos(lat_rad) * cos(interp_dec_event_rad) * cos(lha_event_rad)) * 180 / M_PI;
+
+        double deltaM = (sun_alt_deg - h_zero_rad * 180 / M_PI) / (360 * cos(interp_dec_event_rad) * cos(lat_rad) * sin(lha_event_rad));
+        m_event += deltaM;
+    }
+
+    sun_event->year = date.year;
+    sun_event->month = date.month;
+    sun_event->day = date.day;
+    sun_event->hour = 0; sun_event->minute = 0; sun_event->second = 0; sun_event->microsecond = 0; 
+    *sun_event = add_days(*sun_event, m_event);
+
+    return 0;
+}
+
+
+/* Python Wrapper */
+PyObject* py_find_proper_suntime(PyObject* self, PyObject* args) {
+    double jd, deltaT, latitude, longitude, elevation, temperature, pressure, utc_offset, angle_deg;
+    char event;
+    if (!PyArg_ParseTuple(args, "dddddddddC", &jd, &deltaT, &latitude, &longitude, &elevation, &temperature, &pressure, &utc_offset, &angle_deg, &event))
+        return NULL;
+    
+    // Get gregorian datetime from JD
+    datetime reference_dt;
+    jd_to_gregorian(jd, utc_offset, &reference_dt);
+
+    // printf("reference_dt: %d, %d, %d, %d, %d, %d, %d\n", 
+        // reference_dt.year, reference_dt.month, reference_dt.day, 
+        // reference_dt.hour, reference_dt.minute, reference_dt.second, reference_dt.microsecond);
+
+    // Calculate UTC Offset estimate if not given
+    double temp_utc_offset = 0.0;
+    if (utc_offset == 0)
+        temp_utc_offset = floor(longitude / 15) - 1;
+
+    // printf("temp_utc_offset: %f\n", temp_utc_offset);
+    
+
+    // Set the reference day of year
+    int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
+    // printf("reference_doy: %d\n", reference_doy);
+
+    int status = 0;
+    int i = 0;
+    while(1) {
+        // printf("status & i: %d, %d\n", status, i);
+        // Shift reference datetime
+        datetime new_datetime;
+        new_datetime = add_days(reference_dt, i);
+        // printf("new_datetime: %d, %d, %d, %d, %d, %d, %d\n", 
+            // new_datetime.year, new_datetime.month, new_datetime.day, 
+            // new_datetime.hour, new_datetime.minute, new_datetime.second, new_datetime.microsecond);
+
+        // Set temp_suntime by sending in the shifted reference datetime
+        datetime temp_suntime;
+        status = sunrise_or_sunset(new_datetime, temp_utc_offset, latitude, longitude, elevation, 
+                                temperature, pressure, 
+                                event, angle_deg, &temp_suntime
+        );
+        // printf("status: %d\n", status);
+        // printf("temp_suntime: %d, %d, %d, %d, %d, %d, %d\n", 
+            // temp_suntime.year, temp_suntime.month, temp_suntime.day, 
+            // temp_suntime.hour, temp_suntime.minute, temp_suntime.second, temp_suntime.microsecond);
+
+        if (status != 0)
+            return NULL;
+
+        datetime temp_suntime_with_estimate_offset = add_days(temp_suntime, (double)i + temp_utc_offset / 24.0);
+        // printf("temp_suntime_with_estimate_offset: %d, %d, %d, %d, %d, %d, %d\n", 
+            // temp_suntime_with_estimate_offset.year, temp_suntime_with_estimate_offset.month, temp_suntime_with_estimate_offset.day, 
+            // temp_suntime_with_estimate_offset.hour, temp_suntime_with_estimate_offset.minute, temp_suntime_with_estimate_offset.second, temp_suntime_with_estimate_offset.microsecond);
+        
+
+        int temp_suntime_doy = day_of_year(temp_suntime_with_estimate_offset.year, 
+                                temp_suntime_with_estimate_offset.month, temp_suntime_with_estimate_offset.day);
+        // printf("temp_suntime_doy: %d\n", temp_suntime_doy);
+
+        if ((temp_suntime_doy < reference_doy && temp_suntime.year == reference_dt.year) || 
+                                (temp_suntime_with_estimate_offset.year < reference_dt.year)) {
+            i++;
+        }
+        else {
+            return datetime_to_pydatetime(temp_suntime);
+        }
+    }
 }

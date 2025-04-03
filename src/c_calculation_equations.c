@@ -21,15 +21,39 @@ double normalize_angle(double angle_deg) {
     return res;
 }
 
+/* ================================
+   Properly interpret angles
+   ================================ */
+
+double angle_diff(double ang1_deg, double ang2_deg) {
+    double diff = normalize_angle(ang2_deg - ang1_deg);
+    if (diff > 180.0)
+        diff -= 360.0;
+    
+    return diff;
+}
+
+double angle_interpolation(double n, double ang1_deg, double ang2_deg, double ang3_deg) {
+    double a = angle_diff(ang1_deg, ang2_deg);
+    double b = angle_diff(ang2_deg, ang3_deg);
+
+    double c = b - a;
+
+    double val = ang2_deg + n / 2 * (a + b + n * c);
+
+    return normalize_angle(val + 360);
+}
+
+
 /*  ================================
-    correct_ra_dec
+    correct_ra_dec (turn ra/dec into topocentric counterparts)
     ================================ */
 
 void correct_ra_dec(double* ra_deg, double* dec_deg, double lha_deg, double parallax_deg, double lat_deg, double elev_km, double dist_km) {
     // Correct the Moon's Right Ascension and Declination for apparent position. See Chapter 40 of *Astronomical Algorthims* for more information.
     double a = dist_km;
     double b = a * (1 - EARTH_FLATTENING_FACTOR);
-    
+
     double ra_rad = *ra_deg * M_PI / 180;
     double dec_rad = *dec_deg * M_PI / 180;
     double lha_rad = lha_deg * M_PI / 180;
