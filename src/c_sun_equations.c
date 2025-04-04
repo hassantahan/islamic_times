@@ -251,15 +251,16 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     // Mean anomaly
     double mean_anom = normalize_angle(357.52911 + 359990.50340 * t - 0.001603 * t2 - t3 / 30000.0);
     result->mean_anomaly = mean_anom;
+    double mean_anom_rad = RADIANS(mean_anom);
     
     // Eccentricity of Earth's orbit
     double ecc = 0.016708634 - 0.00042037 * t - 0.000001267 * t2;
     result->earth_orbit_eccentricity = ecc;
     
     // Sun centre (the equation of the centre)
-    double sun_center_val = (1.914602 - 0.04817 * t - 0.000014 * t2) * sin(mean_anom * M_PI / 180.0) +
-                            (0.019993 - 0.000101 * t) * sin(2 * mean_anom * M_PI / 180.0) +
-                            0.000289 * sin(3 * mean_anom * M_PI / 180.0);
+    double sun_center_val = (1.914602 -  0.04817 * t - 0.000014 * t2) * sin(1 * mean_anom_rad) +
+                            (0.019993 - 0.000101 * t)                 * sin(2 * mean_anom_rad) +
+                             0.000289                                 * sin(3 * mean_anom_rad);
     result->sun_centre = sun_center_val;
     
     // True longitude and anomaly
@@ -269,7 +270,7 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     result->true_anomaly = true_anom;
 
     // Geocentric distance (in AU)
-    double geo_dist = (1.000001018 * (1 - ecc * ecc)) / (1 + ecc * cos(true_anom * M_PI / 180.0));
+    double geo_dist = (1.000001018 * (1 - ecc * ecc)) / (1 + ecc * cos(RADIANS(true_anom)));
     result->geocentric_distance = geo_dist;
 
     // Nutation and Obliquity
@@ -287,9 +288,10 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     // Compute omega
     double omega = 125.04452 - 19341.36261 * t + 0.020708 * t2 + t3 / 45000.0;
     result->omega = omega;
+    double omega_rad = RADIANS(omega);
     
     // Apparent longitude
-    double app_long = true_long - 0.00569 - 0.00478 * sin(omega * M_PI / 180.0);
+    double app_long = true_long - 0.00569 - 0.00478 * sin(omega_rad);
     result->apparent_longitude = app_long;
     
 
@@ -300,7 +302,7 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     result->true_declination = dec;
     
     // Apparent Equitorial Coordinates
-    double epsilon_corr = result->true_obliquity + 0.00256 * cos(omega * M_PI / 180.0); // obliquity correction
+    double epsilon_corr = result->true_obliquity + 0.00256 * cos(omega_rad); // obliquity correction
     double app_ra, app_dec;
     compute_equitorial_coordinates(app_long, epsilon_corr, 0, &app_ra, &app_dec);
 
@@ -408,8 +410,8 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
 int find_sun_transit(datetime date, double utc_offset, double local_latitude, double local_longitude,
                     double elevation, double temperature, double pressure, datetime* sun_event) {
 
-    double lat_rad = local_latitude * M_PI / 180;
-    double lon_rad = local_longitude * M_PI / 180;
+    double lat_rad = RADIANS(local_latitude);
+    double lon_rad = RADIANS(local_longitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
     double new_deltaT = delta_t_approx(date.year, date.month);
 
@@ -477,8 +479,8 @@ PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
 int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure, char event_type, double angle_deg, datetime* sun_event) {
     
-    double lat_rad = local_latitude * M_PI / 180;
-    double lon_rad = local_longitude * M_PI / 180;
+    double lat_rad = RADIANS(local_latitude);
+    double lon_rad = RADIANS(local_longitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
     double new_deltaT = delta_t_approx(date.year, date.month);
 
@@ -494,9 +496,9 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
         );
     }
 
-    double h_zero_rad = -angle_deg * M_PI / 180;
-    double cosH_zero = (sin(h_zero_rad) - sin(lat_rad) * sin(sun_params[1].apparent_declination * M_PI / 180)) / \
-                        (cos(lat_rad) * cos(sun_params[1].apparent_declination * M_PI / 180));
+    double h_zero_rad = RADIANS(-angle_deg);
+    double cosH_zero = (sin(h_zero_rad) - sin(lat_rad) * sin(RADIANS(sun_params[1].apparent_declination))) / \
+                        (cos(lat_rad) * cos(RADIANS(sun_params[1].apparent_declination)));
 
     double H_zero_rad, H_zero_deg;
     if (cosH_zero < 1.0 && cosH_zero > -1.0) {

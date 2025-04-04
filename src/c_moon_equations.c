@@ -427,11 +427,12 @@ MoonNutationResult moon_nutation(double jde) {
         double temp_lr = d * fundamental_arguments[0] + m * fundamental_arguments[1] +
                          mp * fundamental_arguments[2] + f * fundamental_arguments[3];
         temp_lr = normalize_angle(temp_lr);
+        double temp_lr_rad = RADIANS(temp_lr);
 
         double eccentricity_comp = (m == 0) ? 1.0 : pow(eccentricity, abs(m));
 
-        sum_l += eccentricity_comp * __MOON_NUTATION_COEFF_LR[i * 2] * sin(temp_lr * M_PI / 180.0);
-        sum_r += eccentricity_comp * __MOON_NUTATION_COEFF_LR[i * 2 + 1] * cos(temp_lr * M_PI / 180.0);
+        sum_l += eccentricity_comp * __MOON_NUTATION_COEFF_LR[i * 2] * sin(temp_lr_rad);
+        sum_r += eccentricity_comp * __MOON_NUTATION_COEFF_LR[i * 2 + 1] * cos(temp_lr_rad);
     }
 
     for (int i = 0; i < sizeof(__MOON_NUTATION_ARGUMENTS_B) / (4 * sizeof(int)); i++) {
@@ -446,19 +447,19 @@ MoonNutationResult moon_nutation(double jde) {
 
         double eccentricity_comp = (m == 0) ? 1.0 : pow(eccentricity, abs(m));
 
-        sum_b += eccentricity_comp * __MOON_NUTATION_COEFF_B[i] * sin(temp_b * M_PI / 180.0);
+        sum_b += eccentricity_comp * __MOON_NUTATION_COEFF_B[i] * sin(RADIANS(temp_b));
     }
 
-    sum_l += 3958 * sin(a[0] * M_PI / 180.0) +
-             1962 * sin((fundamental_arguments[4] - fundamental_arguments[3]) * M_PI / 180.0) +
-              318 * sin(a[1] * M_PI / 180.0);
+    sum_l += 3958 * sin(RADIANS(a[0])) +
+             1962 * sin(RADIANS(fundamental_arguments[4] - fundamental_arguments[3])) +
+              318 * sin(RADIANS(a[1]));
 
-    sum_b += -2235 * sin(fundamental_arguments[4] * M_PI / 180.0) +
-               382 * sin(a[2] * M_PI / 180.0) +
-               175 * sin((a[0] - fundamental_arguments[3]) * M_PI / 180.0) +
-               175 * sin((a[0] + fundamental_arguments[3]) * M_PI / 180.0) +
-               127 * sin((fundamental_arguments[4] - fundamental_arguments[2]) * M_PI / 180.0) -
-               115 * sin((fundamental_arguments[4] + fundamental_arguments[2]) * M_PI / 180.0);
+    sum_b += -2235 * sin(RADIANS(fundamental_arguments[4])) +
+               382 * sin(RADIANS(a[2])) +
+               175 * sin(RADIANS(a[0] - fundamental_arguments[3])) +
+               175 * sin(RADIANS(a[0] + fundamental_arguments[3])) +
+               127 * sin(RADIANS(fundamental_arguments[4] - fundamental_arguments[2])) -
+               115 * sin(RADIANS(fundamental_arguments[4] + fundamental_arguments[2]));
 
     MoonNutationResult result;
     for (int i = 0; i < 5; i++) {
