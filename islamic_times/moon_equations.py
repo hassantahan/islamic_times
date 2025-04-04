@@ -398,129 +398,159 @@ __A_COEFFS = [
 	0.000035,	0.000023
 ]
 
-# TODO: Move to Angle, Distance, etc.
 @dataclass(frozen=True, slots=True)
 class Moon:
 	"""
 	A class to compute the position of the Moon in the sky based on given astronomical parameters.
     """
 
-	jde: float
-	deltaT: float
-	local_latitude: Angle
-	local_longitude: Angle
-	elevation: Distance
+	# Orbital elements
+	true_longitude: Angle
+	true_latitude: Angle
+	geocentric_distance: Distance
+
+	# Nutation and obliquity
+	lunar_nutation: Tuple[List[float], float, float, float]
+	omega: Angle
+	apparent_longitude: Angle
 	deltaPsi: Angle
-	ecliptic: Angle
+	true_obliquity: Angle
 
-	lunar_nutation: Tuple = field(init=False)
-	true_longitude: Angle = field(init=False)
-	true_latitude: Angle = field(init=False)
-	geocentric_distance: Distance = field(init=False)
-	apparent_longitude: Angle = field(init=False)
-	right_ascension: RightAscension = field(init=False)
-	declination: Angle = field(init=False)
-	eh_parallax: Angle = field(init=False)
-	greenwich_hour_angle: Angle = field(init=False)
-	local_hour_angle: Angle = field(init=False)
-	topocentric_ascension: RightAscension = field(init=False)
-	top_declination: Angle = field(init=False)
-	top_local_hour_angle: Angle = field(init=False)
-	true_altitude: Angle = field(init=False)
-	true_azimuth: Angle = field(init=False)
-	apparent_altitude: Angle = field(init=False)
+	# Apparent coordinates
+	right_ascension: RightAscension
+	declination: Angle
 
-	def __post_init__(self):
-		self._compute_nutation()
-		self._compute_position()
-		self._compute_equatorial()
-		self._compute_local_hour_angle()
-		self._compute_topocentric()
-		self._compute_horizontal_coordinates()
+	# Hour angles
+	greenwich_hour_angle: Angle
+	local_hour_angle: Angle
 
-	def _compute_nutation(self):
-		object.__setattr__(self, 'lunar_nutation', moon_nutation(self.jde))
+	# Topocentric quantities
+	eh_parallax: Angle
+	topocentric_ascension: RightAscension
+	top_declination: Angle
+	topocentric_local_hour_angle: Angle
 
-	def _compute_position(self):
-		lon = self.lunar_nutation[0][4] + self.lunar_nutation[1] / 1e6
-		lat = self.lunar_nutation[2] / 1e6
-		dist = 385000.56 + self.lunar_nutation[3] / 1e3
+	# Horizontal coordinates
+	true_altitude: Angle
+	true_azimuth: Angle
+	apparent_altitude: Angle
 
-		object.__setattr__(self, 'true_longitude', Angle(lon))
-		object.__setattr__(self, 'true_latitude', Angle(lat))
-		object.__setattr__(self, 'geocentric_distance', Distance(dist, DistanceUnits.KILOMETRE))
-		object.__setattr__(self, 'apparent_longitude', Angle(lon + self.deltaPsi.decimal))
+	# jde: float
+	# deltaT: float
+	# local_latitude: Angle
+	# local_longitude: Angle
+	# elevation: Distance
+	# deltaPsi: Angle
+	# ecliptic: Angle
 
-	def _compute_equatorial(self):
-		ra = math.atan2(
-			math.sin(math.radians(self.apparent_longitude.decimal)) * math.cos(self.ecliptic.radians) -
-			math.tan(math.radians(self.true_latitude.decimal)) * math.sin(self.ecliptic.radians),
-			math.cos(math.radians(self.apparent_longitude.decimal))
-		)
+	# lunar_nutation: Tuple = field(init=False)
+	# true_longitude: Angle = field(init=False)
+	# true_latitude: Angle = field(init=False)
+	# geocentric_distance: Distance = field(init=False)
+	# apparent_longitude: Angle = field(init=False)
+	# right_ascension: RightAscension = field(init=False)
+	# declination: Angle = field(init=False)
+	# eh_parallax: Angle = field(init=False)
+	# greenwich_hour_angle: Angle = field(init=False)
+	# local_hour_angle: Angle = field(init=False)
+	# topocentric_ascension: RightAscension = field(init=False)
+	# top_declination: Angle = field(init=False)
+	# top_local_hour_angle: Angle = field(init=False)
+	# true_altitude: Angle = field(init=False)
+	# true_azimuth: Angle = field(init=False)
+	# apparent_altitude: Angle = field(init=False)
 
-		dec = math.asin(
-			math.sin(math.radians(self.true_latitude.decimal)) * math.cos(self.ecliptic.radians) +
-			math.cos(math.radians(self.true_latitude.decimal)) * math.sin(self.ecliptic.radians) *
-			math.sin(math.radians(self.apparent_longitude.decimal))
-		)
+	# def __post_init__(self):
+	# 	self._compute_nutation()
+	# 	self._compute_position()
+	# 	self._compute_equatorial()
+	# 	self._compute_local_hour_angle()
+	# 	self._compute_topocentric()
+	# 	self._compute_horizontal_coordinates()
 
-		parallax = math.degrees(math.asin(
-			math.sin(math.radians(8.794 / 3600)) / (self.geocentric_distance.in_unit(DistanceUnits.AU))
-		))
+	# def _compute_nutation(self):
+	# 	object.__setattr__(self, 'lunar_nutation', moon_nutation(self.jde))
 
-		object.__setattr__(self, 'right_ascension', RightAscension(math.degrees(ra) % 360 / 15))
-		object.__setattr__(self, 'declination', Angle(math.degrees(dec)))
-		object.__setattr__(self, 'eh_parallax', Angle(parallax))
+	# def _compute_position(self):
+	# 	lon = self.lunar_nutation[0][4] + self.lunar_nutation[1] / 1e6
+	# 	lat = self.lunar_nutation[2] / 1e6
+	# 	dist = 385000.56 + self.lunar_nutation[3] / 1e3
 
-	def _compute_local_hour_angle(self):
-		gst = te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400).decimal
-		arcsec = self.deltaPsi.dms[2]  # arcseconds directly from DMS
-		st_corr = arcsec * math.cos(self.ecliptic.radians) / 15
-		app_gst = gst + (st_corr / 3600)
-		lha = (app_gst + self.local_longitude.decimal - self.right_ascension.decimal_degrees.decimal) % 360
+	# 	object.__setattr__(self, 'true_longitude', Angle(lon))
+	# 	object.__setattr__(self, 'true_latitude', Angle(lat))
+	# 	object.__setattr__(self, 'geocentric_distance', Distance(dist, DistanceUnits.KILOMETRE))
+	# 	object.__setattr__(self, 'apparent_longitude', Angle(lon + self.deltaPsi.decimal))
 
-		object.__setattr__(self, 'greenwich_hour_angle', Angle(app_gst))
-		object.__setattr__(self, 'local_hour_angle', Angle(lha))
+	# def _compute_equatorial(self):
+	# 	ra = math.atan2(
+	# 		math.sin(math.radians(self.apparent_longitude.decimal)) * math.cos(self.ecliptic.radians) -
+	# 		math.tan(math.radians(self.true_latitude.decimal)) * math.sin(self.ecliptic.radians),
+	# 		math.cos(math.radians(self.apparent_longitude.decimal))
+	# 	)
 
-	def _compute_topocentric(self):
-		top_ra, top_dec = ce.correct_ra_dec(
-			self.right_ascension,
-			self.declination,
-			self.local_hour_angle,
-			self.eh_parallax,
-			self.local_latitude,
-			self.elevation
-		)
+	# 	dec = math.asin(
+	# 		math.sin(math.radians(self.true_latitude.decimal)) * math.cos(self.ecliptic.radians) +
+	# 		math.cos(math.radians(self.true_latitude.decimal)) * math.sin(self.ecliptic.radians) *
+	# 		math.sin(math.radians(self.apparent_longitude.decimal))
+	# 	)
 
-		top_lha = (te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400).decimal +
-					self.local_longitude.decimal - top_ra.decimal_degrees.decimal) % 360
+	# 	parallax = math.degrees(math.asin(
+	# 		math.sin(math.radians(8.794 / 3600)) / (self.geocentric_distance.in_unit(DistanceUnits.AU))
+	# 	))
 
-		object.__setattr__(self, 'topocentric_ascension', top_ra)
-		object.__setattr__(self, 'top_declination', top_dec)
-		object.__setattr__(self, 'top_local_hour_angle', Angle(top_lha))
+	# 	object.__setattr__(self, 'right_ascension', RightAscension(math.degrees(ra) % 360 / 15))
+	# 	object.__setattr__(self, 'declination', Angle(math.degrees(dec)))
+	# 	object.__setattr__(self, 'eh_parallax', Angle(parallax))
 
-	def _compute_horizontal_coordinates(self):
-		alt = math.asin(
-			math.sin(self.local_latitude.radians) * math.sin(self.top_declination.radians) +
-			math.cos(self.local_latitude.radians) * math.cos(self.top_declination.radians) *
-			math.cos(self.top_local_hour_angle.radians)
-		)
+	# def _compute_local_hour_angle(self):
+	# 	gst = te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400).decimal
+	# 	arcsec = self.deltaPsi.dms[2]  # arcseconds directly from DMS
+	# 	st_corr = arcsec * math.cos(self.ecliptic.radians) / 15
+	# 	app_gst = gst + (st_corr / 3600)
+	# 	lha = (app_gst + self.local_longitude.decimal - self.right_ascension.decimal_degrees.decimal) % 360
 
-		az = math.atan2(
-			-math.cos(self.top_declination.radians) * math.sin(self.top_local_hour_angle.radians),
-			math.sin(self.top_declination.radians) * math.cos(self.local_latitude.radians) -
-			math.cos(self.top_declination.radians) * math.sin(self.local_latitude.radians) *
-			math.cos(self.top_local_hour_angle.radians)
-		)
+	# 	object.__setattr__(self, 'greenwich_hour_angle', Angle(app_gst))
+	# 	object.__setattr__(self, 'local_hour_angle', Angle(lha))
 
-		alt_deg = math.degrees(alt)
-		az_deg = math.degrees(az) % 360
+	# def _compute_topocentric(self):
+	# 	top_ra, top_dec = ce.correct_ra_dec(
+	# 		self.right_ascension,
+	# 		self.declination,
+	# 		self.local_hour_angle,
+	# 		self.eh_parallax,
+	# 		self.local_latitude,
+	# 		self.elevation
+	# 	)
 
-		refraction = 1.02 / math.tan(math.radians(alt_deg + 10.3 / (alt_deg + 5.11))) + 0.0019279 - 0.000034 * self.elevation.value
+	# 	top_lha = (te.greenwich_mean_sidereal_time(self.jde - self.deltaT / 86400).decimal +
+	# 				self.local_longitude.decimal - top_ra.decimal_degrees.decimal) % 360
 
-		object.__setattr__(self, 'true_altitude', Angle(alt_deg))
-		object.__setattr__(self, 'true_azimuth', Angle(az_deg))
-		object.__setattr__(self, 'apparent_altitude', Angle(alt_deg + refraction / 60))
+	# 	object.__setattr__(self, 'topocentric_ascension', top_ra)
+	# 	object.__setattr__(self, 'top_declination', top_dec)
+	# 	object.__setattr__(self, 'top_local_hour_angle', Angle(top_lha))
+
+	# def _compute_horizontal_coordinates(self):
+	# 	alt = math.asin(
+	# 		math.sin(self.local_latitude.radians) * math.sin(self.top_declination.radians) +
+	# 		math.cos(self.local_latitude.radians) * math.cos(self.top_declination.radians) *
+	# 		math.cos(self.top_local_hour_angle.radians)
+	# 	)
+
+	# 	az = math.atan2(
+	# 		-math.cos(self.top_declination.radians) * math.sin(self.top_local_hour_angle.radians),
+	# 		math.sin(self.top_declination.radians) * math.cos(self.local_latitude.radians) -
+	# 		math.cos(self.top_declination.radians) * math.sin(self.local_latitude.radians) *
+	# 		math.cos(self.top_local_hour_angle.radians)
+	# 	)
+
+	# 	alt_deg = math.degrees(alt)
+	# 	az_deg = math.degrees(az) % 360
+
+	# 	refraction = 1.02 / math.tan(math.radians(alt_deg + 10.3 / (alt_deg + 5.11))) + 0.0019279 - 0.000034 * self.elevation.value
+
+	# 	object.__setattr__(self, 'true_altitude', Angle(alt_deg))
+	# 	object.__setattr__(self, 'true_azimuth', Angle(az_deg))
+	# 	object.__setattr__(self, 'apparent_altitude', Angle(alt_deg + refraction / 60))
 
 # Chapter 47
 def moon_nutation(jde: float) -> Tuple[float, float, float]:
@@ -606,15 +636,22 @@ def moonpos(observer_date: DateTimeInfo, observer: ObserverInfo, deltaPsi: Angle
 		- The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is enabled.
 	"""
 
-	the_moon = Moon(
-		jde=observer_date.jde,
-		deltaT=observer_date.deltaT,
-		local_latitude=observer.latitude,
-		local_longitude=observer.longitude,
-		elevation=observer.elevation,
-		deltaPsi=deltaPsi,
-		ecliptic=ecliptic
-	)
+	# the_moon = Moon(
+	# 	jde=observer_date.jde,
+	# 	deltaT=observer_date.deltaT,
+	# 	local_latitude=observer.latitude,
+	# 	local_longitude=observer.longitude,
+	# 	elevation=observer.elevation,
+	# 	deltaPsi=deltaPsi,
+	# 	ecliptic=ecliptic
+	# )
+
+	# print(the_moon)
+	import islamic_times.astro_core as fast_astro
+	the_moon: Moon = fast_astro.compute_moon(observer_date.jde, observer_date.deltaT, 
+						 observer.latitude.decimal, observer.longitude.decimal, 
+						 observer.elevation.in_unit(DistanceUnits.METRE), 0, 0, 
+						 deltaPsi.decimal, ecliptic.decimal)
 
 	return the_moon
 

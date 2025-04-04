@@ -259,8 +259,11 @@ class Sun:
     # def _compute_apparent_coordinates(self):
     #     ra = math.atan2(math.cos(self.mean_obliquity.radians) * math.sin(self.true_longitude.radians), math.cos(self.true_longitude.radians))
     #     dec = math.asin(math.sin(self.mean_obliquity.radians) * math.sin(self.true_longitude.radians))
-    #     app_ra = math.atan2(math.cos(self.true_obliquity.radians + math.radians(0.00256 * math.cos(self.omega.radians))) * math.sin(self.apparent_longitude.radians), math.cos(self.apparent_longitude.radians))
-    #     app_dec = math.asin(math.sin(self.true_obliquity.radians + math.radians(0.00256 * math.cos(self.omega.radians))) * math.sin(self.apparent_longitude.radians))
+    #     app_ra = math.atan2(
+    #                   math.cos(self.true_obliquity.radians + math.radians(0.00256 * math.cos(self.omega.radians))) * math.sin(self.apparent_longitude.radians), 
+    #                   math.cos(self.apparent_longitude.radians))
+    #     app_dec = math.asin(
+    #               math.sin(self.true_obliquity.radians + math.radians(0.00256 * math.cos(self.omega.radians))) * math.sin(self.apparent_longitude.radians))
 
     #     object.__setattr__(self, 'true_right_ascension', RightAscension(math.degrees(ra) % 360 / 15))
     #     object.__setattr__(self, 'true_declination', Angle(math.degrees(dec)))
@@ -439,45 +442,45 @@ def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> dat
                                        observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
                                        observer_date.utc_offset)
 
-    # First find the Year Month Day at UT 0h from JDE
-    ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
-    new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
-    new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
+    # # First find the Year Month Day at UT 0h from JDE
+    # ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
+    # new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
+    # new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
 
-    # Calculate new sun params with the new_jd
-    sun_params: List[Sun] = []
-    for i in range(3):
-        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
-        delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-        sun_params.append(
-                        sunpos(
-                            replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), 
-                            observer
-                        )
-                    )
+    # # Calculate new sun params with the new_jd
+    # sun_params: List[Sun] = []
+    # for i in range(3):
+    #     ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
+    #     delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
+    #     sun_params.append(
+    #                     sunpos(
+    #                         replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), 
+    #                         observer
+    #                     )
+    #                 )
 
-    # GMST
-    sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
+    # # GMST
+    # sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
 
-    # Compute m0 and m2 without wrapping
-    # Transit
-    m0: float = (sun_params[1].topocentric_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
+    # # Compute m0 and m2 without wrapping
+    # # Transit
+    # m0: float = (sun_params[1].topocentric_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
 
-    # Minor corrective steps thru iteration
-    for _ in range(3):
-        little_theta_zero: Angle = Angle((sidereal_time.decimal + 360.985647 * m0) % 360)
-        n = m0 + new_deltaT / 86400
-        interpolated_sun_ra = RightAscension(ce.interpolation(n, sun_params[0].topocentric_ascension.decimal_degrees.decimal, 
-                                                sun_params[1].topocentric_ascension.decimal_degrees.decimal, 
-                                                sun_params[2].topocentric_ascension.decimal_degrees.decimal) / 15
-                                            )
+    # # Minor corrective steps thru iteration
+    # for _ in range(3):
+    #     little_theta_zero: Angle = Angle((sidereal_time.decimal + 360.985647 * m0) % 360)
+    #     n = m0 + new_deltaT / 86400
+    #     interpolated_sun_ra = RightAscension(ce.interpolation(n, sun_params[0].topocentric_ascension.decimal_degrees.decimal, 
+    #                                             sun_params[1].topocentric_ascension.decimal_degrees.decimal, 
+    #                                             sun_params[2].topocentric_ascension.decimal_degrees.decimal) / 15
+    #                                         )
 
-        solar_local_hour_angle: Angle = Angle((little_theta_zero.decimal - (-observer.longitude.decimal) - interpolated_sun_ra.decimal_degrees.decimal) % 360)
-        m0 -= solar_local_hour_angle.decimal / 360
+    #     solar_local_hour_angle: Angle = Angle((little_theta_zero.decimal - (-observer.longitude.decimal) - interpolated_sun_ra.decimal_degrees.decimal) % 360)
+    #     m0 -= solar_local_hour_angle.decimal / 360
 
-    # Compute final transit time by adding days to base date
-    m0 %= 1
-    sun_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=observer_date.utc_offset)
+    # # Compute final transit time by adding days to base date
+    # m0 %= 1
+    # sun_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=observer_date.utc_offset)
                                                                                         
     return sun_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 

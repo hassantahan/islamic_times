@@ -2,12 +2,12 @@
 #include <Python.h>
 #include <math.h>
 #include <string.h>
+#include "c_calculation_equations.h"
 
 /* ================================
    Definitions & Helper Constants
    ================================ */
 
-#define M_PI 3.14159265358979
 #define EARTH_FLATTENING_FACTOR 0.003352810665
 
 /*  ================================
@@ -45,20 +45,42 @@ double angle_interpolation(double n, double ang1_deg, double ang2_deg, double an
 }
 
 
+/* ================================
+    Calculation of Geocentric Equitorial Coordinates 
+    from Ecliptic Coordinates
+   ================================ */
+
+void compute_equitorial_coordinates(double apparent_longitude_deg, double true_obliquity_deg, double true_latitude_deg, double* ra_deg, double* dec_deg) {
+    // See Chapter 13 of *Astronomical Algorithms* (pg. 93)
+    double apparent_longitude_rad = RADIANS(apparent_longitude_deg);
+    double true_obliquity_rad = RADIANS(true_obliquity_deg);
+    double true_latitude_rad = RADIANS(true_latitude_deg);
+
+    double ra_rad = atan2(sin(apparent_longitude_rad) * cos(true_obliquity_rad) - tan(true_latitude_rad) * sin(true_obliquity_rad),
+                    cos(apparent_longitude_rad));
+
+    double dec_rad = asin(sin(true_latitude_rad) * cos(true_obliquity_rad) + 
+                        cos(true_latitude_rad) * sin(true_obliquity_rad) * sin(apparent_longitude_rad));
+
+    *ra_deg = DEGREES(ra_rad);
+    *dec_deg = DEGREES(dec_rad);
+}
+
 /*  ================================
-    correct_ra_dec (turn ra/dec into topocentric counterparts)
+    correct_ra_dec 
+    (turn ra/dec into topocentric counterparts)
     ================================ */
 
 void correct_ra_dec(double* ra_deg, double* dec_deg, double lha_deg, double parallax_deg, double lat_deg, double elev_km, double dist_km) {
-    // Correct the Moon's Right Ascension and Declination for apparent position. See Chapter 40 of *Astronomical Algorthims* for more information.
+    // Correct a celestial body's Right Ascension and Declination for apparent position. See Chapter 40 of *Astronomical Algorthims* for more information.
     double a = dist_km;
     double b = a * (1 - EARTH_FLATTENING_FACTOR);
 
-    double ra_rad = *ra_deg * M_PI / 180;
-    double dec_rad = *dec_deg * M_PI / 180;
-    double lha_rad = lha_deg * M_PI / 180;
-    double lat_rad = lat_deg * M_PI / 180;
-    double parallax_rad = parallax_deg * M_PI / 180;
+    double ra_rad = RADIANS(*ra_deg);
+    double dec_rad = RADIANS(*dec_deg);
+    double lha_rad = RADIANS(lha_deg);
+    double lat_rad = RADIANS(lat_deg);
+    double parallax_rad = RADIANS(parallax_deg);
 
     double u_rad = atan2(b / a * tan(lat_rad), 1);
     double p_sin_phi_prime = b / a * sin(u_rad) + elev_km / dist_km * sin(lat_rad);
@@ -66,14 +88,48 @@ void correct_ra_dec(double* ra_deg, double* dec_deg, double lha_deg, double para
 
     double numerator_delA = -1 * p_cos_phi_prime * sin(parallax_rad) * sin(lha_rad);
     double denominator = cos(dec_rad) - p_cos_phi_prime * sin(parallax_rad) * cos(lha_rad);
-    double delA = atan2(numerator_delA, denominator) * 180 / M_PI;
-
+    double delA = DEGREES(atan2(numerator_delA, denominator));
+    
     // Right ascension corrected
     *ra_deg += delA;
-
-    double numerator_dec = (sin(dec_rad) - p_sin_phi_prime * sin(parallax_rad)) * cos(delA * M_PI / 180);
-
+    
     // Declination corrected
-    *dec_deg = atan2(numerator_dec, denominator) * 180 / M_PI;
+    double numerator_dec = (sin(dec_rad) - p_sin_phi_prime * sin(parallax_rad)) * cos(RADIANS(delA));
+    *dec_deg = DEGREES(atan2(numerator_dec, denominator));
+}
 
+/*  ================================
+    GHA and LHA computation
+    ================================ */
+
+void compute_gha_lha(double jd, double true_obliquity_deg, double nut_lon_deg, double gmst_deg, double observer_longitude_deg, double ra_deg,
+    double* gst_deg, double* gha_deg, double* lha_deg) {
+    double st_correction = nut_lon_deg * 3600.0 * cos(RADIANS(true_obliquity_deg)) / 15.0;
+    *gst_deg = normalize_angle(gmst_deg + st_correction / 240.0);
+
+    *gha_deg = normalize_angle(*gst_deg - ra_deg);
+    *lha_deg = normalize_angle(*gst_deg + observer_longitude_deg - ra_deg);
+}
+
+/* ================================
+    Calculation of Horizontal Coordinates
+    from Geocentric Equatorial Coordinates
+   ================================ */
+
+void compute_horizontal_coordinates(double ra_deg, double dec_deg, double lha_deg, double lat_deg, double* az_deg, double* alt_deg) {
+    // See Chapter 13 of *Astronomical Algorithms* (pg. 93)
+
+    double ra_rad = RADIANS(ra_deg);
+    double dec_rad = RADIANS(dec_deg);
+    double lha_rad = RADIANS(lha_deg);
+    double lat_rad = RADIANS(lat_deg);
+
+    double az_rad = atan2(sin(lha_rad),
+                        cos(lha_rad) * sin(lat_rad) - tan(dec_rad) * cos(lat_rad)) + M_PI;
+
+    double alt_rad = asin(sin(lat_rad) * sin(dec_rad) + 
+                        cos(lat_rad) * cos(dec_rad) * cos(lha_rad));
+    
+    *az_deg = DEGREES(az_rad);
+    *alt_deg = DEGREES(alt_rad);
 }

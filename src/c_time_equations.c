@@ -2,16 +2,10 @@
 #include <math.h>
 #include <string.h>
 #include "c_time_equations.h"
-#include "c_calculation_equations.h"
 
 /* ================================
    Definitions & Helper Constants
    ================================ */
-
-#define M_PI 3.14159265358979
-#define J2000 2451545.0
-#define JULIAN_CENTURY 36525.0
-#define JULIAN_MILLENNIUM 365250.0
 
 /* ================================
    GMST Calculation
@@ -22,7 +16,9 @@ double greenwich_mean_sidereal_time(double julian_day){
     double t2 = t * t;
     double t3 = t2 * t;
 
-    double theta_zero = 280.46061837 + 360.98564736629 * (julian_day - J2000) + 0.000387933 * t2 - t3 / 38710000.0;
+    double theta_zero = 280.46061837 + 360.98564736629 * (julian_day - J2000) 
+                                     + 0.000387933 * t2 
+                                     - t3 / 38710000.0;
 
     return normalize_angle(theta_zero);
 }

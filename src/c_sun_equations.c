@@ -7,11 +7,6 @@
    Definitions & Helper Constants
    ================================ */
 
-#define M_PI 3.14159265358979
-#define DEG2RAD M_PI / 180
-#define J2000 2451545.0
-#define JULIAN_CENTURY 36525.0  // as used in your _compute_time()
-#define JULIAN_MILLENNIUM 365250.0  // as used in your _compute_time()
 #define OBLIQUITY_TERMS_SIZE 10
 #define SUN_NUTATION_COEFFICIENTS_LOOP 63
 #define SUN_NUTATION_ARGUMENTS_LOOP 5
@@ -240,6 +235,7 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
                         double elevation, double temperature, double pressure,
                         SunResult* result) {
     // Compute time variable
+    double jd = jde - deltaT / SECONDS_IN_DAY;
     result->t = (jde - J2000) / JULIAN_MILLENNIUM;
     double t = result->t;
     double t2 = t * t;
@@ -247,7 +243,7 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     double t4 = t3 * t;
     double t5 = t4 * t;
     
-    // --- Orbital Elements ---
+    // Orbital Elements
     // Mean longitude
     double mean_long = normalize_angle(280.4664567 + 360007.6982779 * t + 0.03032028 * t2 + t3 / 49931.0 - t4 / 15300.0 - t5 / 2000000.0);
     result->mean_longitude = mean_long;
@@ -271,12 +267,12 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     result->true_longitude = true_long;
     double true_anom = mean_anom + sun_center_val;
     result->true_anomaly = true_anom;
-    
+
     // Geocentric distance (in AU)
     double geo_dist = (1.000001018 * (1 - ecc * ecc)) / (1 + ecc * cos(true_anom * M_PI / 180.0));
     result->geocentric_distance = geo_dist;
-    
-    // --- Nutation and Obliquity ---
+
+    // Nutation and Obliquity
     double dp, de;
     sun_nutation(jde, &dp, &de);
     result->nutation_longitude = dp;
@@ -296,69 +292,55 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     double app_long = true_long - 0.00569 - 0.00478 * sin(omega * M_PI / 180.0);
     result->apparent_longitude = app_long;
     
-    // --- Apparent Coordinates (Right Ascension & Declination) ---
-    // Using the simplified formulas:
-    double ra = atan2(cos(result->mean_obliquity * M_PI / 180.0) * sin(true_long * M_PI / 180.0),
-                      cos(true_long * M_PI / 180.0));
-    double dec = asin(sin(result->mean_obliquity * M_PI / 180.0) * sin(true_long * M_PI / 180.0));
+
+    // True Equitorial Coordinates
+    double ra, dec;
+    compute_equitorial_coordinates(app_long, result->true_obliquity, 0, &ra, &dec);
+    result->true_right_ascension = ra;
+    result->true_declination = dec;
     
-    // Convert RA (in radians) to degrees; note that in your Python code RA is later divided by 15 to get hours.
-    result->true_right_ascension = normalize_angle(ra * 180.0 / M_PI);
-    result->true_declination = dec * 180.0 / M_PI;
-    
-    // Apparent RA/Dec
+    // Apparent Equitorial Coordinates
     double epsilon_corr = result->true_obliquity + 0.00256 * cos(omega * M_PI / 180.0); // obliquity correction
-    double app_long_rad = app_long * M_PI / 180.0; // apparent longitude in radians
-    double epsilon_corr_rad = epsilon_corr * M_PI / 180.0; // corrected obliquity in radians
+    double app_ra, app_dec;
+    compute_equitorial_coordinates(app_long, epsilon_corr, 0, &app_ra, &app_dec);
 
-    double app_ra = atan2(cos(epsilon_corr_rad) * sin(app_long_rad), cos(app_long_rad));
-    double app_dec = asin(sin(epsilon_corr_rad) * sin(app_long_rad));
-
-    result->apparent_right_ascension = normalize_angle(app_ra * 180.0 / M_PI);
-    result->apparent_declination = app_dec * 180.0 / M_PI;
+    result->apparent_right_ascension = app_ra;
+    result->apparent_declination = app_dec;
     
-    // --- Hour Angles ---
-    double sidereal_time = greenwich_mean_sidereal_time(jde - deltaT / 86400);
-    double st_correction = dp * 3600 * cos(result->true_obliquity * M_PI / 180) / 15;
-    double gha = normalize_angle(sidereal_time + st_correction / 240);
+
+    // Hour Angles
+    double gst, gha, lha;
+    double gmst = greenwich_mean_sidereal_time(jd);
+    compute_gha_lha(jd, result->true_obliquity, dp, gmst, local_longitude, app_ra, &gst, &gha, &lha);
     result->greenwich_hour_angle = gha;
-
-    result->local_hour_angle = normalize_angle(gha + local_longitude - result->apparent_right_ascension);
+    result->local_hour_angle = lha;
     
-    // --- Topocentric Corrections ---
-    result->eh_parallax = asin(sin(8.794 / 3600 * M_PI / 180) / result->geocentric_distance) * 180 / M_PI;
+
+    // Parallax
+    result->eh_parallax = DEGREES(asin(sin(RADIANS(8.794 / 3600)) / result->geocentric_distance));
+
+
+    // Topocentric Corrections
     double top_ra = result->apparent_right_ascension; 
     double top_dec = result->apparent_declination;
-
     correct_ra_dec(&top_ra, &top_dec, result->local_hour_angle, result->eh_parallax, local_latitude, elevation / 1000, EARTH_RADIUS_KM);
 
     result->topocentric_ascension = top_ra;
     result->topocentric_declination = top_dec;
-    result->topocentric_local_hour_angle = normalize_angle(gha + local_longitude - result->topocentric_ascension);
+    result->topocentric_local_hour_angle = normalize_angle(gst + local_longitude - top_ra);
     
-    // --- Horizontal Coordinates ---
+
+    // Horizontal Coordinates
     // True
-    double top_dec_rad = top_dec * M_PI / 180;
-    double lat_rad = local_latitude * M_PI / 180;
-    double lha_rad = result->local_hour_angle * M_PI / 180;
-    
-    double true_alt_rad = asin(
-        sin(lat_rad) * sin(top_dec_rad) + 
-        cos(lat_rad) * cos(top_dec_rad) * cos(lha_rad)
-    );
+    double true_alt, true_az;
+    compute_horizontal_coordinates(top_ra, top_dec, result->topocentric_local_hour_angle, 
+                                    local_latitude, &true_az, &true_alt);
+    result->true_altitude = true_alt;
+    result->true_azimuth = true_az;
 
-    double true_az_ra = atan2(
-        -cos(top_dec_rad) * sin(lha_rad),
-        sin(top_dec_rad) * cos(lat_rad) - 
-        cos(top_dec_rad) * sin(lat_rad) * cos(lha_rad)
-    );
-
-    result->true_altitude = true_alt_rad * 180 / M_PI;
-    result->true_azimuth = normalize_angle(true_az_ra * 180 / M_PI);
-
-    // Apparent
+    // Apparent (disabled)
     // double refraction_factor = 1.02 / tan((result->true_altitude + 10.3 / (result->true_altitude + 5.11)) * M_PI / 180) * pressure / 101.325 *  283 / (273 + temperature);
-    result->apparent_altitude = result->true_altitude ;//+ refraction_factor / 60;
+    result->apparent_altitude = result->true_altitude;//+ refraction_factor / 60;
 }
 
 
@@ -436,7 +418,7 @@ int find_sun_transit(datetime date, double utc_offset, double local_latitude, do
         datetime temp_date;
         jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
         double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
-        double t_jde = (new_jd + i - 1) + t_deltaT / 86400;
+        double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
         compute_sun_result(t_jde, t_deltaT, 
             local_latitude, local_longitude, elevation, temperature, pressure, 
             &sun_params[i]
@@ -448,7 +430,7 @@ int find_sun_transit(datetime date, double utc_offset, double local_latitude, do
     
     for (int i = 0; i < 3; i++) {
         double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m0);
-        double n_event = m0 + new_deltaT / 86400;
+        double n_event = m0 + new_deltaT / SECONDS_IN_DAY;
         double interp_ra_event_deg = angle_interpolation(n_event,
                                     sun_params[0].apparent_right_ascension,
                                     sun_params[1].apparent_right_ascension,
@@ -505,7 +487,7 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
         datetime temp_date;
         jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
         double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
-        double t_jde = (new_jd + i - 1) + t_deltaT / 86400;
+        double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
         compute_sun_result(t_jde, t_deltaT, 
             local_latitude, local_longitude, elevation, temperature, pressure, 
             &sun_params[i]
@@ -537,7 +519,7 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
     
     for (int i = 0; i < 3; i++) {
         double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m_event);
-        double n_event = m_event + new_deltaT / 86400;
+        double n_event = m_event + new_deltaT / SECONDS_IN_DAY;
         double interp_dec_event_rad = angle_interpolation(n_event,
                                     sun_params[0].apparent_declination,
                                     sun_params[1].apparent_declination,

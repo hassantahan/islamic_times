@@ -32,6 +32,9 @@ class Angle:
 
     Attributes:
         decimal (float): The angle in decimal degrees.
+        dms (Tuple[int, int, float]): The angle in degrees, minutes, and seconds.
+        radians (float): The angle in radians.
+        dms_str (str): The angle formatted as a DMS string.
     """
 
     decimal: float
@@ -77,6 +80,11 @@ class RightAscension:
 
     Attributes:
         decimal_hours (float): Right ascension in decimal hours.
+        hms (Tuple[int, int, float]): Right ascension in hours, minutes, and seconds.
+        decimal_degrees (Angle): Right ascension in degrees.
+        radians (float): Right ascension in radians.
+        dms (Tuple[int, int, float]): Right ascension in degrees, minutes, and seconds.
+        dms_str (str): Right ascension formatted as a DMS string.
     """
     decimal_hours: float
 
@@ -166,7 +174,16 @@ class DistanceUnit:
         return self.symbol
 
 class DistanceUnits:
-    """Standard distance units used throughout the application."""
+    """Standard distance units used throughout the application.
+    
+    Attributes:
+        METRE (DistanceUnit): Meter unit.
+        KILOMETRE (DistanceUnit): Kilometer unit.
+        AU (DistanceUnit): Astronomical unit.
+        NAUTICAL_MILE (DistanceUnit): Nautical mile unit.
+        MILE (DistanceUnit): Mile unit.
+        FOOT (DistanceUnit): Foot unit.
+    """
     METRE = DistanceUnit("meter", "m", 1)
     KILOMETRE = DistanceUnit("kilometer", "km", 1_000)
     AU = DistanceUnit("astronomical unit", "AU", 149_597_870_691)
@@ -182,6 +199,8 @@ class Distance:
     Attributes:
         value (float): The numerical value.
         unit (DistanceUnit): The distance unit.
+        in_unit (float): Converts the distance to the target unit.
+        to (Distance): Returns a new Distance object in the target unit.
     """
     value: float
     unit: DistanceUnit = DistanceUnits.METRE
@@ -539,7 +558,7 @@ class MoonInfo:
                 f"\tMoonrise:\t\t{self.moonrise.strftime("%X %d-%m-%Y")}\n"
                 f"\tMoon Transit:\t\t{self.moon_transit.strftime("%X %d-%m-%Y")}\n"
                 f"\tMoonset:\t\t{self.moonset.strftime("%X %d-%m-%Y")}\n"
-                f"\tIllumination:\t\t{self.illumination * 100:.2f}%"
+                f"\tIllumination:\t\t{self.illumination * 100:.2f}%\n"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tAzimuth:\t\t{self.true_azimuth}\n"
                 f"\tDistance:\t\t{self.geocentric_distance}\n"

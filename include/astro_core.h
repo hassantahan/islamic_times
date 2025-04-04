@@ -1,10 +1,21 @@
 // astro_types.h
-
 #ifndef ASTRO_TYPES_H
 #define ASTRO_TYPES_H
 
 #include <Python.h>
 #include <datetime.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define J2000 2451545.0
+#define JULIAN_CENTURY 36525.0
+#define JULIAN_MILLENNIUM 365250.0
+#define SECONDS_IN_DAY 86400.0
+
+#define RADIANS(value) ((value) * (M_PI) / 180.0)
+#define DEGREES(value) ((value) * (180.0) / M_PI)
 
 #define ANGLE(value) PyObject_CallFunctionObjArgs(AngleType, PyFloat_FromDouble(value), NULL)
 #define DIST(value, unit) PyObject_CallFunctionObjArgs(DistanceType, PyFloat_FromDouble(value), unit, NULL)
@@ -25,10 +36,15 @@
 
 extern PyObject *datetime_datetime;
 extern PyObject *SunType;
+extern PyObject *MoonType;
 extern PyObject *AngleType;
 extern PyObject *DistanceType;
 extern PyObject *DistanceUnitsType;
 extern PyObject *RightAscensionType;
 
+
+/* ================================
+   
+   ================================ */
 
 #endif

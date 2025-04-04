@@ -3,8 +3,10 @@
 #include "c_time_equations.h"
 #include "c_calculation_equations.h"
 #include "c_sun_equations.h"
+#include "c_moon_equations.h"
 
 PyObject *SunType = NULL;
+PyObject *MoonType = NULL;
 PyObject *AngleType = NULL;
 PyObject *DistanceType = NULL;
 PyObject *DistanceUnitsType = NULL;
@@ -18,6 +20,7 @@ PyObject *RightAscensionType = NULL;
 static void cleanup_types(void) {
     // Optional cleanup at exit
     Py_XDECREF(SunType);
+    Py_XDECREF(MoonType);
     Py_XDECREF(AngleType);
     Py_XDECREF(DistanceType);
     Py_XDECREF(DistanceUnitsType);
@@ -36,6 +39,7 @@ static PyMethodDef AstroCoreMethods[] = {
     {"compute_sun", (PyCFunction)(void(*)(void))py_compute_sun, METH_FASTCALL, "Compute the sun's position and parameters."},
     {"find_sun_transit", py_find_sun_transit, METH_VARARGS, "Compute the time of the transit of the sunfor the given date."},
     {"find_proper_suntime", py_find_proper_suntime, METH_VARARGS, "Compute sunrise or sunset for the given date."},
+    {"compute_moon", (PyCFunction)(void(*)(void))py_compute_moon, METH_FASTCALL, "Compute the moon's position and parameters."},
     {NULL, NULL, 0, NULL}  /* Sentinel */
 };
 
@@ -65,18 +69,21 @@ PyMODINIT_FUNC PyInit_astro_core(void) {
     
     // islamic_times module imports
     PyObject *mod_sun = PyImport_ImportModule("islamic_times.sun_equations");
+    PyObject *mod_moon = PyImport_ImportModule("islamic_times.moon_equations");
     PyObject *mod_dc  = PyImport_ImportModule("islamic_times.dataclasses");
 
-    if (!mod_sun || !mod_dc) return NULL;
+    if (!mod_sun || !mod_moon || !mod_dc) return NULL;
 
     // Clean and safe import
     IMPORT_TYPE(SunType, mod_sun, "Sun");
+    IMPORT_TYPE(MoonType, mod_moon, "Moon");
     IMPORT_TYPE(AngleType, mod_dc, "Angle");
     IMPORT_TYPE(DistanceType, mod_dc, "Distance");
     IMPORT_TYPE(DistanceUnitsType, mod_dc, "DistanceUnits");
     IMPORT_TYPE(RightAscensionType, mod_dc, "RightAscension");
 
     Py_DECREF(mod_sun);
+    Py_DECREF(mod_moon);
     Py_DECREF(mod_dc);
 
     // Register cleanup when interpreter shuts down
