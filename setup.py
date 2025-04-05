@@ -15,7 +15,7 @@ astro_core = Extension(
         "C:/Program Files/Python313/include"
     ],
     library_dirs=["C:/Program Files/Python313/libs"],
-    extra_compile_args=["/Ox", "/Zi"], #/Od
+    extra_compile_args=["/Od", "/Zi"], #/Ox
     extra_link_args=["/DEBUG"]
 )
 

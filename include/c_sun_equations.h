@@ -39,6 +39,12 @@ typedef struct {
     double apparent_altitude;
 } SunResult;
 
+void compute_sun_result(double jde, double deltaT, double local_latitude, double local_longitude,
+    double elevation, double temperature, double pressure,
+    SunResult* result);
+
+int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_latitude, double local_longitude,
+    double elevation, double temperature, double pressure, char event_type, double angle_deg, double* deltaPsi, double* true_obliquity, datetime* sun_event);
 
 PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs);
 PyObject* py_find_sun_transit(PyObject* self, PyObject* args);

@@ -636,17 +636,6 @@ def moonpos(observer_date: DateTimeInfo, observer: ObserverInfo, deltaPsi: Angle
 		- The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is enabled.
 	"""
 
-	# the_moon = Moon(
-	# 	jde=observer_date.jde,
-	# 	deltaT=observer_date.deltaT,
-	# 	local_latitude=observer.latitude,
-	# 	local_longitude=observer.longitude,
-	# 	elevation=observer.elevation,
-	# 	deltaPsi=deltaPsi,
-	# 	ecliptic=ecliptic
-	# )
-
-	# print(the_moon)
 	import islamic_times.astro_core as fast_astro
 	the_moon: Moon = fast_astro.compute_moon(observer_date.jde, observer_date.deltaT, 
 						 observer.latitude.decimal, observer.longitude.decimal, 
@@ -682,7 +671,7 @@ def next_phases_of_moon_utc(date: datetime) -> List[datetime]:
 	k_array = np.array([
 		p_sign * np.round(k_temp),
 		p_sign * (np.round(k_temp - 0.25) + 0.25),
-		p_sign * (np.round(k_temp - 0.5) + 0.5),
+		p_sign * (np.round(k_temp - 0.50) + 0.50),
 		p_sign * (np.round(k_temp - 0.75) + 0.75)
 	])
 
@@ -819,7 +808,7 @@ def moon_illumination(sun_dec: Angle, sun_ra: Angle, moon_dec: Angle, moon_ra: A
 	fraction_illuminated = (1 + math.cos(phase_angle.radians)) / 2
 	return fraction_illuminated
 
-def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> datetime:
+def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_nutation = np.inf) -> datetime:
 	"""
 	Calculate transit of the moon (specifically culmination) for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
@@ -830,54 +819,70 @@ def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> da
 	Returns:
 		datetime: The time of moonset.
 	"""
+	import islamic_times.astro_core as fast_astro
 
-	# First find the Year Month Day at UT 0h from JDE
-	ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
-	new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
-	new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
+	# To be later explained
+	if (sun_nutation == np.inf):
+		delPsi = [-123456.0, -123456.0, -123456.0]
+		true_obliquity = [-123456.0, -123456.0, -123456.0]
+	else:
+		delPsi = list(sun_nutation[:3])
+		true_obliquity = list(sun_nutation[-3:])
 
-	# Calculate new moon params with the new_jd
-	moon_params: List[Moon] = []
-	for i in range(3):
-		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
-		delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-		sun_params = se.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer)
-		delPsi = sun_params.delta_obliquity
-		moon_params.append(
-							moonpos(
-								replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp),
-								observer, delPsi, sun_params.true_obliquity
-							)
-						)
+	moon_transit: datetime = fast_astro.find_moon_transit(observer_date.jd, observer_date.deltaT, 
+									observer.latitude.decimal, observer.longitude.decimal, 
+									observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
+									observer_date.utc_offset, delPsi, true_obliquity)
+	
+	return moon_transit.replace(tzinfo=observer_date.date.tzinfo)
 
-	# Greenwich Mean Sidereal Time (GMST)
-	sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
+	# # First find the Year Month Day at UT 0h from JDE
+	# ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
+	# new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
+	# new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
 
-	# Transit approximation (m0)
-	m0 = (moon_params[1].right_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
+	# # Calculate new moon params with the new_jd
+	# moon_params: List[Moon] = []
+	# for i in range(3):
+	# 	ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
+	# 	delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
+	# 	sun_params = se.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer)
+	# 	delPsi = sun_params.nutation[0]
+	# 	moon_params.append(
+	# 						moonpos(
+	# 							replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp),
+	# 							observer, delPsi, sun_params.true_obliquity
+	# 						)
+	# 					)
 
-	# Iteratively refine transit time
-	for _ in range(3):
-		little_theta_zero = Angle((sidereal_time.decimal + 360.985647 * m0) % 360)
-		n = m0 + new_deltaT / 86400
+	# # Greenwich Mean Sidereal Time (GMST)
+	# sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
 
-		interpolated_moon_ra = RightAscension(ce.interpolation(n,
-												moon_params[0].right_ascension.decimal_degrees.decimal,
-												moon_params[1].right_ascension.decimal_degrees.decimal,
-												moon_params[2].right_ascension.decimal_degrees.decimal) / 15
-											)
+	# # Transit approximation (m0)
+	# m0 = (moon_params[1].right_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
 
-		lunar_local_hour_angle = Angle((little_theta_zero.decimal - (-observer.longitude.decimal) - interpolated_moon_ra.decimal_degrees.decimal) % 360)
+	# # Iteratively refine transit time
+	# for _ in range(3):
+	# 	little_theta_zero = Angle((sidereal_time.decimal + 360.985647 * m0) % 360)
+	# 	n = m0 + new_deltaT / 86400
 
-		m0 -= lunar_local_hour_angle.decimal / 360
+	# 	interpolated_moon_ra = RightAscension(ce.interpolation(n,
+	# 											moon_params[0].right_ascension.decimal_degrees.decimal,
+	# 											moon_params[1].right_ascension.decimal_degrees.decimal,
+	# 											moon_params[2].right_ascension.decimal_degrees.decimal) / 15
+	# 										)
 
-	# Normalize m0 to [0,1]
-	m0 %= 1
+	# 	lunar_local_hour_angle = Angle((little_theta_zero.decimal - (-observer.longitude.decimal) - interpolated_moon_ra.decimal_degrees.decimal) % 360)
 
-	# Compute final transit datetime
-	moon_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=observer_date.utc_offset)
+	# 	m0 -= lunar_local_hour_angle.decimal / 360
 
-	return moon_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
+	# # Normalize m0 to [0,1]
+	# m0 %= 1
+
+	# # Compute final transit datetime
+	# moon_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=observer_date.utc_offset)
+
+	# return moon_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 
 # Refer to Chapter 15 of AA
 def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set') -> datetime:
@@ -908,7 +913,7 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 		ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
 		delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
 		sun_params = se.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer)
-		delPsi = sun_params.delta_obliquity
+		delPsi = sun_params.nutation[0]
 		moon_params.append(
 						moonpos(
 							replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp),
@@ -983,7 +988,7 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 	return event_dt
 
 # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
-def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set') -> datetime:
+def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set', sun_nutation = np.inf) -> datetime:
 	"""
     Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 
@@ -998,32 +1003,53 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
     Raises:
         ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
     """
+	import islamic_times.astro_core as fast_astro
 
 	if rise_or_set not in ['rise', 'set', 'moonrise', 'moonset']:
 		raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
-
-	if observer_date.utc_offset == 0:
-			temp_utc_offset = math.floor(observer.longitude.decimal / 15) - 1
+	
+	if rise_or_set in ["set", "sunset"]:
+		event = 's'
 	else:
-		temp_utc_offset = observer_date.utc_offset * -1
+		event = 'r'
 
-	temp_moonset: datetime = moonrise_or_moonset(observer_date, observer, rise_or_set)
-	date_doy = observer_date.date.timetuple().tm_yday
+	# To be later explained
+	if (sun_nutation == np.inf):
+		delPsi = [-123456.0, -123456.0, -123456.0]
+		true_obliquity = [-123456.0, -123456.0, -123456.0]
+		...
+	else:
+		delPsi = list(sun_nutation[:3])
+		true_obliquity = list(sun_nutation[-3:])
 
-	i = 1
-	while(True):
-		if temp_moonset == math.inf:
-			return datetime.min
+	moontime: datetime = fast_astro.find_proper_moontime(observer_date.jd, observer_date.deltaT, 
+									observer.latitude.decimal, observer.longitude.decimal, 
+									observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
+									observer_date.utc_offset, delPsi, true_obliquity, event)
+	
+	return moontime.replace(tzinfo=observer_date.date.tzinfo)
+
+	# if observer_date.utc_offset == 0:
+	# 		temp_utc_offset = math.floor(observer.longitude.decimal / 15) - 1
+	# else:
+	# 	temp_utc_offset = observer_date.utc_offset * -1
+
+	# temp_moonset: datetime = moonrise_or_moonset(observer_date, observer, rise_or_set)
+	# date_doy = observer_date.date.timetuple().tm_yday
+
+	# i = 1
+	# while(True):
+	# 	if temp_moonset == math.inf:
+	# 		return datetime.min
 		
-		temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_offset)).timetuple().tm_yday
-		if (temp_moonset_doy < date_doy and temp_moonset.year == observer_date.date.year) or ((temp_moonset + timedelta(hours=temp_utc_offset)).year < observer_date.date.year):
-			temp_moonset = moonrise_or_moonset(
-										replace(observer_date, date=observer_date.date + timedelta(days=i)), 
-										observer, rise_or_set
-									)
-			i += 1
-		else: 
-			return temp_moonset.replace(tzinfo=observer_date.date.tzinfo)
+	# 	temp_moonset_doy = (temp_moonset + timedelta(hours=temp_utc_offset)).timetuple().tm_yday
+	# 	if (temp_moonset_doy < date_doy and temp_moonset.year == observer_date.date.year) or ((temp_moonset + timedelta(hours=temp_utc_offset)).year < observer_date.date.year):
+	# 		temp_moonset = moonrise_or_moonset(
+	# 									replace(observer_date, date=observer_date.date + timedelta(days=i)), 
+	# 									observer, rise_or_set)
+	# 		i += 1
+	# 	else: 
+	# 		return temp_moonset.replace(tzinfo=observer_date.date.tzinfo)
 
 # Visibility calculations either:
 # Criterion 0: Odeh, 2006

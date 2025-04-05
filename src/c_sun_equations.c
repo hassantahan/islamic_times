@@ -548,7 +548,6 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
     return 0;
 }
 
-
 /* Python Wrapper */
 PyObject* py_find_proper_suntime(PyObject* self, PyObject* args) {
     double jd, deltaT, latitude, longitude, elevation, temperature, pressure, utc_offset, angle_deg;
@@ -619,4 +618,81 @@ PyObject* py_find_proper_suntime(PyObject* self, PyObject* args) {
             return datetime_to_pydatetime(temp_suntime);
         }
     }
+}
+
+/* Special sunset function for visibilities */
+
+int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_latitude, double local_longitude,
+    double elevation, double temperature, double pressure, char event_type, double angle_deg, 
+    double* deltaPsi, double* true_obliquity, datetime* sun_event) {
+        
+    double lat_rad = RADIANS(local_latitude);
+    double lon_rad = RADIANS(local_longitude);
+    double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
+    double new_deltaT = delta_t_approx(date.year, date.month);
+
+    SunResult sun_params[3];
+    for (int i = 0; i < 3; i++) {
+        datetime temp_date;
+        jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
+        double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
+        double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
+        compute_sun_result(t_jde, t_deltaT, 
+            local_latitude, local_longitude, elevation, temperature, pressure, 
+            &sun_params[i]
+        );
+        deltaPsi[i] = sun_params[i].nutation_longitude;
+        true_obliquity[i] = sun_params[i].true_obliquity;
+    }
+
+    double h_zero_rad = RADIANS(-angle_deg);
+    double cosH_zero = (sin(h_zero_rad) - sin(lat_rad) * sin(RADIANS(sun_params[1].apparent_declination))) / \
+                        (cos(lat_rad) * cos(RADIANS(sun_params[1].apparent_declination)));
+
+    double H_zero_rad, H_zero_deg;
+    if (cosH_zero < 1.0 && cosH_zero > -1.0) {
+        H_zero_rad = acos(cosH_zero);
+        H_zero_deg = H_zero_rad * 180 / M_PI;
+    }
+    else
+        return -1;
+    
+    double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
+
+    double m_event;
+    if (event_type == 'r')
+        m_event = m0 - H_zero_deg / 360;
+    else if (event_type == 's')
+        m_event = m0 + H_zero_deg / 360;
+    else
+        return -2;
+    
+    for (int i = 0; i < 3; i++) {
+        double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m_event);
+        double n_event = m_event + new_deltaT / SECONDS_IN_DAY;
+        double interp_dec_event_rad = angle_interpolation(n_event,
+                                    sun_params[0].apparent_declination,
+                                    sun_params[1].apparent_declination,
+                                    sun_params[2].apparent_declination) * M_PI / 180;
+        double interp_ra_event_deg = angle_interpolation(n_event,
+                                    sun_params[0].apparent_right_ascension,
+                                    sun_params[1].apparent_right_ascension,
+                                    sun_params[2].apparent_right_ascension);
+
+        double lha_event_rad = normalize_angle(theta_event_deg - (-local_longitude) - interp_ra_event_deg) * M_PI / 180;
+        double sun_alt_deg = asin(sin(lat_rad) * sin(interp_dec_event_rad) + 
+                                cos(lat_rad) * cos(interp_dec_event_rad) * cos(lha_event_rad)) * 180 / M_PI;
+
+        double deltaM = (sun_alt_deg - h_zero_rad * 180 / M_PI) / (360 * cos(interp_dec_event_rad) * cos(lat_rad) * sin(lha_event_rad));
+        m_event += deltaM;
+    }
+
+    sun_event->year = date.year;
+    sun_event->month = date.month;
+    sun_event->day = date.day;
+    sun_event->hour = 0; sun_event->minute = 0; sun_event->second = 0; sun_event->microsecond = 0; 
+    *sun_event = add_days(*sun_event, m_event);
+
+    return 0;
 }

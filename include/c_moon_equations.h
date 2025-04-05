@@ -2,8 +2,7 @@
 #define MOON_EQUATIONS_H
 
 #include "astro_core.h"
-#include "c_time_equations.h"
-#include "c_calculation_equations.h"
+#include "c_sun_equations.h"
 
 /* ================================
    Helper structs for calculation
@@ -59,5 +58,8 @@ void compute_moon_result(double jde, double deltaT, double local_latitude, doubl
 
 /* Python wrappers */
 PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t nargs);
+PyObject* py_find_moon_transit(PyObject* self, PyObject* args);
+PyObject* py_find_proper_moontime(PyObject* self, PyObject* args); 
+PyObject* py_next_phases_of_moon_utc(PyObject* self, PyObject* args);
 
 #endif
