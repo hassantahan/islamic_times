@@ -603,7 +603,7 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
     else:
         event = 'r'
 
-    suntime: datetime = fast_astro.find_proper_suntime(observer_date.jd, observer_date.deltaT, 
+    suntime: datetime = fast_astro.find_proper_suntime(observer_date.jd, 
                                        observer.latitude.decimal, observer.longitude.decimal, 
                                        observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
                                        observer_date.utc_offset, angle.decimal, event)

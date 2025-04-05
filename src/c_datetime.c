@@ -1,5 +1,3 @@
-#include <math.h>
-#include <stdlib.h>
 #include "c_datetime.h"
 
 // Cumulative days up to the first day of each month (0-indexed)
@@ -144,4 +142,20 @@ PyObject* datetime_to_pydatetime(datetime dt) {
         return NULL;
 
     return py_dt;
+}
+
+/*
+    1 --> A later than B
+   -1 --> B later than A
+    0 --> A and B are the exact same
+*/
+int compare_datetime(const datetime* a, const datetime* b) {
+    if (a->year != b->year) return (a->year < b->year) ? -1 : 1;
+    if (a->month != b->month) return (a->month < b->month) ? -1 : 1;
+    if (a->day != b->day) return (a->day < b->day) ? -1 : 1;
+    if (a->hour != b->hour) return (a->hour < b->hour) ? -1 : 1;
+    if (a->minute != b->minute) return (a->minute < b->minute) ? -1 : 1;
+    if (a->second != b->second) return (a->second < b->second) ? -1 : 1;
+    if (a->microsecond != b->microsecond) return (a->microsecond < b->microsecond) ? -1 : 1;
+    return 0;
 }

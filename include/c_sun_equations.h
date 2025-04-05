@@ -1,9 +1,8 @@
 #ifndef SUN_EQUATIONS_H
 #define SUN_EQUATIONS_H
 
-#include "astro_core.h"
+// Includes
 #include "c_time_equations.h"
-#include "c_calculation_equations.h"
 
 /* ================================
    SunResult Structure
@@ -42,9 +41,10 @@ typedef struct {
 void compute_sun_result(double jde, double deltaT, double local_latitude, double local_longitude,
     double elevation, double temperature, double pressure,
     SunResult* result);
-
-int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_latitude, double local_longitude,
-    double elevation, double temperature, double pressure, char event_type, double angle_deg, double* deltaPsi, double* true_obliquity, datetime* sun_event);
+datetime find_proper_suntime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
+        double temperature, double pressure, double angle_deg, char event);
+datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double latitude, double longitude, double elevation, 
+        double temperature, double pressure, double angle_deg, char event, double* deltaPsi, double* true_obliquity);
 
 PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs);
 PyObject* py_find_sun_transit(PyObject* self, PyObject* args);

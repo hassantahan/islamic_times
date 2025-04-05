@@ -788,10 +788,7 @@ class ITLocation:
                 jd=test_jd_new_moon,
                 deltaT=test_deltaT_new_moon
             )
-
-            # Set sun parameters
-            nm_sun_params = se.sunpos(test_observer_dateinfo, self.observer_info)
-
+            
             # Sunset & moonset calculations
             test_nm_sunset = se.find_proper_suntime(test_observer_dateinfo, self.observer_info, 'set')
 

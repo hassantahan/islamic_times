@@ -15,6 +15,8 @@
 #define SECONDS_IN_DAY 86400.0
 #define TROPICAL_YEAR 365.24219878
 
+#define STANDARD_SET_AND_RISE 0.8333333
+
 #define RADIANS(value) ((value) * (M_PI) / 180.0)
 #define DEGREES(value) ((value) * (180.0) / M_PI)
 

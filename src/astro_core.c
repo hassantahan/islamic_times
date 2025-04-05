@@ -4,6 +4,7 @@
 #include "c_calculation_equations.h"
 #include "c_sun_equations.h"
 #include "c_moon_equations.h"
+#include "c_visibilities.h"
 
 PyObject *SunType = NULL;
 PyObject *MoonType = NULL;
@@ -43,6 +44,7 @@ static PyMethodDef AstroCoreMethods[] = {
     {"find_moon_transit", py_find_moon_transit, METH_VARARGS, "Compute the time of the transit of the moon for the given date."},
     {"find_proper_moontime", py_find_proper_moontime, METH_VARARGS, "Compute moonrise or moonset for the given date."},
     {"next_phases_of_moon_utc", py_next_phases_of_moon_utc, METH_VARARGS, "Compute the nearest phases of the moon."},
+    {"compute_visibilities", py_compute_visibilities, METH_VARARGS, "Compute the new moon crescent visibility for a given number of days according to a specified critierion."},
     {NULL, NULL, 0, NULL}  /* Sentinel */
 };
 

@@ -4,6 +4,7 @@ astro_core = Extension(
     name="islamic_times.astro_core",
     sources=[
         "src/astro_core.c",
+        "src/c_visibilities.c",
         "src/c_moon_equations.c",
         "src/c_sun_equations.c",
         "src/c_time_equations.c",

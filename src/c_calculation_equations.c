@@ -1,7 +1,4 @@
 #define PY_SSIZE_T_CLEAN
-#include <Python.h>
-#include <math.h>
-#include <string.h>
 #include "c_calculation_equations.h"
 
 /* ================================
@@ -125,11 +122,35 @@ void compute_horizontal_coordinates(double ra_deg, double dec_deg, double lha_de
     double lat_rad = RADIANS(lat_deg);
 
     double az_rad = atan2(sin(lha_rad),
-                        cos(lha_rad) * sin(lat_rad) - tan(dec_rad) * cos(lat_rad)) + M_PI;
+                          cos(lha_rad) * sin(lat_rad) - tan(dec_rad) * cos(lat_rad)) + M_PI;
 
     double alt_rad = asin(sin(lat_rad) * sin(dec_rad) + 
-                        cos(lat_rad) * cos(dec_rad) * cos(lha_rad));
+                          cos(lat_rad) * cos(dec_rad) * cos(lha_rad));
     
     *az_deg = DEGREES(az_rad);
     *alt_deg = DEGREES(alt_rad);
+}
+
+void geocentric_horizontal_coordinates(double lat_deg, double body_dec_deg, double body_lha_deg, double* body_geo_alt_deg, double* body_geo_az_deg) {
+    double lat_rad = RADIANS(lat_deg);
+    double body_dec_rad = RADIANS(body_dec_deg);
+    double body_lha_rad = RADIANS(body_lha_deg);
+    
+    double tan_phi = pow(1 - EARTH_FLATTENING_FACTOR, 2) * tan(lat_rad);
+    double geo_lat_rad = atan2(tan_phi, 1);
+
+    // Geocentric Altitude
+    double body_geo_alt_rad = asin(sin(geo_lat_rad) * sin(body_dec_rad) + 
+                                   cos(geo_lat_rad) * cos(body_dec_rad) * cos(body_lha_rad));
+    
+    *body_geo_alt_deg = DEGREES(body_geo_alt_rad);
+
+    // Geocentric Azimuth
+    double cos_az = (sin(body_dec_rad) - sin(body_geo_alt_rad) * sin(geo_lat_rad)) / \
+                    (cos(body_geo_alt_rad) * cos(geo_lat_rad));
+
+    double sin_az = (-cos(body_dec_rad) * sin(body_lha_rad)) / (cos(body_geo_alt_rad));
+    double body_geo_az_rad = atan2(sin_az, cos_az);
+
+    *body_geo_az_deg = normalize_angle(DEGREES(body_geo_az_rad));
 }

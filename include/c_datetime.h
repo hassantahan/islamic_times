@@ -3,6 +3,8 @@
 
 #include "astro_core.h"
 
+#define INVALID_DATETIME (datetime){.year = -9999}
+
 typedef struct {
     int year;
     int month;
@@ -21,5 +23,6 @@ datetime add_days(datetime dt, double days_to_add);
 double fraction_of_day_datetime(datetime date);
 void fill_in_datetime_values(datetime* date, PyObject* input_datetime);
 PyObject* datetime_to_pydatetime(datetime dt);
+int compare_datetime(const datetime* a, const datetime* b);
 
 #endif

@@ -1,6 +1,4 @@
 #define PY_SSIZE_T_CLEAN
-#include <math.h>
-#include <string.h>
 #include "c_time_equations.h"
 
 /* ================================

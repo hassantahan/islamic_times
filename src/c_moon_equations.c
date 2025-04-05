@@ -1,6 +1,4 @@
 #define PY_SSIZE_T_CLEAN
-#include <math.h>
-#include <string.h>
 #include "c_moon_equations.h"
 
 /* ================================
@@ -12,7 +10,6 @@
 #define NUM_A_SIN_TERMS 14
 #define NUM_A_COEFFS 14
 
-#define CALCULATE_SUN_PARAMS_FOR_MOON_TIME -123456.0
 #define ASTRONOMICAL_UNIT_KM 149597870.7
 #define EARTH_RADIUS_KM 6378.14
 
@@ -823,6 +820,50 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
     return 0;
 }
 
+datetime find_proper_moontime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
+                                double temperature, double pressure, char event, double deltaPsi[3], double true_obliquity[3]) {
+    // Get gregorian datetime from JD
+    datetime reference_dt;
+    jd_to_gregorian(jd, utc_offset, &reference_dt);
+
+    // Calculate UTC Offset estimate if not given
+    double temp_utc_offset = 0.0;
+    if (utc_offset == 0)
+        temp_utc_offset = floor(longitude / 15) - 1;
+
+    // Set the reference day of year
+    int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
+
+    int status = 0;
+    int i = 0;
+    while(1) {
+        // Shift reference datetime
+        datetime new_datetime;
+        new_datetime = add_days(reference_dt, i);
+
+        // Set temp_moontime by sending in the shifted reference datetime
+        datetime temp_moontime;
+        status = moonrise_or_moonset(new_datetime, temp_utc_offset, latitude, longitude, elevation, 
+                                temperature, pressure, event, deltaPsi, true_obliquity, &temp_moontime);
+
+        if (status != 0)
+            return INVALID_DATETIME;
+
+        datetime temp_moontime_with_estimate_offset = add_days(temp_moontime, (double)i + temp_utc_offset / 24.0);
+
+        int temp_moontime_doy = day_of_year(temp_moontime_with_estimate_offset.year, 
+                                temp_moontime_with_estimate_offset.month, temp_moontime_with_estimate_offset.day);
+
+        if ((temp_moontime_doy < reference_doy && temp_moontime.year == reference_dt.year) || 
+                                (temp_moontime_with_estimate_offset.year < reference_dt.year)) {
+            i++;
+        }
+        else {
+            return temp_moontime;
+        }
+    }
+}
+
 /* Python Wrapper */
 PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
     PyObject *deltaPsi_obj, *true_obliquity_obj;
@@ -862,67 +903,8 @@ PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
         Py_DECREF(item2);
     }
     
-    // Get gregorian datetime from JD
-    datetime reference_dt;
-    jd_to_gregorian(jd, utc_offset, &reference_dt);
-
-    // printf("reference_dt: %d, %d, %d, %d, %d, %d, %d\n", 
-        // reference_dt.year, reference_dt.month, reference_dt.day, 
-        // reference_dt.hour, reference_dt.minute, reference_dt.second, reference_dt.microsecond);
-
-    // Calculate UTC Offset estimate if not given
-    double temp_utc_offset = 0.0;
-    if (utc_offset == 0)
-        temp_utc_offset = floor(longitude / 15) - 1;
-
-    // printf("temp_utc_offset: %f\n", temp_utc_offset);
-    
-
-    // Set the reference day of year
-    int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
-    // printf("reference_doy: %d\n", reference_doy);
-
-    int status = 0;
-    int i = 0;
-    while(1) {
-        // printf("status & i: %d, %d\n", status, i);
-        // Shift reference datetime
-        datetime new_datetime;
-        new_datetime = add_days(reference_dt, i);
-        // printf("new_datetime: %d, %d, %d, %d, %d, %d, %d\n", 
-            // new_datetime.year, new_datetime.month, new_datetime.day, 
-            // new_datetime.hour, new_datetime.minute, new_datetime.second, new_datetime.microsecond);
-
-        // Set temp_moontime by sending in the shifted reference datetime
-        datetime temp_moontime;
-        status = moonrise_or_moonset(new_datetime, temp_utc_offset, latitude, longitude, elevation, 
-                                temperature, pressure, event, deltaPsi, true_obliquity, &temp_moontime);
-        // printf("status: %d\n", status);
-        // printf("temp_moontime: %d, %d, %d, %d, %d, %d, %d\n", 
-            // temp_moontime.year, temp_moontime.month, temp_moontime.day, 
-            // temp_moontime.hour, temp_moontime.minute, temp_moontime.second, temp_moontime.microsecond);
-
-        if (status != 0)
-            return NULL;
-
-        datetime temp_moontime_with_estimate_offset = add_days(temp_moontime, (double)i + temp_utc_offset / 24.0);
-        // printf("temp_moontime_with_estimate_offset: %d, %d, %d, %d, %d, %d, %d\n", 
-            // temp_moontime_with_estimate_offset.year, temp_moontime_with_estimate_offset.month, temp_moontime_with_estimate_offset.day, 
-            // temp_moontime_with_estimate_offset.hour, temp_moontime_with_estimate_offset.minute, temp_moontime_with_estimate_offset.second, temp_moontime_with_estimate_offset.microsecond);
-        
-
-        int temp_moontime_doy = day_of_year(temp_moontime_with_estimate_offset.year, 
-                                temp_moontime_with_estimate_offset.month, temp_moontime_with_estimate_offset.day);
-        // printf("temp_moontime_doy: %d\n", temp_moontime_doy);
-
-        if ((temp_moontime_doy < reference_doy && temp_moontime.year == reference_dt.year) || 
-                                (temp_moontime_with_estimate_offset.year < reference_dt.year)) {
-            i++;
-        }
-        else {
-            return datetime_to_pydatetime(temp_moontime);
-        }
-    }
+    return datetime_to_pydatetime(
+        find_proper_moontime(jd, utc_offset, latitude, longitude, elevation, temperature, pressure, event, deltaPsi, true_obliquity));
 }
 
 
