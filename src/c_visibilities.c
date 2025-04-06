@@ -14,13 +14,52 @@ double yallop_odeh(double sun_az, double sun_alt, double moon_az, double moon_al
     double w_prime = semi_diameter_prime * (1 - cos(RADIANS(arcl_deg)));
 
     if (criterion)
-        return (arcv_deg - (11.8371 - 6.3226 * w_prime + 0.7319 * pow(w_prime, 2) - 0.1018 * pow(w_prime, 3))) / 10;
+        return (arcv_deg - (11.8371 - 6.3226 * w_prime + 0.7319 * pow(w_prime, 2) - 0.1018 * pow(w_prime, 3))) / 10.0;
     
     return arcv_deg - (-0.1018 * pow(w_prime, 3) + 0.7319 * pow(w_prime, 2) - 6.3226 * w_prime + 7.1651);
 }
 
 double shaukat() {
     return 0.0;
+}
+
+const char* classify_visibility(double q, int criterion) {
+    // Special moon/sun conditions
+    if (q == -999.0) 
+        return "Moonset before the new moon.";
+    else if (q == -998.0) 
+        return "Moonset before sunset.";
+    else if (q == -997.0) 
+        return "Moonset & Sunset don't exist.";
+    else if (q == -996.0) 
+        return "Sunset doesn't exist.";
+    else if (q == -995.0) 
+        return "Moonset doesn't exist.";
+
+    // Visibility classification
+    if (criterion == 0) {
+        if (q >= 5.65)
+            return "A: Crescent is visible by naked eyes.";
+        else if (q >= 2.0)
+            return "B: Crescent is visible by optical aid, and it could be seen by naked eyes.";
+        else if (q >= -0.96)
+            return "C: Crescent is visible by optical aid only.";
+        else
+            return "D: Crescent is not visible even by optical aid.";
+    } else {
+        if (q > 0.216)
+            return "A: Easily visible.";
+        else if (q > -0.014)
+            return "B: Visible under perfect conditions.";
+        else if (q > -0.160)
+            return "C: May need optical aid to find crescent.";
+        else if (q > -0.232)
+            return "D: Will need optical aid to find crescent.";
+        else if (q > -0.293)
+            return "E: Not visible with a [conventional] telescope.";
+        else
+            return "F: Not visible; below the Danjon limit.";
+    }
 }
 
 /* ================================
@@ -30,7 +69,7 @@ double shaukat() {
     ================================ */
 
 void compute_visibilities(datetime date, double utc_offset, double lat, double lon, double elev, double temp, double press,
-    double* q_values, datetime* best_dts, int days, int criterion) {
+    VisibilityResult* results, int days, int criterion) {
 
     // Get New Moon Date from moon_phases list
     datetime moon_phases[4];
@@ -55,13 +94,13 @@ void compute_visibilities(datetime date, double utc_offset, double lat, double l
     int start = 0; // To skip the first day if invalid
     if (compare_datetime(&nm_moonset, &INVALID_DATETIME) == 0) {
         // Moonset doesn't exist, for extreme latitudes
-        q_values[0] = -997.0;
+        results[0].q_value = -997.0;
         best_jds[0] = jd_new_moon;
         start++; // Skip day 0
     }
     else if (compare_datetime(&nm_moonset, &new_moon_dt) == 0) {
         // Moon is not visibile before the new moon
-        q_values[0] = -999.0;
+        results[0].q_value = -999.0;
         best_jds[0] = gregorian_to_jd(nm_moonset, utc_offset);
         start++; // Skip day 0
     }
@@ -74,9 +113,6 @@ void compute_visibilities(datetime date, double utc_offset, double lat, double l
 
         // Sunset and Moonset calculations
         double deltaPsi[3]; double true_obliquity[3]; // To store the nutations and avoid unnecessary computations
-        
-        datetime testing = find_proper_suntime(test_jd_new_moon, utc_offset, lat, lon, elev, temp, press, 
-            STANDARD_SET_AND_RISE, 's');
         datetime test_nm_sunset = find_proper_suntime_w_nutation(test_jd_new_moon, utc_offset, lat, lon, elev, temp, press, 
             STANDARD_SET_AND_RISE, 's', deltaPsi, true_obliquity);
 
@@ -91,7 +127,7 @@ void compute_visibilities(datetime date, double utc_offset, double lat, double l
         
         // If moonset is before sunset, continue
         if (compare_datetime(&test_nm_sunset, &test_nm_moonset) == 1) {
-            q_values[i] = -998.0;
+            results[i].q_value = -998.0;
             best_jds[i] = gregorian_to_jd(test_nm_moonset, utc_offset);
             continue;
         }
@@ -117,7 +153,7 @@ void compute_visibilities(datetime date, double utc_offset, double lat, double l
         switch (criterion) {
             case 0:
                 // Odeh uses topocentric apparent (i.e. corrected for standard refraction) horizontal coordinates
-                q_values[i] = yallop_odeh(nm_sun_params.true_azimuth, nm_sun_params.apparent_altitude, 
+                results[i].q_value = yallop_odeh(nm_sun_params.true_azimuth, nm_sun_params.apparent_altitude, 
                                           nm_moon_params.true_azimuth, nm_moon_params.apparent_altitude, nm_moon_params.eh_parallax, 
                                           criterion);
                 break;
@@ -126,19 +162,23 @@ void compute_visibilities(datetime date, double utc_offset, double lat, double l
                 double sun_geo_alt, sun_geo_az, moon_geo_alt, moon_geo_az;
                 geocentric_horizontal_coordinates(lat, nm_sun_params.apparent_declination, nm_sun_params.local_hour_angle, &sun_geo_alt, &sun_geo_az);
                 geocentric_horizontal_coordinates(lat, nm_moon_params.declination, nm_moon_params.local_hour_angle, &moon_geo_alt, &moon_geo_az);
-                q_values[i] = yallop_odeh(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, criterion);
+                results[i].q_value = yallop_odeh(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, criterion);
                 break;
             case 2:
                 // TODO
-                q_values[i] = shaukat();
+                results[i].q_value = shaukat();
                 break;
             default:
                 break;
         }
+
+        results[i].classification = classify_visibility(results[i].q_value, criterion);
     }
 
     for (int i = 0; i < days; i++)
-        jd_to_gregorian(best_jds[i], utc_offset, &best_dts[i]);
+        jd_to_gregorian(best_jds[i], utc_offset, &results[i].best_dt);
+
+    free(best_jds);
 }
     
 /* Python wrapper */
@@ -156,36 +196,71 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     datetime date;
     fill_in_datetime_values(&date, input_datetime);
 
-    double* q_values = malloc(sizeof(double) * days);
-    datetime* best_dts = malloc(sizeof(datetime) * days);
-    compute_visibilities(date, utc_offset, lat, lon, elev, temp, press, q_values, best_dts, days, criterion);
+    // Allocate array and compute
+    VisibilityResult* c_results = malloc(sizeof(VisibilityResult) * days);
+    compute_visibilities(date, utc_offset, lat, lon, elev, temp, press, 
+                        c_results, days, criterion);
 
-    PyObject* result = PyTuple_New(days);
-    if (!result) return NULL;
+    // Construct return tuple
+    // PyObject* result = PyTuple_New(days);
+    // if (!result) {free(c_results); return NULL;}
+
+    // Prepare Python sequences
+    PyObject* py_dates = PyTuple_New(days);
+    PyObject* py_q_values = PyTuple_New(days);
+    PyObject* py_classifications = PyTuple_New(days);
+    if (!py_dates || !py_q_values || !py_classifications) {
+        Py_XDECREF(py_dates);
+        Py_XDECREF(py_q_values);
+        Py_XDECREF(py_classifications);
+        free(c_results);
+        return NULL;
+    }
 
     for (int i = 0; i < days; i++) {
-        PyObject* py_q = PyFloat_FromDouble(q_values[i]);
-        PyObject* py_dt = datetime_to_pydatetime(best_dts[i]);
-        if (!py_q || !py_dt) {
-            Py_XDECREF(py_q);
+        PyObject* py_dt = datetime_to_pydatetime(c_results[i].best_dt);
+        PyObject* py_q = PyFloat_FromDouble(c_results[i].q_value);
+        PyObject* py_class = PyUnicode_FromString(c_results[i].classification);
+
+        if (!py_dt || !py_q || !py_class) {
             Py_XDECREF(py_dt);
-            Py_DECREF(result);
+            Py_XDECREF(py_q);
+            Py_XDECREF(py_class);
+            Py_DECREF(py_dates);
+            Py_DECREF(py_q_values);
+            Py_DECREF(py_classifications);
+            free(c_results);
             return NULL;
         }
 
-        PyObject* pair = PyTuple_New(2);
-        if (!pair) {
-            Py_DECREF(py_q);
-            Py_DECREF(py_dt);
-            Py_DECREF(result);
-            return NULL;
-        }
-
-        PyTuple_SET_ITEM(pair, 0, py_q);  // Transfers ownership
-        PyTuple_SET_ITEM(pair, 1, py_dt); // Transfers ownership
-
-        PyTuple_SET_ITEM(result, i, pair);  // Transfers ownership
+        PyTuple_SET_ITEM(py_dates, i, py_dt);
+        PyTuple_SET_ITEM(py_q_values, i, py_q);
+        PyTuple_SET_ITEM(py_classifications, i, py_class);
     }
+
+    free(c_results);
+
+    // Create Visibilities instance
+    const char* criterion_name = (criterion == 0) ? "Odeh" :
+                                 (criterion == 1) ? "Yallop" :
+                                 (criterion == 2) ? "Shaukat" : "Unknown";
+    PyObject* py_criterion = PyUnicode_FromString(criterion_name);
+    if (!py_criterion) {
+        Py_DECREF(py_dates);
+        Py_DECREF(py_q_values);
+        Py_DECREF(py_classifications);
+        return NULL;
+    }
+
+    PyObject* args_tuple = Py_BuildValue("OOOO", py_criterion, py_dates, py_q_values, py_classifications);
+    Py_DECREF(py_criterion);  // Py_BuildValue increases refcount
+    Py_DECREF(py_dates);
+    Py_DECREF(py_q_values);
+    Py_DECREF(py_classifications);
+    if (!args_tuple) return NULL;
+
+    PyObject* result = PyObject_CallObject(VisibilitiesType, args_tuple); //PyObject_CallObject(VisibilitiesType, args_tuple);
+    Py_DECREF(args_tuple);
 
     return result;
 }

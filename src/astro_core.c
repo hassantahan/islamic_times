@@ -8,6 +8,7 @@
 
 PyObject *SunType = NULL;
 PyObject *MoonType = NULL;
+PyObject *VisibilitiesType = NULL;
 PyObject *AngleType = NULL;
 PyObject *DistanceType = NULL;
 PyObject *DistanceUnitsType = NULL;
@@ -22,6 +23,7 @@ static void cleanup_types(void) {
     // Optional cleanup at exit
     Py_XDECREF(SunType);
     Py_XDECREF(MoonType);
+    Py_XDECREF(VisibilitiesType);
     Py_XDECREF(AngleType);
     Py_XDECREF(DistanceType);
     Py_XDECREF(DistanceUnitsType);
@@ -82,6 +84,7 @@ PyMODINIT_FUNC PyInit_astro_core(void) {
     // Clean and safe import
     IMPORT_TYPE(SunType, mod_sun, "Sun");
     IMPORT_TYPE(MoonType, mod_moon, "Moon");
+    IMPORT_TYPE(VisibilitiesType, mod_dc, "Visibilities");
     IMPORT_TYPE(AngleType, mod_dc, "Angle");
     IMPORT_TYPE(DistanceType, mod_dc, "Distance");
     IMPORT_TYPE(DistanceUnitsType, mod_dc, "DistanceUnits");

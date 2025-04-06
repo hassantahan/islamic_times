@@ -40,6 +40,7 @@
 extern PyObject *datetime_datetime;
 extern PyObject *SunType;
 extern PyObject *MoonType;
+extern PyObject *VisibilitiesType;
 extern PyObject *AngleType;
 extern PyObject *DistanceType;
 extern PyObject *DistanceUnitsType;

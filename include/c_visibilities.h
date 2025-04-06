@@ -4,6 +4,12 @@
 // Includes
 #include "c_moon_equations.h"
 
+typedef struct {
+    double q_value;
+    datetime best_dt;
+    const char* classification;
+} VisibilityResult;
+
 PyObject* py_compute_visibilities(PyObject* self, PyObject* args);
 
 #endif

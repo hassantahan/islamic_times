@@ -567,3 +567,16 @@ class MoonInfo:
                 f"\tTop. Right Ascension:\t{self.topocentric_right_ascension}\n"
                 f"\tGreenwich Hour Angle:\t{self.greenwich_hour_angle}\n"
                 f"\tLocal Hour Angle:\t{self.local_hour_angle}")
+
+@dataclass(frozen=True, slots=True)
+class Visibilities:
+    criterion: str
+    dates: Tuple[datetime]
+    q_values: Tuple[float]
+    classifications: Tuple[str]
+
+    def __str__(self):
+        base: str = f"Visibility of New Moon Crescent:\n\tCriterion: {self.criterion}\n"
+        for i, q in enumerate(self.q_values):
+            base += f"\t{self.dates[i].strftime("%X %d-%m-%Y")}:\t{self.q_values[i]:+6.3f}\t{self.classifications[i]}\n"
+        return base

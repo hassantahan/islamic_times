@@ -699,7 +699,7 @@ class ITLocation:
         return moon_phases
 
     # Calculate Next New Moon Visibilities
-    def visibilities(self, days: int = 3, criterion: int = 1) -> Dict [datetime, List[str | float]]:
+    def visibilities(self, days: int = 3, criterion: int = 1) -> Visibilities:
         """
         Returns a dictionary describing the visibility of the nearest new moon for the observer.
 
@@ -742,130 +742,140 @@ class ITLocation:
             raise ValueError(f"'type' must be either 0 or 1. Invalid value: {criterion}.")
         
 
-        # Get New Moon Date from moon_phases list
-        moon_phases = self.moonphases()
-        for item in moon_phases:
-                if item['phase'] == "New Moon":
-                    new_moon = item['datetime']
-                    break
+        import islamic_times.astro_core as fast_astro
 
-        # Find JD for the given date; adjust day for difference in UTC and local timezone
-        jd_new_moon = te.gregorian_to_jd(new_moon, self.observer_dateinfo.utc_offset * -1)
-        ymd_new_moon = te.jd_to_gregorian(jd_new_moon).replace(tzinfo=self.observer_dateinfo.date.tzinfo)
-        deltaT_new_moon = te.delta_t_approx(ymd_new_moon.year, ymd_new_moon.month)
-        new_moon_dateinfo: DateTimeInfo = DateTimeInfo(
-                                                    date=ymd_new_moon,
-                                                    jd=jd_new_moon,
-                                                    deltaT=deltaT_new_moon
-                                                )
+        visibilities: Visibilities = fast_astro.compute_visibilities(self.observer_dateinfo.date, self.observer_dateinfo.utc_offset, 
+                                              self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, 
+                                              self.observer_info.elevation.in_unit(DistanceUnits.METRE), 
+                                              self.observer_info.temperature, self.observer_info.pressure, 
+                                              days, criterion)
 
-        # Find visibilities for the three days
-        visibilities = []
-        best_jds = []
-        for day in range(days):
-            # First, check if the moonset is before the new moon for the first day
-            if day == 0:
-                nm_moonset = me.find_proper_moontime(new_moon_dateinfo, self.observer_info, 'set')
-                if nm_moonset == datetime.min:
-                    # Moonset doesn't exist, for extreme latitudes
-                    v = -997
-                    visibilities.append(v)
-                    best_jds.append(jd_new_moon)
-                    continue
-                elif nm_moonset < new_moon_dateinfo.date:
-                    # Moon is not visibile before the new moon
-                    v = -999
-                    visibilities.append(v)
-                    best_jds.append(te.gregorian_to_jd(nm_moonset))
-                    continue
+        return visibilities
 
-            # Set the day parameters
-            test_jd_new_moon = jd_new_moon + day
-            test_ymd_new_moon = te.jd_to_gregorian(test_jd_new_moon).replace(tzinfo=self.observer_dateinfo.date.tzinfo)
-            test_deltaT_new_moon = te.delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month)
-            test_observer_dateinfo: DateTimeInfo = DateTimeInfo(
-                date=test_ymd_new_moon,
-                jd=test_jd_new_moon,
-                deltaT=test_deltaT_new_moon
-            )
+        # # Get New Moon Date from moon_phases list
+        # moon_phases = self.moonphases()
+        # for item in moon_phases:
+        #         if item['phase'] == "New Moon":
+        #             new_moon = item['datetime']
+        #             break
+
+        # # Find JD for the given date; adjust day for difference in UTC and local timezone
+        # jd_new_moon = te.gregorian_to_jd(new_moon, self.observer_dateinfo.utc_offset * -1)
+        # ymd_new_moon = te.jd_to_gregorian(jd_new_moon).replace(tzinfo=self.observer_dateinfo.date.tzinfo)
+        # deltaT_new_moon = te.delta_t_approx(ymd_new_moon.year, ymd_new_moon.month)
+        # new_moon_dateinfo: DateTimeInfo = DateTimeInfo(
+        #                                             date=ymd_new_moon,
+        #                                             jd=jd_new_moon,
+        #                                             deltaT=deltaT_new_moon
+        #                                         )
+
+        # # Find visibilities for the three days
+        # visibilities = []
+        # best_jds = []
+        # for day in range(days):
+        #     # First, check if the moonset is before the new moon for the first day
+        #     if day == 0:
+        #         nm_moonset = me.find_proper_moontime(new_moon_dateinfo, self.observer_info, 'set')
+        #         if nm_moonset == datetime.min:
+        #             # Moonset doesn't exist, for extreme latitudes
+        #             v = -997
+        #             visibilities.append(v)
+        #             best_jds.append(jd_new_moon)
+        #             continue
+        #         elif nm_moonset < new_moon_dateinfo.date:
+        #             # Moon is not visibile before the new moon
+        #             v = -999
+        #             visibilities.append(v)
+        #             best_jds.append(te.gregorian_to_jd(nm_moonset))
+        #             continue
+
+        #     # Set the day parameters
+        #     test_jd_new_moon = jd_new_moon + day
+        #     test_ymd_new_moon = te.jd_to_gregorian(test_jd_new_moon).replace(tzinfo=self.observer_dateinfo.date.tzinfo)
+        #     test_deltaT_new_moon = te.delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month)
+        #     test_observer_dateinfo: DateTimeInfo = DateTimeInfo(
+        #         date=test_ymd_new_moon,
+        #         jd=test_jd_new_moon,
+        #         deltaT=test_deltaT_new_moon
+        #     )
+
+        #     # Sunset & moonset calculations
+        #     test_nm_sunset = se.find_proper_suntime(test_observer_dateinfo, self.observer_info, 'set')
+
+        #     if day == 0:
+        #         test_nm_moonset = nm_moonset
+        #     else:
+        #         test_nm_moonset = me.find_proper_moontime(test_observer_dateinfo, self.observer_info, 'set')
+
+        #     # For extreme latitudes where the moonset or sunset don't exist:
+        #     if abs(self.observer_info.latitude.decimal) > 62:
+        #         if test_nm_sunset == datetime.min and test_nm_moonset == datetime.min:
+        #             # Moonset and sunset don't exist
+        #             v = -997
+        #             visibilities.append(v)
+        #             best_jds.append(test_jd_new_moon)
+        #             continue
+        #         elif test_nm_sunset == datetime.min:
+        #             # Only sunset doesn't exist
+        #             v = -996
+        #             visibilities.append(v)
+        #             best_jds.append(te.gregorian_to_jd(test_nm_moonset))
+        #             continue
+        #         elif test_nm_moonset == datetime.min:
+        #             # Only moonset doesn't exist
+        #             v = -995
+        #             visibilities.append(v)
+        #             best_jds.append(te.gregorian_to_jd(test_nm_sunset))
+        #             continue
             
-            # Sunset & moonset calculations
-            test_nm_sunset = se.find_proper_suntime(test_observer_dateinfo, self.observer_info, 'set')
+        #     # If moonset is before sunset, continue
+        #     if test_nm_moonset < test_nm_sunset:
+        #         v = -998
+        #         visibilities.append(v)
+        #         best_jds.append(te.gregorian_to_jd(test_nm_moonset))
+        #         continue
 
-            if day == 0:
-                test_nm_moonset = nm_moonset
-            else:
-                test_nm_moonset = me.find_proper_moontime(test_observer_dateinfo, self.observer_info, 'set')
+        #     # Find the best time which is four ninths the moonset-sunset lag after sunset 
+        #     lag = (test_nm_moonset - test_nm_sunset).total_seconds() / 3600
+        #     best_time = (test_nm_sunset + timedelta(hours=4 / 9 * lag)).replace(tzinfo=self.observer_dateinfo.date.tzinfo)
+        #     best_time_jd = te.gregorian_to_jd(best_time, -1 * self.observer_dateinfo.utc_offset)
+        #     best_jds.append(best_time_jd)
 
-            # For extreme latitudes where the moonset or sunset don't exist:
-            if abs(self.observer_info.latitude.decimal) > 62:
-                if test_nm_sunset == datetime.min and test_nm_moonset == datetime.min:
-                    # Moonset and sunset don't exist
-                    v = -997
-                    visibilities.append(v)
-                    best_jds.append(test_jd_new_moon)
-                    continue
-                elif test_nm_sunset == datetime.min:
-                    # Only sunset doesn't exist
-                    v = -996
-                    visibilities.append(v)
-                    best_jds.append(te.gregorian_to_jd(test_nm_moonset))
-                    continue
-                elif test_nm_moonset == datetime.min:
-                    # Only moonset doesn't exist
-                    v = -995
-                    visibilities.append(v)
-                    best_jds.append(te.gregorian_to_jd(test_nm_sunset))
-                    continue
-            
-            # If moonset is before sunset, continue
-            if test_nm_moonset < test_nm_sunset:
-                v = -998
-                visibilities.append(v)
-                best_jds.append(te.gregorian_to_jd(test_nm_moonset))
-                continue
+        #     best_time_dateinfo: DateTimeInfo = DateTimeInfo(
+        #         date=best_time,
+        #         jd=best_time_jd,
+        #         deltaT=test_deltaT_new_moon
+        #     )
 
-            # Find the best time which is four ninths the moonset-sunset lag after sunset 
-            lag = (test_nm_moonset - test_nm_sunset).total_seconds() / 3600
-            best_time = (test_nm_sunset + timedelta(hours=4 / 9 * lag)).replace(tzinfo=self.observer_dateinfo.date.tzinfo)
-            best_time_jd = te.gregorian_to_jd(best_time, -1 * self.observer_dateinfo.utc_offset)
-            best_jds.append(best_time_jd)
+        #     # Recalculate sun & calculate moon parameters
+        #     nm_sun_params = se.sunpos(best_time_dateinfo, self.observer_info)
+        #     nm_moon_params = me.moonpos(best_time_dateinfo, self.observer_info, nm_sun_params.delta_obliquity, nm_sun_params.true_obliquity)
 
-            best_time_dateinfo: DateTimeInfo = DateTimeInfo(
-                date=best_time,
-                jd=best_time_jd,
-                deltaT=test_deltaT_new_moon
-            )
+        #     # Calculate visibilities
+        #     if criterion == 1:
+        #         # Yallop uses geocentric horizontal coordinates
+        #         sun_geo_alt, sun_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_sun_params.apparent_declination, nm_sun_params.local_hour_angle)
+        #         moon_geo_alt, moon_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_moon_params.declination, nm_moon_params.local_hour_angle)
+        #         v = me.calculate_visibility(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, criterion)
+        #     else:
+        #         # Odeh uses the apparent (i.e. adjusted for refraction) topocentric horizontal coordinates
+        #         v = me.calculate_visibility(nm_sun_params.true_azimuth, nm_sun_params.apparent_altitude, nm_moon_params.true_azimuth, nm_moon_params.apparent_altitude, nm_moon_params.eh_parallax, criterion)
 
-            # Recalculate sun & calculate moon parameters
-            nm_sun_params = se.sunpos(best_time_dateinfo, self.observer_info)
-            nm_moon_params = me.moonpos(best_time_dateinfo, self.observer_info, nm_sun_params.delta_obliquity, nm_sun_params.true_obliquity)
+        #     visibilities.append(v)
 
-            # Calculate visibilities
-            if criterion == 1:
-                # Yallop uses geocentric horizontal coordinates
-                sun_geo_alt, sun_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_sun_params.apparent_declination, nm_sun_params.local_hour_angle)
-                moon_geo_alt, moon_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_moon_params.declination, nm_moon_params.local_hour_angle)
-                v = me.calculate_visibility(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, criterion)
-            else:
-                # Odeh uses the apparent (i.e. adjusted for refraction) topocentric horizontal coordinates
-                v = me.calculate_visibility(nm_sun_params.true_azimuth, nm_sun_params.apparent_altitude, nm_moon_params.true_azimuth, nm_moon_params.apparent_altitude, nm_moon_params.eh_parallax, criterion)
+        # # Arrange and classify visibilties
+        # q_values = [[v, me.classify_visibility(v, criterion)] for v in visibilities]
 
-            visibilities.append(v)
+        # # Convert best times from JD to datetime
+        # best_dates = [
+        #     te.jd_to_gregorian(jd, self.utc_offset)
+        #     for jd in best_jds
+        # ]
 
-        # Arrange and classify visibilties
-        q_values = [[v, me.classify_visibility(v, criterion)] for v in visibilities]
+        # # Label each q_value to its associated date
+        # visibility_dictionary = {
+        #     dt.strftime('%Y-%m-%d %X'): q_value
+        #     for dt, q_value in zip(best_dates, q_values)
+        # }
 
-        # Convert best times from JD to datetime
-        best_dates = [
-            te.jd_to_gregorian(jd, self.utc_offset)
-            for jd in best_jds
-        ]
-
-        # Label each q_value to its associated date
-        visibility_dictionary = {
-            dt.strftime('%Y-%m-%d %X'): q_value
-            for dt, q_value in zip(best_dates, q_values)
-        }
-
-        return visibility_dictionary
+        # return visibility_dictionary
