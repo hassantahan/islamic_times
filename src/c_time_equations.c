@@ -47,7 +47,7 @@ double gregorian_to_jd(datetime date, double utc_offset) {
     int a = (int)(floor(y / 100));
     int b = 2 - a + (int)(floor(a / 4));
 
-    double jd = (int)(floor(365.25 * (y + 4716)) + (int)(floor(30.6001 * (m + 1)))) + d + b - 1524.5 - utc_offset / 24;
+    double jd = (int)(floor(365.25 * (y + 4716)) + (int)(floor(30.6001 * (m + 1)))) + d + b - 1524.5 - utc_offset / 24.0;
 
     return jd;
 }
@@ -78,7 +78,7 @@ PyObject* py_gregorian_to_jd(PyObject *self, PyObject *args) {
 
 int jd_to_gregorian(double jd, double utc_offset, datetime* date) {
     if (jd > 0) {
-        jd += 0.5 - utc_offset / 24;
+        jd += 0.5 + utc_offset / 24.0;
         
         int z = (int)jd;
         double f = jd - z;
@@ -236,7 +236,7 @@ double delta_t_approx(int year, int month) {
 PyObject* py_delta_t_approx(PyObject *self, PyObject *args) {
     int year, month; 
 
-    if (!PyArg_ParseTuple(args, "dd", &year, &month)) return NULL;
+    if (!PyArg_ParseTuple(args, "ii", &year, &month)) return NULL;
 
     double result = delta_t_approx(year, month);
 

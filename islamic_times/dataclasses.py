@@ -350,7 +350,7 @@ class DateTimeInfo:
     
     @property
     def utc_offset(self) -> float:
-        return self.date.utcoffset().total_seconds() / 3600 * -1
+        return self.date.utcoffset().total_seconds() / 3600
     
     @property
     def jde(self) -> float:

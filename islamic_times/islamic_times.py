@@ -23,6 +23,7 @@ from islamic_times import sun_equations as se
 from islamic_times import moon_equations as me
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
+import islamic_times.astro_core as fast_astro
 
 class ITLocation:
     """
@@ -166,11 +167,11 @@ class ITLocation:
         
         # Determine UTC Offset
         tz = self.get_timezone(find_local_tz, date)
-        self.utc_offset = tz.utcoffset(None).total_seconds() / 3600 * -1
+        self.utc_offset = tz.utcoffset(None).total_seconds() / 3600
         date = date.replace(tzinfo=tz)
 
-        jd = te.gregorian_to_jd(date, -1 * date.utcoffset().total_seconds() / 3600)
-        deltaT = te.delta_t_approx(date.year, date.month)
+        jd = fast_astro.gregorian_to_jd(date, date.utcoffset().total_seconds() / 3600)
+        deltaT = fast_astro.delta_t_approx(date.year, date.month)
         islamic_dates = te.gregorian_to_hijri(date.year, date.month, date.day)
         self.observer_dateinfo: DateTimeInfo = DateTimeInfo(
             date=date,
@@ -178,6 +179,7 @@ class ITLocation:
             jd=jd,
             deltaT=deltaT
         )
+        test = fast_astro.jd_to_gregorian(jd, self.observer_dateinfo.utc_offset)
 
         # Autocalculation for astronomical parameters
         self.auto_calculate = auto_calculate
@@ -236,10 +238,10 @@ class ITLocation:
             raise TypeError(f"'date_time' must be of type `datetime`, but got `{type(new_date).__name__}`.")
 
         if new_date.tzinfo is not None:
-            jd = te.gregorian_to_jd(new_date, -1 * new_date.utcoffset().total_seconds() / 3600)
+            jd = fast_astro.gregorian_to_jd(new_date, new_date.utcoffset().total_seconds() / 3600)
         else:
-            jd = te.gregorian_to_jd(new_date)
-        deltaT = te.delta_t_approx(new_date.year, new_date.month)
+            jd = fast_astro.gregorian_to_jd(new_date, 0)
+        deltaT = fast_astro.delta_t_approx(new_date.year, new_date.month)
         islamic_dates = te.gregorian_to_hijri(new_date.year, new_date.month, new_date.day)
         self.observer_dateinfo: DateTimeInfo = DateTimeInfo(
             date=new_date.replace(tzinfo=self.observer_dateinfo.date.tzinfo),
@@ -680,22 +682,10 @@ class ITLocation:
         """
 
         # Find Next New Moon (and the rest of the phases)
-        phases = me.next_phases_of_moon_utc(self.observer_dateinfo.date)
-        moon_phases: List = []
-        for i, phase in enumerate(phases):
-            phase_str = ""
-            if i == 0:
-                phase_str = "New Moon"
-            elif i == 1:
-                phase_str = "First Quarter"
-            elif i == 2:
-                phase_str = "Full Moon"
-            else:
-                phase_str = "Last Quarter"
-            
-            moon_phases.extend((phase_str, phase))
+        phases: Tuple[datetime, datetime, datetime, datetime] = me.next_phases_of_moon_utc(self.observer_dateinfo.date)
+        phase_names = ["New Moon", "First Quarter", "Full Moon", "Last Quarter"]
 
-        return moon_phases
+        return [(phase_names[i], phase + timedelta(hours=self.utc_offset)) for i, phase in enumerate(phases)]
 
     # Calculate Next New Moon Visibilities
     def visibilities(self, days: int = 3, criterion: int = 1) -> Visibilities:
@@ -729,17 +719,14 @@ class ITLocation:
             raise ValueError(f"'days' must be greater than 0. Invalid value: {days}.")
         
         if criterion not in (0, 1):
-            raise ValueError(f"'type' must be either 0 or 1. Invalid value: {criterion}.")
+            raise ValueError(f"'criterion' must be either 0 or 1. Invalid value: {criterion}.")
         
         
         if not isinstance(criterion, int):
-            raise TypeError(f"'type' must be of type `int`, but got `{criterion(criterion).__name__}`.")
+            raise TypeError(f"'criterion' must be of type `int`, but got `{criterion(criterion).__name__}`.")
         
         if criterion not in (0, 1):
-            raise ValueError(f"'type' must be either 0 or 1. Invalid value: {criterion}.")
-        
-
-        import islamic_times.astro_core as fast_astro
+            raise ValueError(f"'criterion' must be either 0 or 1. Invalid value: {criterion}.")
 
         visibilities: Visibilities = fast_astro.compute_visibilities(self.observer_dateinfo.date, self.observer_dateinfo.utc_offset, 
                                               self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, 

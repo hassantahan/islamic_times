@@ -19,6 +19,7 @@ References:
 import math
 import pytz
 from typing import Tuple, Dict
+from warnings import deprecated
 from datetime import datetime, time
 from timezonefinder import TimezoneFinder
 from islamic_times.dataclasses import Angle
@@ -73,6 +74,7 @@ def fraction_of_day(date: datetime) -> float:
 
 # Taken from pg. 88 of AA 
 # (DOES NOT TAKE JDE)
+@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension as "islamic_times.astro_core.greenwich_mean_sidereal_time()".')
 def greenwich_mean_sidereal_time(julian_day: float) -> Angle:
     '''Compute the Greenwich Mean Sidereal Time (GMST) in degrees for a given Julian Day.
 
@@ -92,6 +94,7 @@ def greenwich_mean_sidereal_time(julian_day: float) -> Angle:
     return Angle(theta_zero % 360)
 
 # Look to Jean Meeus' "Astronomical Algorithms"
+@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension as "islamic_times.astro_core.gregorian_to_jd()".')
 def gregorian_to_jd(date: datetime, zone: float = 0) -> float:
     '''Convert a Gregorian date to a Julian Day.
 
@@ -117,6 +120,7 @@ def gregorian_to_jd(date: datetime, zone: float = 0) -> float:
     return jd
 
 # Look to Jean Meeus' "Astronomical Algorithms" pg. 
+@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension as "islamic_times.astro_core.jd_to_gregorian()".')
 def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
     '''Convert a Julian Day to a Gregorian datetime.
 
@@ -276,6 +280,7 @@ def get_islamic_day(day: str) -> str:
     return ISLAMIC_DAYS.get(day, "Invalid day")
 
 # Based off of https://eclipse.gsfc.nasa.gov/LEcat5/deltatpoly.html
+@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension as "islamic_times.astro_core.delta_t_approx()".')
 def delta_t_approx(year: int, month: int) -> float:
     '''Approximate the value of ΔT (Delta T) in seconds for a given year and month.
 

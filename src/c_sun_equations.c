@@ -465,7 +465,7 @@ PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
                                     elevation, temperature, pressure, &transit_dt);
 
     if (status == 0)
-        return datetime_to_pydatetime(transit_dt);
+        return datetime_to_pydatetime(add_days(transit_dt, utc_offset / 24.0));
     else
         return NULL;
 }
@@ -553,7 +553,7 @@ datetime find_proper_suntime(double jd, double utc_offset, double latitude, doub
     jd_to_gregorian(jd, utc_offset, &reference_dt);
 
     // Calculate UTC Offset estimate if not given
-    double temp_utc_offset = 0.0;
+    double temp_utc_offset = utc_offset;
     if (utc_offset == 0)
         temp_utc_offset = floor(longitude / 15) - 1;
     
@@ -587,7 +587,7 @@ datetime find_proper_suntime(double jd, double utc_offset, double latitude, doub
             i++;
         }
         else {
-            return temp_suntime;
+            return add_days(temp_suntime, utc_offset / 24.0);
         }
     }
 }
@@ -689,7 +689,7 @@ datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double lat
     jd_to_gregorian(jd, utc_offset, &reference_dt);
 
     // Calculate UTC Offset estimate if not given
-    double temp_utc_offset = 0.0;
+    double temp_utc_offset = utc_offset;
     if (utc_offset == 0)
         temp_utc_offset = floor(longitude / 15) - 1;
     
@@ -721,7 +721,7 @@ datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double lat
             i++;
         }
         else {
-            return temp_suntime;
+            return add_days(temp_suntime, utc_offset / 24.0);
         }
     }
 }

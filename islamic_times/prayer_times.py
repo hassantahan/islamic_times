@@ -19,6 +19,7 @@ adjustments for extreme latitudes.
 
 import warnings
 from typing import List
+import islamic_times.astro_core as fast_astro
 from islamic_times.dataclasses import *
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
@@ -76,16 +77,18 @@ def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angl
     for the **midnight calculation** in the **Sunset-to-Fajr method**.
 
     Parameters:
-    	date (datetime): Date of the observer.
-    	lat (float): Latitude of the observer.
-    	long (float): Longitude of the observer.
-    	elevation (float): Observer's elevation above sea level in metres.
-    	utc_change (float): Observer's UTC offset.
+    	observer_date (DateTimeInfo): Date information of the observer.
+    	observer (ObserverInfo): Position information of the observer.
+    	angle (Angle): Fajr angle.
 
     Returns:
-    	datetime: The calculated **fajr time** for the next day in **local standard time**.
+    	datetime: The calculated fajr time for the next day in local time.
     """
-    tomorrow_date = replace(observer_date, date=observer_date.date + timedelta(days=1))
+    new_date: datetime = observer_date.date + timedelta(days=1) 
+    tomorrow_date: DateTimeInfo = replace(observer_date, 
+                                            date=new_date,
+                                            jd=observer_date.jd + 1,
+                                            deltaT=fast_astro.delta_t_approx(new_date.year, new_date.month))
     tomorrow_standard_time = se.find_proper_suntime(tomorrow_date, observer, 'rise', angle)
 
     return tomorrow_standard_time

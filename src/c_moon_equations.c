@@ -729,7 +729,7 @@ PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
                                     &transit_dt);
 
     if (status == 0)
-        return datetime_to_pydatetime(transit_dt);
+        return datetime_to_pydatetime(add_days(transit_dt, utc_offset / 24.0));
     else
         return NULL;
 }
@@ -827,7 +827,7 @@ datetime find_proper_moontime(double jd, double utc_offset, double latitude, dou
     jd_to_gregorian(jd, utc_offset, &reference_dt);
 
     // Calculate UTC Offset estimate if not given
-    double temp_utc_offset = 0.0;
+    double temp_utc_offset = utc_offset;
     if (utc_offset == 0)
         temp_utc_offset = floor(longitude / 15) - 1;
 
@@ -859,7 +859,7 @@ datetime find_proper_moontime(double jd, double utc_offset, double latitude, dou
             i++;
         }
         else {
-            return temp_moontime;
+            return add_days(temp_moontime, utc_offset / 24.0);
         }
     }
 }

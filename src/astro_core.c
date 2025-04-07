@@ -38,7 +38,7 @@ static PyMethodDef AstroCoreMethods[] = {
     {"greenwich_mean_sidereal_time", py_greenwich_mean_sidereal_time, METH_VARARGS, "Compute GMST give a Julian Day."},
     {"jd_to_gregorian", py_jd_to_gregorian, METH_VARARGS, "Find the Gregorian date and time given a Julian day."},
     {"gregorian_to_jd", py_gregorian_to_jd, METH_VARARGS, "Find the Julian Day given a Gregorian date and time."},
-    {"delta_t_appox", py_delta_t_approx, METH_VARARGS, "Find the approximate ΔT given a year and month."},
+    {"delta_t_approx", py_delta_t_approx, METH_VARARGS, "Find the approximate ΔT given a year and month."},
     {"compute_sun", (PyCFunction)(PyObject *(*)(PyObject *, PyObject *const *, Py_ssize_t))py_compute_sun, METH_FASTCALL, "Compute the sun's position and parameters."},
     {"find_sun_transit", py_find_sun_transit, METH_VARARGS, "Compute the time of the transit of the sun for the given date."},
     {"find_proper_suntime", py_find_proper_suntime, METH_VARARGS, "Compute sunrise or sunset for the given date."},
