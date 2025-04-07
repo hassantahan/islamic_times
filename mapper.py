@@ -188,15 +188,6 @@ def compute_visibility_map_parallel(lon_vals, lat_vals, dt, days, criterion,
     mode_byte: str = 'r' if mode == "raw" else 'c'
     lat_chunks = split_lat_chunks(lat_vals, num_workers)
 
-    moon_phases = it.ITLocation(date=dt, auto_calculate=False).moonphases()
-    for item in moon_phases:
-            if item['phase'] == "New Moon":
-                new_moon_date = item['datetime']
-                break  
-    
-    if new_moon_date is None:
-        raise RuntimeError("New Moon not found in moon phases.")
-
     print_ts(f"Conjunction Date: {new_moon_date.strftime("%Y-%m-%d %X")}")
 
     args = [(chunk, lon_vals, new_moon_date, days, criterion, utc_offset, elev, temp, press, mode_byte)
@@ -207,7 +198,7 @@ def compute_visibility_map_parallel(lon_vals, lat_vals, dt, days, criterion,
 
     # Stack along latitude axis to reconstruct full (ny, nx, days) array
     visibilities_3d = np.vstack(results)
-    return visibilities_3d, new_moon_date
+    return visibilities_3d
 
 def load_shapefiles(states_path, places_path, cities):
     states_gdf = gpd.read_file(states_path)
@@ -411,10 +402,10 @@ def name_fig(start_date, mode):
         name += "Odeh"
 
     if mode == "raw":
-        qual = 90
+        qual = 95
         name += " Gradient"
     else:
-        qual = 80
+        qual = 90
 
     name += ".jpg"
 
@@ -486,7 +477,7 @@ def main(day: datetime, res: int = 100, mode: str = "category", region: str = 'W
 
     print_ts(f"Calculating new moon crescent visibilities...")
     t1 = time()
-    visibilities_3d, start_date = compute_visibility_map_parallel(lon_vals, lat_vals, day, amount, visibility_criterion, mode=mode)
+    visibilities_3d = compute_visibility_map_parallel(lon_vals, lat_vals, day, amount, visibility_criterion, mode=mode)
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
     print_ts(f"Getting colours for the categories...")
@@ -505,12 +496,12 @@ def main(day: datetime, res: int = 100, mode: str = "category", region: str = 'W
     plot_map(lon_vals, lat_vals, visibilities_mapped, states_clip, places_clip, 
              list(categories.keys()) if mode == "category" else [], 
              colors_rgba if mode == "category" else {}, 
-             start_date, amount, path, mode)
+             new_moon_date, amount, path, mode)
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
 if __name__ == "__main__":
     # Vars
-    today = datetime(2024, 8, 4)
+    today = datetime.now()
     master_path: str = "B:/Personal/New Moon Visibilities/Experiment/C-Rewrite/"
     total_months: int = 1
     map_region: str = "WORLD" # 'NORTH_AMERICA' 'EUROPE' 'MIDDLE_EAST' 'IRAN' 'WORLD' 'WORLD_FULL'
@@ -525,10 +516,10 @@ if __name__ == "__main__":
     for month in range(total_months):
         assert map_mode in ("raw", "category"), f"Invalid mode: {map_mode}"
         month_start_time: float = time()
-        new_day = today + timedelta(days=np.round(AVERAGE_LUNAR_MONTH_DAYS * month))
+        new_moon_date: datetime = fast_astro.next_phases_of_moon_utc(today)[0]
 
         # Islamic Date Formatting
-        islamic_date = gregorian_to_hijri(new_day.year, new_day.month, new_day.day)
+        islamic_date = gregorian_to_hijri(new_moon_date.year, new_moon_date.month, new_moon_date.day)
         islamic_year, islamic_month, islamic_day = islamic_date[0], islamic_date[1], islamic_date[2]
         if islamic_day > 6:
             islamic_month += 1
@@ -544,7 +535,7 @@ if __name__ == "__main__":
             os.makedirs(new_path)
 
         print_ts(f"===Generating map for {islamic_month_name}, {islamic_year}===")
-        main(day=new_day, res=resolution, region=map_region, amount=days_to_generate, visibility_criterion=criterion, path=new_path, mode=map_mode)
+        main(day=new_moon_date, res=resolution, region=map_region, amount=days_to_generate, visibility_criterion=criterion, path=new_path, mode=map_mode)
         print_ts(f"===Map for {islamic_month_name}, {islamic_year} Complete===")
         print_ts(f"Time to generate map for {islamic_month_name}, {islamic_year}: {(time() - month_start_time):.2f}s")
 

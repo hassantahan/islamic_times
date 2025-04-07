@@ -1,5 +1,16 @@
 from setuptools import setup, find_packages, Extension
 import numpy
+import sys
+
+compile_args = []
+link_args = []
+
+if sys.platform == "win32":
+    compile_args = ["/Ox"]
+    link_args = []
+else:
+    compile_args = ["-O3"]
+    link_args = []
 
 astro_core = Extension(
     name="islamic_times.astro_core",
@@ -14,17 +25,16 @@ astro_core = Extension(
     ],
     include_dirs=[
         "include",
-        "C:/Program Files/Python313/include",
         numpy.get_include()
     ],
     library_dirs=["C:/Program Files/Python313/libs"],
-    extra_compile_args=["/MD", "/O2", "/Zi"], #/Ox
-    extra_link_args=["/DEBUG"]
+    extra_compile_args=compile_args,
+    extra_link_args=link_args
 )
 
 setup(
     name='islamic_times',
-    version='1.8.0',
+    version='2.0.0',
     description='Various calculations for Islamic purposes',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',

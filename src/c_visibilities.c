@@ -94,7 +94,7 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         best_jds[0] = jd_new_moon;
         start++; // Skip day 0
     }
-    else if (compare_datetime(&nm_moonset, &new_moon_dt) == 0) {
+    else if (compare_datetime(&new_moon_dt, &nm_moonset) == 1) {
         // Moon is not visibile before the new moon
         results[0].q_value = -999.0;
         results[0].classification = classify_visibility(results[0].q_value, criterion);
@@ -204,13 +204,13 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
 //     datetime nm_moonset = find_proper_moontime(jd_new_moon, utc_offset, lat, lon, elev, temp, press, 's', temp1, temp2);
 
 //     int start = 0;
-//     if (compare_datetime(&nm_moonset, &INVALID_DATETIME) == 0) {
+//     if (compare_datetime(&nm_moonset, &INVALID_DATETIME) == 1) {
 //         printf("Day 0: Invalid moonset at extreme latitude.\n");
 //         results[0].q_value = -995.0;
 //         results[0].classification = classify_visibility(results[0].q_value, criterion);
 //         best_jds[0] = jd_new_moon;
 //         start++;
-//     } else if (compare_datetime(&nm_moonset, &new_moon_dt) == 0) {
+//     } else if (compare_datetime(&nm_moonset, &new_moon_dt) == 1) {
 //         printf("Day 0: Moonset occurs before new moon.\n");
 //         results[0].q_value = -999.0;
 //         results[0].classification = classify_visibility(results[0].q_value, criterion);

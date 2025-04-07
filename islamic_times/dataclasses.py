@@ -570,6 +570,15 @@ class MoonInfo:
 
 @dataclass(frozen=True, slots=True)
 class Visibilities:
+    """
+    Contains visibility information for the new moon crescent.
+
+    Attributes:
+        criterion (str): Visibility criterion used.
+        dates (Tuple[datetime]): Dates of visibility calculations.
+        q_values (Tuple[float]): Q values for each date.
+        classifications (Tuple[str]): Classifications for each date.
+    """
     criterion: str
     dates: Tuple[datetime]
     q_values: Tuple[float]
