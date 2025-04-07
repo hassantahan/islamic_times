@@ -47,6 +47,7 @@ static PyMethodDef AstroCoreMethods[] = {
     {"find_proper_moontime", py_find_proper_moontime, METH_VARARGS, "Compute moonrise or moonset for the given date."},
     {"next_phases_of_moon_utc", py_next_phases_of_moon_utc, METH_VARARGS, "Compute the nearest phases of the moon."},
     {"compute_visibilities", py_compute_visibilities, METH_VARARGS, "Compute the new moon crescent visibility for a given number of days according to a specified critierion."},
+    {"compute_visibilities_batch", compute_visibilities_batch_py, METH_VARARGS, "Batch computation of new moon visibilities."},
     {NULL, NULL, 0, NULL}  /* Sentinel */
 };
 
@@ -73,6 +74,8 @@ PyMODINIT_FUNC PyInit_astro_core(void) {
 
     // Import and initialize datetime C-API
     PyDateTime_IMPORT;
+    import_array();
+    // fprintf(stderr, "PyArray_API = %p\n", PyArray_API);
     
     // islamic_times module imports
     PyObject *mod_sun = PyImport_ImportModule("islamic_times.sun_equations");

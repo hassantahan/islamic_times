@@ -3,8 +3,10 @@ import sys
 import numpy as np
 from time import time
 import geopandas as gpd
+from multiprocessing import Pool
 from datetime import timedelta, datetime
-from islamic_times import islamic_times as it
+import islamic_times.islamic_times as it
+import islamic_times.astro_core as fast_astro
 from islamic_times.time_equations import get_islamic_month, gregorian_to_hijri
 
 # Plotting libraries
@@ -136,41 +138,76 @@ class Tee:
         self.stdout.flush()
         self.file.flush()
 
-def compute_q_values_for_lat(i_lat: float, lon: float, day: datetime, amount: int, type: int, mode: str = "category"):
-        q_values_temp = []
-        if mode == "category":
-            for i_lon in lon:
-                local = it.ITLocation(latitude=i_lat, longitude=i_lon, elevation=0, date=day, find_local_tz=False, auto_calculate=False)
-                vis = local.visibilities(days=amount, criterion=type)
-                for label, value in vis.items():
-                    q_values_temp.append(value[1])
-        else:
-            for i_lon in lon:
-                local = it.ITLocation(latitude=i_lat, longitude=i_lon, elevation=0, date=day, find_local_tz=False, auto_calculate=False)
-                vis = local.visibilities(days=amount, criterion=type)
-                for label, value in vis.items():
-                    q_values_temp.append(value[0])
-        return q_values_temp
+# def compute_q_values_for_lat(i_lat: float, lon: float, day: datetime, amount: int, type: int, mode: str = "category"):
+#     q_values_temp = []
+#     for i_lon in lon:
+#         local = it.ITLocation(latitude=i_lat, longitude=i_lon, elevation=0, date=day, find_local_tz=False, auto_calculate=False)
+#         vis = local.visibilities(days=amount, criterion=type)
+#         # Use the dataclass attributes instead of dict items
+#         if mode == "category":
+#             q_values_temp.extend(vis.classifications)
+#         else:
+#             q_values_temp.extend(vis.q_values)
+#     return q_values_temp
 
-def calculate_moon_visibility(lon: float, lat: float, day: datetime, amount: int = 1, type: int = 0, mode: str = "category"):
-    moon_phases = it.ITLocation(date=day, auto_calculate=False).moonphases()
+# def parallel_compute_q_values(lat: float, lon: float, day: datetime, amount: int, type: int, mode: str, num_processes: int = 8):
+#     # Create the pool of worker processes
+#     with Pool(processes=num_processes) as pool:
+#         # Map each latitude to the compute_q_values_for_lat function
+#         results = pool.starmap(
+#             compute_q_values_for_lat,
+#             [(i_lat, lon, day, amount, type, mode) for i_lat in lat]  # arguments per latitude
+#         )
+#     return results
+
+# def calculate_moon_visibility(lon: float, lat: float, day: datetime, amount: int = 1, type: int = 0, mode: str = "category"):
+#     moon_phases = it.ITLocation(date=day, auto_calculate=False).moonphases()
+#     for item in moon_phases:
+#             if item['phase'] == "New Moon":
+#                 new_moon_date = item['datetime']
+#                 break  
+
+#     q_values = parallel_compute_q_values(lat, lon, day, amount, type, mode, 1)
+#     return q_values, new_moon_date
+
+def split_lat_chunks(lat_vals, n_chunks):
+    return np.array_split(lat_vals, n_chunks)
+
+def batch_worker(lat_chunk, lon_vals, dt, days, criterion, utc_offset, elev, temp, press, mode_byte):
+    lats, lons = np.meshgrid(lat_chunk, lon_vals, indexing="ij")
+    lats_flat = lats.ravel()
+    lons_flat = lons.ravel()
+    result_flat = fast_astro.compute_visibilities_batch(lats_flat, lons_flat, dt, days, criterion,
+                                                utc_offset, elev, temp, press, mode_byte)
+    ny, nx = lats.shape
+    return result_flat.reshape(ny, nx, days)
+
+def compute_visibility_map_parallel(lon_vals, lat_vals, dt, days, criterion,
+                                    utc_offset=0.0, elev=0.0, temp=20.0, press=101.325,
+                                    mode="category", num_workers=1):
+    mode_byte: str = 'r' if mode == "raw" else 'c'
+    lat_chunks = split_lat_chunks(lat_vals, num_workers)
+
+    moon_phases = it.ITLocation(date=dt, auto_calculate=False).moonphases()
     for item in moon_phases:
             if item['phase'] == "New Moon":
                 new_moon_date = item['datetime']
                 break  
-    from multiprocessing import Pool
-    def parallel_compute_q_values(lat: float, lon: float, day: datetime, amount: int, type: int, num_processes: int = 8):
-        # Create the pool of worker processes
-        with Pool(processes=num_processes) as pool:
-            # Map each latitude to the compute_q_values_for_lat function
-            results = pool.starmap(
-                compute_q_values_for_lat,
-                [(i_lat, lon, day, amount, type, mode) for i_lat in lat]  # arguments per latitude
-            )
-        return results
+    
+    if new_moon_date is None:
+        raise RuntimeError("New Moon not found in moon phases.")
 
-    q_values = parallel_compute_q_values(lat, lon, day, amount, type, 8)
-    return q_values, new_moon_date
+    print_ts(f"Conjunction Date: {new_moon_date.strftime("%Y-%m-%d %X")}")
+
+    args = [(chunk, lon_vals, new_moon_date, days, criterion, utc_offset, elev, temp, press, mode_byte)
+            for chunk in lat_chunks]
+
+    with Pool(num_workers) as pool:
+        results = pool.starmap(batch_worker, args)
+
+    # Stack along latitude axis to reconstruct full (ny, nx, days) array
+    visibilities_3d = np.vstack(results)
+    return visibilities_3d, new_moon_date
 
 def load_shapefiles(states_path, places_path, cities):
     states_gdf = gpd.read_file(states_path)
@@ -326,6 +363,38 @@ def create_legend(fig, gs, unique_categories, category_colors_rgba):
     legend_ax.set_ylim(0, len(unique_categories) * row_height)
     legend_ax.set_aspect("auto")
 
+def create_scale(fig, mesh, norm):
+    # Create a colorbar
+    cbar_ax = fig.add_axes([0.88, 0.135, 0.02, 0.8])
+    cbar = fig.colorbar(mesh, cax=cbar_ax)
+    cbar.set_label("Q Value", fontsize=12)
+
+    # Format ticks to show original q_values
+    tick_values_transformed = np.linspace(norm.vmin, norm.vmax, 7)
+    tick_labels = [f"{inverse_signed_log_transform(t, epsilon=2.0):.1f}" for t in tick_values_transformed]
+    cbar.set_ticks(tick_values_transformed)
+    cbar.set_ticklabels(tick_labels)
+
+    # Special cases
+    from matplotlib.axes import Axes
+    legend_ax: Axes = fig.add_axes([0.82, 0.04, 0.1, 0.08])  # [left, bottom, width, height]
+    legend_ax.axis("off")
+    special_cases = [
+        ("Moonset before the new moon.", "#141414"),
+        ("Moonset before sunset.", "#393a3c"),
+    ]
+    for i, (label_text, color) in enumerate(special_cases):
+        y = 1 - i * 0.5
+        legend_ax.add_patch(
+            Rectangle(
+                (0, y - 0.3), 0.3, 0.3,
+                facecolor=color,
+                edgecolor="black",       # outline color
+                linewidth=1.2            # thickness of the border
+            )
+        )
+        legend_ax.text(0.4, y - 0.15, label_text, fontsize=10, va='center', ha='left', color='black')
+
 def annotate_plot(fig, start_date, criterion, days, islamic_month_name, islamic_year):
     criterion_string = "Odeh, 2006" if criterion == 0 else "Yallop, 1997"
     plt.subplots_adjust(hspace=0.2, left=0.05, right=0.85, top=0.95, bottom=0.05)
@@ -334,13 +403,36 @@ def annotate_plot(fig, start_date, criterion, days, islamic_month_name, islamic_
     plt.figtext(0.84, 0.01, "CC BY-SA | Hassan Tahan | Created with the islamic_times Python library", ha="center", fontsize=12)
     plt.figtext(0.5, 0.98, f"{days}-Day New Moon Crescent Visibility Map for {islamic_month_name}, {islamic_year} A.H.", ha="center", fontsize=16)
 
+def name_fig(start_date, mode):
+    name: str = f"{start_date.strftime('%Y-%m-%d')} {islamic_month_name} {islamic_year}"
+    if criterion == 1:
+        name += "—Yallop"
+    else:
+        name += "Odeh"
+
+    if mode == "raw":
+        qual = 90
+        name += " Gradient"
+    else:
+        qual = 80
+
+    name += ".jpg"
+
+    return name, qual
+
 def plot_map(lon_vals, lat_vals, visibilities_mapped, states_clip, places_clip, unique_categories, category_colors_rgba, start_date, amount, out_dir, mode="category"):
+    # Set up the color mapping
     cmap, norm = setup_color_mapping(mode, visibilities_mapped, unique_categories, category_colors_rgba)
-    fig = plt.figure(figsize=(20, 15), dpi=80, constrained_layout=False)
+
+    width_x, width_y = 20, 15
+    dpi = 300
+
+    fig = plt.figure(figsize=(width_x, width_y), dpi=dpi, constrained_layout=False)
     gs = gridspec.GridSpec(amount, 2, width_ratios=[50, 1], height_ratios=[2] * amount)
     axes = [fig.add_subplot(gs[i, 0]) for i in range(amount)]
     mesh = None
 
+    # Plot each day's visibility
     for i_day, ax in enumerate(axes):
         if mode == "raw":
             z_data_raw = visibilities_mapped[..., i_day]
@@ -359,49 +451,19 @@ def plot_map(lon_vals, lat_vals, visibilities_mapped, states_clip, places_clip, 
     if mode == "category":
         create_legend(fig, gs, unique_categories, category_colors_rgba)
     else:
-        cbar_ax = fig.add_axes([0.88, 0.135, 0.02, 0.8])
-        cbar = fig.colorbar(mesh, cax=cbar_ax)
-        cbar.set_label("Q Value", fontsize=12)
+        create_scale(fig, mesh, norm)
 
-        # Format ticks to show original q_values
-        tick_values_transformed = np.linspace(norm.vmin, norm.vmax, 7)
-        tick_labels = [f"{inverse_signed_log_transform(t, epsilon=2.0):.1f}" for t in tick_values_transformed]
-        cbar.set_ticks(tick_values_transformed)
-        cbar.set_ticklabels(tick_labels)
-
-        # Special cases
-        from matplotlib.axes import Axes
-        legend_ax: Axes = fig.add_axes([0.82, 0.04, 0.1, 0.08])  # [left, bottom, width, height]
-        legend_ax.axis("off")
-        special_cases = [
-            ("Moonset before the new moon.", "#141414"),
-            ("Moonset before sunset.", "#393a3c"),
-        ]
-        for i, (label_text, color) in enumerate(special_cases):
-            y = 1 - i * 0.5
-            legend_ax.add_patch(
-                Rectangle(
-                    (0, y - 0.3), 0.3, 0.3,
-                    facecolor=color,
-                    edgecolor="black",       # outline color
-                    linewidth=1.2            # thickness of the border
-                )
-            )
-            legend_ax.text(0.4, y - 0.15, label_text, fontsize=10, va='center', ha='left', color='black')
-
+    # Annotations and text    
     annotate_plot(fig, start_date, criterion, days_to_generate, islamic_month_name, islamic_year)
 
-    name = f"{start_date.strftime('%Y-%m-%d')} {islamic_month_name} {islamic_year}"
-    if criterion == 1:
-        name += " Type 1"
-    if mode == "raw":
-        name += " Gradient"
+    # Name and save the figure
+    name, qual = name_fig(start_date, mode)
 
-    plt.savefig(os.path.join(out_dir, name))
+    plt.savefig(os.path.join(out_dir, name), format='jpg', pil_kwargs={'optimize': True, 'progressive': True, 'quality': qual})
     plt.close()
 
 def print_ts(message: str):
-    print(f"[{datetime.fromtimestamp(time()).strftime("%X %d-%m-%Y")}] {message}")
+    print(f"[{datetime.fromtimestamp(time()).strftime('%X %d-%m-%Y')}] {message}")
 
 def main(day: datetime, res: int = 100, mode: str = "category", region: str = 'WORLD', amount: int = 1, visibility_criterion: int = 0, path: str = ""):
     cities: list[str] = REGION_CITIES[region]
@@ -424,16 +486,7 @@ def main(day: datetime, res: int = 100, mode: str = "category", region: str = 'W
 
     print_ts(f"Calculating new moon crescent visibilities...")
     t1 = time()
-    visibilities_2d, start_date = calculate_moon_visibility(lon_vals, lat_vals, day, amount, visibility_criterion, mode=mode)
-    print_ts(f"Conjunction Date: {start_date.strftime("%Y-%m-%d %X")}")
-    print_ts(f"Time taken: {(time() - t1):.2f}s")
-
-    print_ts(f"Rearranging the visibility values...")
-    t1 = time()
-    if mode == "raw":
-        visibilities_3d = np.array(visibilities_2d).reshape(ny, nx, amount).astype(float)
-    else:
-        visibilities_3d = np.array(visibilities_2d).reshape(ny, nx, amount)
+    visibilities_3d, start_date = compute_visibility_map_parallel(lon_vals, lat_vals, day, amount, visibility_criterion, mode=mode)
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
     print_ts(f"Getting colours for the categories...")
@@ -457,21 +510,22 @@ def main(day: datetime, res: int = 100, mode: str = "category", region: str = 'W
 
 if __name__ == "__main__":
     # Vars
-    today = datetime.now()
-    master_path: str = "B:/Personal/New Moon Visibilities/Experiment/"
+    today = datetime(2024, 8, 4)
+    master_path: str = "B:/Personal/New Moon Visibilities/Experiment/C-Rewrite/"
     total_months: int = 1
-    map_region: str = 'EUROPE' # 'NORTH_AMERICA' 'MIDDLE_EAST' 'IRAN' 'WORLD' 'WORLD_FULL'
-    map_mode: str = "raw" # "category"
-    resolution: int = 200
-    days_to_generate: int = 1
+    map_region: str = "WORLD" # 'NORTH_AMERICA' 'EUROPE' 'MIDDLE_EAST' 'IRAN' 'WORLD' 'WORLD_FULL'
+    map_mode: str = "category" #"raw" # "category"
+    resolution: int = 300
+    days_to_generate: int = 3
     criterion: int = 1 # Either 0 (Odeh, 2006), or 1 (Yallop, 1997)
 
-    sys.stdout = Tee(f"mapper_logs/mapper_{datetime.fromtimestamp(time()).strftime("%Y-%m-%d_%H%M%S")}.log")
+    sys.stdout = Tee(f'mapper_logs/mapper_{datetime.fromtimestamp(time()).strftime("%Y-%m-%d_%H%M%S")}.log')
     map_region = map_region.upper()
     start_time: float = time()
     for month in range(total_months):
+        assert map_mode in ("raw", "category"), f"Invalid mode: {map_mode}"
         month_start_time: float = time()
-        new_day = today + timedelta(days=np.round(29.5 * month))
+        new_day = today + timedelta(days=np.round(AVERAGE_LUNAR_MONTH_DAYS * month))
 
         # Islamic Date Formatting
         islamic_date = gregorian_to_hijri(new_day.year, new_day.month, new_day.day)

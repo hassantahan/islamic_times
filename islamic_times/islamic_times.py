@@ -879,3 +879,20 @@ class ITLocation:
         # }
 
         # return visibility_dictionary
+
+
+# def compute_visibilities_batch(lats: np.ndarray,
+#                                     lons: np.ndarray,
+#                                     new_moon_dt: datetime.datetime,
+#                                     days: int,
+#                                     criterion: int,
+#                                     utc_offset: float,
+#                                     elev: float,
+#                                     temp: float,
+#                                     press: float,
+#                                     type: bytes) -> np.ndarray:
+#     """For mapper.py for batch processing
+#     """
+#     import islamic_times.astro_core as fast_astro
+    
+#     return fast_astro.compute_visibilities_batch(lats, lons, new_moon_dt, days, criterion, utc_offset, elev, temp, press, type)

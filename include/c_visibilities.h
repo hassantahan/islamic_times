@@ -11,5 +11,6 @@ typedef struct {
 } VisibilityResult;
 
 PyObject* py_compute_visibilities(PyObject* self, PyObject* args);
+PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args);
 
 #endif

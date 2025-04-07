@@ -4,6 +4,7 @@
 
 #include <Python.h>
 #include <datetime.h>
+#include <numpy/arrayobject.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -35,6 +36,11 @@
     } while (0)
 
 #define ENSURE_PYDATETIME() if (!PyDateTimeAPI) { PyDateTime_IMPORT; }
+#define ENSURE_NUMPY() do { \
+    if (PyArray_API == NULL) { \
+        import_array(); \
+    } \
+} while(0)
 
 
 extern PyObject *datetime_datetime;

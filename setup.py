@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages, Extension
+import numpy
 
 astro_core = Extension(
     name="islamic_times.astro_core",
@@ -13,10 +14,11 @@ astro_core = Extension(
     ],
     include_dirs=[
         "include",
-        "C:/Program Files/Python313/include"
+        "C:/Program Files/Python313/include",
+        numpy.get_include()
     ],
     library_dirs=["C:/Program Files/Python313/libs"],
-    extra_compile_args=["/Od", "/Zi"], #/Ox
+    extra_compile_args=["/MD", "/O2", "/Zi"], #/Ox
     extra_link_args=["/DEBUG"]
 )
 
