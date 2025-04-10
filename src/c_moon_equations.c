@@ -10,10 +10,6 @@
 #define NUM_A_SIN_TERMS 14
 #define NUM_A_COEFFS 14
 
-#define ASTRONOMICAL_UNIT_KM 149597870.7
-#define EARTH_RADIUS_KM 6378.14
-
-
 /* ================================
    Nutation, Obliquity, and Moon Phases array terms
    ================================ */
@@ -517,7 +513,7 @@ void compute_moon_result(double jde, double deltaT, double local_latitude, doubl
     double jd = jde - deltaT / 86400.0;
     double gmst = greenwich_mean_sidereal_time(jd);
     double gst, gha_deg, lha_deg;
-    compute_gha_lha(jd, result->true_obliquity, deltaPsi, gmst, local_longitude, ra_deg,
+    compute_gha_lha(result->true_obliquity, deltaPsi, gmst, local_longitude, ra_deg,
                     &gst, &gha_deg, &lha_deg);
 
     result->greenwich_hour_angle = gha_deg;
@@ -756,7 +752,7 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
         jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
         double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
         double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
-        if (deltaPsi[i] = CALCULATE_SUN_PARAMS_FOR_MOON_TIME) {   
+        if (deltaPsi[i] == CALCULATE_SUN_PARAMS_FOR_MOON_TIME) {   
             compute_sun_result(t_jde, t_deltaT, 
                 local_latitude, local_longitude, elevation, temperature, pressure, 
                 &temp_sun_param);
@@ -850,7 +846,7 @@ datetime find_proper_moontime(double jd, double utc_offset, double latitude, dou
             return INVALID_DATETIME;
 
         datetime temp_moontime_with_estimate_offset = add_days(temp_moontime, (double)i + temp_utc_offset / 24.0);
-
+ 
         int temp_moontime_doy = day_of_year(temp_moontime_with_estimate_offset.year, 
                                 temp_moontime_with_estimate_offset.month, temp_moontime_with_estimate_offset.day);
 

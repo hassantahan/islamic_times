@@ -59,7 +59,7 @@ void compute_equitorial_coordinates(double apparent_longitude_deg, double true_o
     double dec_rad = asin(sin(true_latitude_rad) * cos(true_obliquity_rad) + 
                         cos(true_latitude_rad) * sin(true_obliquity_rad) * sin(apparent_longitude_rad));
 
-    *ra_deg = DEGREES(ra_rad);
+    *ra_deg = normalize_angle(DEGREES(ra_rad));
     *dec_deg = DEGREES(dec_rad);
 }
 
@@ -88,7 +88,7 @@ void correct_ra_dec(double* ra_deg, double* dec_deg, double lha_deg, double para
     double delA = DEGREES(atan2(numerator_delA, denominator));
     
     // Right ascension corrected
-    *ra_deg += delA;
+    *ra_deg = normalize_angle(*ra_deg + delA);
     
     // Declination corrected
     double numerator_dec = (sin(dec_rad) - p_sin_phi_prime * sin(parallax_rad)) * cos(RADIANS(delA));
@@ -99,7 +99,7 @@ void correct_ra_dec(double* ra_deg, double* dec_deg, double lha_deg, double para
     GHA and LHA computation
     ================================ */
 
-void compute_gha_lha(double jd, double true_obliquity_deg, double nut_lon_deg, double gmst_deg, double observer_longitude_deg, double ra_deg,
+void compute_gha_lha(double true_obliquity_deg, double nut_lon_deg, double gmst_deg, double observer_longitude_deg, double ra_deg,
     double* gst_deg, double* gha_deg, double* lha_deg) {
     double st_correction = nut_lon_deg * 3600.0 * cos(RADIANS(true_obliquity_deg)) / 15.0;
     *gst_deg = normalize_angle(gmst_deg + st_correction / 240.0);
@@ -127,7 +127,7 @@ void compute_horizontal_coordinates(double ra_deg, double dec_deg, double lha_de
     double alt_rad = asin(sin(lat_rad) * sin(dec_rad) + 
                           cos(lat_rad) * cos(dec_rad) * cos(lha_rad));
     
-    *az_deg = DEGREES(az_rad);
+    *az_deg = normalize_angle(DEGREES(az_rad));
     *alt_deg = DEGREES(alt_rad);
 }
 

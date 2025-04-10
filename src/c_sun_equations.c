@@ -8,8 +8,6 @@
 #define OBLIQUITY_TERMS_SIZE 10
 #define SUN_NUTATION_COEFFICIENTS_LOOP 63
 #define SUN_NUTATION_ARGUMENTS_LOOP 5
-#define ASTRONOMICAL_UNIT_KM 149597870.7
-#define EARTH_RADIUS_KM 6378.14
 
 
 /* ================================
@@ -311,7 +309,7 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     // Hour Angles
     double gst, gha, lha;
     double gmst = greenwich_mean_sidereal_time(jd);
-    compute_gha_lha(jd, result->true_obliquity, dp, gmst, local_longitude, app_ra, &gst, &gha, &lha);
+    compute_gha_lha(result->true_obliquity, dp, gmst, local_longitude, app_ra, &gst, &gha, &lha);
     result->greenwich_hour_angle = gha;
     result->local_hour_angle = lha;
     
@@ -344,11 +342,7 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
 }
 
 
-/* ================================
-   Python Wrapper Functions
-   ================================ */
-
-// compute_sun(jde, deltaT, latitude, longitude, elevation, temperature, pressure)
+/* Python wrapper*/
 PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs) {
     if (nargs != 7) {
         PyErr_SetString(PyExc_TypeError, "Expected 7 arguments");
@@ -400,6 +394,7 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
 
     return sun;
 }
+
 
 /* ================================
    Sun Transit/Culmination calculations
@@ -453,6 +448,7 @@ int find_sun_transit(datetime date, double utc_offset, double local_latitude, do
     return 0;
 }
 
+/* Python wrapper */
 PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
     double jd, deltaT, latitude, longitude, elevation, temperature, pressure, utc_offset;
     if (!PyArg_ParseTuple(args, "dddddddd", &jd, &deltaT, &latitude, &longitude, &elevation, &temperature, &pressure, &utc_offset))
@@ -469,6 +465,7 @@ PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
     else
         return NULL;
 }
+
 
 /* ================================
    Sunrise and Sunset calculations

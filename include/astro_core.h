@@ -18,6 +18,9 @@
 
 #define STANDARD_SET_AND_RISE 0.8333333
 
+#define ASTRONOMICAL_UNIT_KM 149597870.7
+#define EARTH_RADIUS_KM 6378.14
+
 #define RADIANS(value) ((value) * (M_PI) / 180.0)
 #define DEGREES(value) ((value) * (180.0) / M_PI)
 

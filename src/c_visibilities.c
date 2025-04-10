@@ -284,7 +284,6 @@ void compute_visibilities_batch(datetime date, double utc_offset, double* lats, 
 {
     for (int i = 0; i < count; i++) {
         // Each coordinate writes 'days' results into the proper offset.
-        // printf("Processing visibility for (%.4f, %.4f)\n", lats[i], lons[i]);
         compute_visibilities(date, utc_offset, lats[i], lons[i], elev, temp, press,
         results + i * days, days, criterion);
     }
@@ -294,7 +293,6 @@ void compute_visibilities_batch(datetime date, double utc_offset, double* lats, 
 PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     ENSURE_PYDATETIME();
     ENSURE_NUMPY();
-    // printf("PyArray_API pointer: %p\n", PyArray_API);
     
     //Input parsing
     PyObject *lats_obj, *lons_obj, *new_moon_obj;
@@ -309,21 +307,15 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
 
     // New moon datetime parsing
     fill_in_datetime_values(&new_moon_dt, new_moon_obj);
-    // printf("new_moon_dt processed.\n");
 
     // Lats and Lons array parsing
-    // printf("Checking lats_obj & lons_obj.\n");
     if (!PyArray_Check(lats_obj) || !PyArray_Check(lons_obj)) {
-        printf("Failed.\n");
         PyErr_SetString(PyExc_TypeError, "lat/lon must be NumPy arrays");
         return NULL;
     }
     
-    // printf("lats_arr and lons_arr being created.\n");
     PyArrayObject* lats_arr = (PyArrayObject*)lats_obj;
-    // printf("lats_arr created.\n");
     PyArrayObject* lons_arr = (PyArrayObject*)lons_obj;
-    // printf("lons_arr created.\n");
     Py_INCREF(lats_arr);
     Py_INCREF(lons_arr);
     
@@ -342,7 +334,6 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    // printf("Validating array size.\n");
     // Validate array size
     if (PyArray_SIZE(lats_arr) != PyArray_SIZE(lons_arr)) {
         PyErr_SetString(PyExc_ValueError, "Latitude and longitude arrays must have same size");
@@ -354,31 +345,27 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     // Get the raw C pointers
     double* lats = (double*) PyArray_DATA(lats_arr);
     double* lons = (double*) PyArray_DATA(lons_arr);
-    // printf("lats and lons arrays processed.\n");
     
     // Total coordinate count
     npy_intp count = PyArray_SIZE(lats_arr);
     
     // Total computations
     int total = days * (int)count;
-    // printf("total int processed.\n");
     
     // Create visibility result
     VisibilityResult* results = malloc(sizeof(VisibilityResult) * total);
     if (!results) return PyErr_NoMemory();
-    // printf("VisibiltyResult array processed.\n");
     
     // Batch compute visibilities
     compute_visibilities_batch(new_moon_dt, utc_offset, lats, lons, (int)count, elev, temp, press, results, days, criterion);
-    // printf("Visibiltiy Batch processed.\n");
-
+    
     // Parse results back to python
     npy_intp dims[1] = { total };
     PyArrayObject* arr = NULL;
     // RAW
     if (type == 'r') {
         // Create NumPy array
-        PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+        arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
         if (!arr) {
             free(results);
             return NULL;
