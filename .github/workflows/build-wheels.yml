@@ -41,22 +41,33 @@ jobs:
       - name: Move wheels to dist folder
         run: |
           mkdir -p dist
-          cp wheelhouse/*.whl dist/
+          cp wheelhouse/*.whl dist/ || true
 
       - name: Upload built distributions
         uses: actions/upload-artifact@v4
         with:
-          name: built-wheels-${{ github.run_id }}
+          name: built-wheels-${{ matrix.os }}-${{ github.run_id }}
           path: dist/
 
   publish:
+    name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: built-wheels-${{ github.run_id }}
+          name: built-wheels-ubuntu-latest-${{ github.run_id }}
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: built-wheels-windows-latest-${{ github.run_id }}
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: built-wheels-macos-latest-${{ github.run_id }}
           path: dist
 
       - name: Publish to PyPI
