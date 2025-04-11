@@ -34,8 +34,9 @@ astro_core = Extension(
 
 setup(
     name='islamic_times',
-    version='2.0.0',
     description='Various calculations for Islamic purposes',
+    use_scm_version=True,
+    setup_requires=["setuptools_scm"],
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     author='Hassan Tahan',

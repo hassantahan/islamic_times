@@ -1,11 +1,30 @@
+# Python artifacts
 __pycache__/
-misc/
+*.py[cod]
+*.log
+*.tmp
+*.bak
+
+# Build artifacts
 build/
 dist/
-islamic_times.egg-info/
-distances.py
-tester.py
-setup.py
-shp_files/
-places_output.txt
-quick.py
+.eggs/
+*.egg-info/
+*.whl
+*.tar.gz
+*.pyd
+
+# setuptools_scm version file
+islamic_times/_version.py
+
+# Local junk
+misc/
+
+# Virtualenvs
+.env/
+.venv/
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
