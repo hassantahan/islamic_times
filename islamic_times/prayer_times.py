@@ -102,7 +102,7 @@ def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angl
 # ʿAṣr time
 # Type 0: Most schools
 # Type 1: Ḥanafī definition
-def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 1) -> datetime:
+def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 0) -> datetime:
     """
     Computes the ʿaṣr prayer time based on the observer's shadow ratio.
 
@@ -116,8 +116,8 @@ def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 1) -> datetime:
         lat (Angle): Observer's latitude.
         dec (Angle): Sun's declination.
         ts (int, optional): ʿaṣr calculation method:
-            - 1 (Standard) → Shadow ratio of 1:1.
-            - 2 (Hanafi) → Shadow ratio of 2:1.  
+            - 0 (Standard) → Shadow ratio of 1:1.
+            - 1 (Ḥanafī) → Shadow ratio of 2:1.  
 
     Returns:
         float/math.inf: Number of hours after solar noon when ʿaṣr occurs, or ʿaṣr cannot be calculated due to extreme solar geometry.
@@ -126,7 +126,7 @@ def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 1) -> datetime:
         - If the sun never reaches the required shadow ratio, the function returns `math.inf`.
     """
 
-    temp_num = math.sin(math.atan2(1, ts + math.tan(lat.radians - dec.radians))) - math.sin(lat.radians) * math.sin(dec.radians)
+    temp_num = math.sin(math.atan2(1, 1 + ts + math.tan(lat.radians - dec.radians))) - math.sin(lat.radians) * math.sin(dec.radians)
     temp_denom = math.cos(lat.radians) * math.cos(dec.radians)
     
     # Sometimes, ʿaṣr cannot be calculated because the sun's geometry at the given date and coordintes does not satisfy the shadow ratio

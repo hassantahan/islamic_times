@@ -689,17 +689,10 @@ class ITLocation:
     # Calculate Next New Moon Visibilities
     def visibilities(self, days: int = 3, criterion: int = 1) -> Visibilities:
         """
-        Returns a dictionary describing the visibility of the nearest new moon for the observer.
+        Returns a `Visibilities` dataclass ojbect describing the visibility of the nearest new moon 
+        for the observer for the given amount of days according to a selected criterion.
 
-        The dictionary contains `datetime` keys and lists of `str` or `float` values.
-    
-        The size of the dictionary is controlled by `days` which specifies how many days from the new moon to look at visibilities.
-
-        The key of each item in the dictionary corresponds to the "Best Time" `datetime` at which to look for the new moon crescent.
-
-        The value of each item in the dictionary is a list in which the first element is the raw number output of the visibility. The second element is the classification of the first element.
-
-        The `type` argument specifies which new moon visibility classification method to use:
+        The `criterion` argument specifies which new moon visibility classification method to use:
         - Criterion 0: Odeh, 2006
         - Criterion 1: Yallop, 1997; a.k.a. HMNAO TN No. 69
 
