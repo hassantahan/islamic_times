@@ -120,6 +120,8 @@ Visibility of New Moon Crescent:
         21:54:55 08-06-2005:    +1.517  A: Easily visible.
 ```
 
+Also included is `test.py` which provides a simple example to showcase the package's functionality.
+
 ## Modules
 
 The package is organized into several modules:
