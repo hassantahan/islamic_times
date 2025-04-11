@@ -12,9 +12,8 @@ References:
   - Prayer times calculation methods (http://praytimes.org/wiki/Calculation_Methods)
 """
 
-import numpy as np
 from numbers import Number
-from typing import Dict, List
+from typing import List
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from islamic_times.dataclasses import *
