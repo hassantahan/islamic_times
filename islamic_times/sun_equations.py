@@ -446,6 +446,7 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 
     Raises:
         ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
+        ArithmeticError: If the sun event does not exist for the given location at the given date & time.
     """
     import islamic_times.astro_core as fast_astro
 
@@ -457,9 +458,12 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
     else:
         event = 'r'
 
-    suntime: datetime = fast_astro.find_proper_suntime(observer_date.jd, 
+    try:
+        suntime: datetime = fast_astro.find_proper_suntime(observer_date.jd, 
                                        observer.latitude.decimal, observer.longitude.decimal, 
                                        observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
                                        observer_date.utc_offset, angle.decimal, event)
+    except:
+        raise ArithmeticError("Sun event does not exist for the given location at the given date & time.")
     
     return suntime.replace(tzinfo=observer_date.date.tzinfo)

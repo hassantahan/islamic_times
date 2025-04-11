@@ -93,6 +93,7 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         results[0].q_value = -995.0;
         results[0].classification = classify_visibility(results[0].q_value, criterion);
         best_jds[0] = jd_new_moon;
+        jd_to_gregorian(best_jds[0], utc_offset, &results[0].best_dt);
         start++; // Skip day 0
     }
     else if (compare_datetime(&new_moon_dt, &nm_moonset) == 1) {
@@ -100,6 +101,7 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         results[0].q_value = -999.0;
         results[0].classification = classify_visibility(results[0].q_value, criterion);
         best_jds[0] = gregorian_to_jd(nm_moonset, utc_offset);
+        jd_to_gregorian(best_jds[0], utc_offset, &results[0].best_dt);
         start++; // Skip day 0
     }
 
@@ -122,13 +124,34 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         }
 
         // For extreme latitudes where the moonset or sunset don't exist
-        // TODO
+        if (fabs(lat) > 62) {
+            if (compare_datetime(&test_nm_sunset, &INVALID_DATETIME) == 0 && 
+                compare_datetime(&test_nm_moonset, &INVALID_DATETIME) == 0) {
+                // Neither sunset nor moonset
+                results[i].q_value = -997.0;
+                results[i].best_dt = new_moon_dt;
+                goto skip;
+            } else if (compare_datetime(&test_nm_sunset, &INVALID_DATETIME) == 0) {
+                // No sunset; Yes moonset
+                results[i].q_value = -996.0;
+                results[i].best_dt = test_nm_moonset;
+                goto skip;
+            } else if (compare_datetime(&test_nm_moonset, &INVALID_DATETIME) == 0) {
+                // Yes sunset; No moonset
+                results[i].q_value = -995.0;
+                results[i].best_dt = test_nm_sunset;
+
+                skip:
+                results[i].classification = classify_visibility(results[i].q_value, criterion);
+                continue;
+            }
+        }
         
         // If moonset is before sunset, continue
         if (compare_datetime(&test_nm_sunset, &test_nm_moonset) == 1) {
             results[i].q_value = -998.0;
+            results[i].best_dt = test_nm_moonset;
             results[i].classification = classify_visibility(results[i].q_value, criterion);
-            best_jds[i] = gregorian_to_jd(test_nm_moonset, utc_offset);
             continue;
         }
 
@@ -174,11 +197,11 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
                 break;
         }
 
+        jd_to_gregorian(best_jds[i], utc_offset, &results[i].best_dt);
         results[i].classification = classify_visibility(results[i].q_value, criterion);
     }
 
-    for (int i = 0; i < days; i++)
-        jd_to_gregorian(best_jds[i], utc_offset, &results[i].best_dt);
+    // for (int i = 0; i < days; i++)
 
     
     free(best_jds);

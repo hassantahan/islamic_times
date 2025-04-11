@@ -13,6 +13,7 @@ Contents:
     - MeccaInfo: Provides Qibla direction and distance.
     - SunInfo: Stores information about solar positions and events.
     - MoonInfo: Stores information about lunar positions, events, and illumination.
+    - Visibilities: Stores information about new moon visibility calculations.
 """
 
 
@@ -369,7 +370,7 @@ class DateTimeInfo:
                 f"\tIslamic Date:\t\t{self.hijri.full_date(self.date.strftime("%A"))}\n"
                 f"\t24h-Time:\t\t{self.clock}\n"
                 f"\tTime Zone:\t\t{self.timezone} {self.format_utc_offset()}\n"
-                f"\tLocal JD:\t\t{self.jd}\n"
+                f"\tJulian Day:\t\t{self.jd}\n"
                 f"\tEstimated ΔT:\t\t{self.deltaT:.2f} s")
 
 @dataclass(frozen=True, slots=True)
@@ -507,11 +508,19 @@ class SunInfo:
     greenwich_hour_angle: Angle
     local_hour_angle: Angle
 
+    def sun_time_str(self, time: datetime | str) -> str:
+        if isinstance(time, datetime):
+            return time.strftime("%X %d-%m-%Y")
+        elif isinstance(time, str):
+            return time
+        else:
+            return str(time)
+
     def __str__(self):
         return ("The Sun\n"
-                f"\tSunrise:\t\t{self.sunrise.strftime("%X %d-%m-%Y")}\n"
+                f"\tSunrise:\t\t{self.sun_time_str(self.sunrise)}\n"
                 f"\tSun Transit:\t\t{self.sun_transit.strftime("%X %d-%m-%Y")}\n"
-                f"\tSunset:\t\t\t{self.sunset.strftime("%X %d-%m-%Y")}\n"
+                f"\tSunset:\t\t\t{self.sun_time_str(self.sunset)}\n"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tApp. Azimuth:\t\t{self.true_azimuth}\n"
                 f"\tDistance:\t\t{self.geocentric_distance}\n"
@@ -540,9 +549,9 @@ class MoonInfo:
         local_hour_angle (Angle): Local hour angle.
     """
 
-    moonrise: datetime
+    moonrise: datetime | str
     moon_transit: datetime
-    moonset: datetime
+    moonset: datetime | str
     illumination: float
     apparent_altitude: Angle
     true_azimuth: Angle
@@ -553,11 +562,19 @@ class MoonInfo:
     greenwich_hour_angle: Angle
     local_hour_angle: Angle
 
+    def moon_time_str(self, time: datetime | str) -> str:
+        if isinstance(time, datetime):
+            return time.strftime("%X %d-%m-%Y")
+        elif isinstance(time, str):
+            return time
+        else:
+            return str(time)
+
     def __str__(self):
         return ("The Moon\n"
-                f"\tMoonrise:\t\t{self.moonrise.strftime("%X %d-%m-%Y")}\n"
+                f"\tMoonrise:\t\t{self.moon_time_str(self.moonrise)}\n"
                 f"\tMoon Transit:\t\t{self.moon_transit.strftime("%X %d-%m-%Y")}\n"
-                f"\tMoonset:\t\t{self.moonset.strftime("%X %d-%m-%Y")}\n"
+                f"\tMoonset:\t\t{self.moon_time_str(self.moonset)}\n"
                 f"\tIllumination:\t\t{self.illumination * 100:.2f}%\n"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tAzimuth:\t\t{self.true_azimuth}\n"
@@ -585,7 +602,13 @@ class Visibilities:
     classifications: Tuple[str]
 
     def __str__(self):
-        base: str = f"Visibility of New Moon Crescent:\n\tCriterion: {self.criterion}\n"
+        base: str = f"Visibility of New Moon Crescent:\n\tCriterion:\t\t{self.criterion}\n"
         for i, q in enumerate(self.q_values):
-            base += f"\t{self.dates[i].strftime("%X %d-%m-%Y")}:\t{self.q_values[i]:+6.3f}\t{self.classifications[i]}\n"
+            if q == 0:
+                return f"{0:.{3}f}"
+            int_digits = int(math.log10(abs(q))) + 1
+            decimal_digits = max(4 - int_digits, 0)
+            formated_q = f"{q:+.{decimal_digits}f}"
+
+            base += f"\t{self.dates[i].strftime("%X %d-%m-%Y")}:\t{formated_q}\t{self.classifications[i]}\n"
         return base

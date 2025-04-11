@@ -282,123 +282,6 @@ __MOON_NUTATION_COEFF_B = [
 	107
 ]
 
-__MOON_PHASE_CORRECTIONS_COEFF = [
-	-0.40720,	-0.40614,	-0.62801,
-	 0.17241,	 0.17302,	 0.17172,
-	 0.01608,	 0.01614,	-0.01183,
-	 0.01039,	 0.01043,	 0.00862,
-	 0.00739,	 0.00734,	 0.00804,
-	-0.00514,	-0.00515,	 0.00454,
-	 0.00208,	 0.00209,	 0.00204,
-	-0.00111,	-0.00111,	-0.00180,
-	-0.00057,	-0.00057,	-0.00070,
-	 0.00056,	 0.00056,	-0.00040,
-	-0.00042,	-0.00042,	-0.00034,
-	 0.00042,	 0.00042,	 0.00032,
-	 0.00038,	 0.00038,	 0.00032,
-	-0.00024,	-0.00024,	-0.00028,
-	-0.00017,	-0.00017,	 0.00027,
-	-0.00007,	-0.00007,	-0.00017,
-	 0.00004,	 0.00004,	-0.00005,
-	 0.00004,	 0.00004,	 0.00004,
-	 0.00003,	 0.00003,	-0.00004,
-	 0.00003,	 0.00003,	 0.00004,
-	-0.00003,	-0.00003,	 0.00003,
-	 0.00003,	 0.00003,	 0.00003,
-	-0.00002,	-0.00002,	 0.00002,
-	-0.00002,	-0.00002,	 0.00002,
-	 0.00002,	 0.00002,	-0.00002
-]
-
-__MOON_PHASE_CORRECTIONS_ARG = [
-	#New & Full Moon
-	[
-	#	E	 M	 M'	 F
-	#	Note: The number for E is it's power, not coeff
-		0,	 0,	  1,	 0,
-		1,	 1,	  0,	 0,
-		0,	 0,	  2,	 0,
-		0,	 0,	  0,	 2,
-		1,	-1,	  1,	 0,
-		1,	 1,	  1,	 0,
-		2,	 2,	  0,	 0,
-		0,	 0,	  1,	-2,
-		0,	 0,	  1,	 2,
-		1,	 1,	  2,	 0,
-		0,	 0,	  3,	 0,
-		1,	 1,	  0,	 2,
-		1,	 1,	  0,	-2,
-		1,	-1,	  2,	 0,
-		9,	 9,	  9,	 9,		#OMEGA
-		0,	 2,	  1,	 0,
-		0,	 0,	  2,	-2,
-		0,	 3,	  0,	 0,
-		0,	 1,	  1,	-2,
-		0,	 0,	  2,	 2,
-		0,	 1,	  1,	 2,
-		0,	-1,	  1,	 2,
-		0,	-1,	  1,	-2,
-		0,	 1,	  3,	 0,
-		0,	 0,	  4,	 0
-	],
-
-	#First & Last Quarter Moon
-	[
-	#	E	 M	 M'	 F
-	#	Note: The number for E is it's power, not coeff
-		0,	 0,	  1,	 0,
-		1,	 1,	  0,	 0,
-		1,	 1,	  1,	 0,
-		0,	 0,	  2,	 0,
-		0,	 0,	  0,	 2,
-		1,	-1,	  1,	 0,
-		2,	 2,	  0,	 0,
-		0,	 0,	  1,	-2,
-		0,	 0,	  1,	 2,
-		0,	 0,	  3,	 0,
-		1,	-1,	  2,	 0,
-		1,	 1,	  0,	 2,
-		1,	 1,	  0,	-2,
-		2,	 2,	  1,	 0,
-		1,	 1,	  2,	 0,
-		9,	 9,	  9,	 9,		#OMEGA
-		0,	-1,	  1,	-2,
-		0,	 0,	  2,	 2,
-		0,	 1,	  1,	 2,
-		0,	-2,	  1,	 0,
-		0,	 1,	  1,	-2,
-		0,	 3,	  0,	 0,
-		0,	 0,	  2,	-2,
-		0,	-1,	  1,	 2,
-		0,	 1,	  3,	 0
-	]
-]
-
-__A_SIN_TERM_PHASES_COEFF = [
-	[299.77,	0.1074080,	-0.009173],
-	[251.88,	0.0163210],
-	[251.83,	26.651886],
-	[349.42,	36.412478],
-	[84.660,	18.206239],
-	[141.74,	53.303771],
-	[207.14,	2.4537320],
-	[154.84,	7.3068600],
-	[34.520,	27.261239],
-	[207.19,	0.1218240],
-	[291.34,	1.8443790],
-	[161.72,	24.198154],
-	[239.56,	25.513099],
-	[331.55,	3.5925180]
-]
-
-__A_COEFFS = [
-	0.000325,	0.000165,	0.000164,
-	0.000126,	0.000110,	0.000062,
-	0.000060,	0.000056,	0.000047,
-	0.000042,	0.000040,	0.000037,
-	0.000035,	0.000023
-]
-
 @dataclass(frozen=True, slots=True)
 class Moon:
 	"""
@@ -543,129 +426,6 @@ def next_phases_of_moon_utc(date: datetime) -> Tuple[datetime, datetime, datetim
 	"""
 	import islamic_times.astro_core as fast_astro
 	return fast_astro.next_phases_of_moon_utc(date)
-
-	# # Find the day of the year.
-	# day_of_year = date.timetuple().tm_yday
-
-	# # Preserve the sign relative to year 2000.
-	# p_sign = np.sign(date.year - 2000)
-	# if not (p_sign in [1, -1]):
-	# 	p_sign = 1
-
-	# # Calculate k based on eq. 49.2.
-	# k_temp = ((abs(date.year - 2000) + p_sign * day_of_year / te.TROPICAL_YEAR) * 12.3685)
-	# # Determine k for each phase:
-	# k_array = np.array([
-	# 	p_sign * np.round(k_temp),
-	# 	p_sign * (np.round(k_temp - 0.25) + 0.25),
-	# 	p_sign * (np.round(k_temp - 0.50) + 0.50),
-	# 	p_sign * (np.round(k_temp - 0.75) + 0.75)
-	# ])
-
-	# # Prepare output array.
-	# moon_phases = [None] * 4
-
-	# # Pre-convert A-term coefficients to NumPy arrays.
-	# a_sin_term_coeffs = [np.array(item) for item in __A_SIN_TERM_PHASES_COEFF]
-	# a_coeffs = np.array(__A_COEFFS)
-
-	# # Loop over each phase (New Moon, First Quarter, Full Moon, Last Quarter)
-	# for p, k in enumerate(k_array):
-	# 	# Julian centuries (eq. 49.3)
-	# 	t = k / 1236.85
-	# 	t2 = t * t
-	# 	t3 = t * t2
-	# 	t4 = t * t3
-
-	# 	# Mean Julian Ephemeris Date.
-	# 	jde = 2451550.09766 + 29.530588861 * k + 0.00015437 * t2 - 0.000000150 * t3 + 0.00000000073 * t4
-	# 	phase = jde  # start with JDE
-
-	# 	# Fundamental arguments (in degrees)
-	# 	fundamental_arguments = np.array([
-	# 		1 - 0.002516 * t - 0.0000074 * t2,                                                   # E
-	# 		2.5534 + 29.10535670 * k - 0.0000014 * t2 - 0.00000011 * t3,                         # M
-	# 		201.5643 + 385.81693528 * k + 0.0107582 * t2 + 0.00001238 * t3 - 0.000000058 * t4,   # M'
-	# 		160.7108 + 390.67050284 * k + 0.0016118 * t2 + 0.00000227 * t3 - 0.000000011 * t4,   # F
-	# 		124.7746 - 1.5637558 * k + 0.0020672 * t2 + 0.00000215 * t3                          # Omega
-	# 	])
-	# 	# Normalize each to [0, 360)
-	# 	fundamental_arguments %= 360
-
-	# 	# === A-Term Corrections ===
-	# 	# For each set in __A_SIN_TERM_PHASES_COEFF, use multipliers: [1, k, t2, ...] (if more than 2 numbers).
-	# 	a_sin_args = []
-	# 	for coeff_array in a_sin_term_coeffs:
-	# 		L = coeff_array.size
-	# 		if L == 2:
-	# 			multipliers = np.array([1, k])
-	# 		else:
-	# 			multipliers = np.concatenate(([1, k], np.full(L - 2, t2)))
-	# 		# Sum the product and reduce modulo 360.
-	# 		a_sin_val = np.dot(coeff_array, multipliers) % 360
-	# 		a_sin_args.append(a_sin_val)
-
-	# 	# === W Correction (for quarter phases) ===
-	# 	# (Note: here we convert degrees to radians for the trigonometric functions.)
-	# 	w = (0.00306 
-	# 			- 0.00038 * fundamental_arguments[0] * ce.sin(fundamental_arguments[1]))	\
-	# 			+ 0.00026 * ce.sin(fundamental_arguments[2])								\
-	# 			- 0.00002 * ce.sin(fundamental_arguments[2] - fundamental_arguments[1])		\
-	# 			+ 0.00002 * ce.sin(fundamental_arguments[2] + fundamental_arguments[1])		\
-	# 			+ 0.00002 * ce.sin(2 * fundamental_arguments[3])
-
-	# 	# === Periodic Term Corrections ===
-	# 	# Reshape the correction coefficients and arguments for vectorized operations.
-	# 	coeff_array = np.array(__MOON_PHASE_CORRECTIONS_COEFF).reshape(-1, 3)
-	# 	arg_array = np.array(__MOON_PHASE_CORRECTIONS_ARG[p % 2]).reshape(-1, 4)
-
-	# 	# Determine the shift "s" for the coefficients based on phase.
-	# 	# p == 0 (New Moon)  -> s = 0; p == 1 or 3 (First/Last Quarter) -> s = 2; p == 2 (Full Moon) -> s = 1.
-	# 	if p in (1, 3):
-	# 		s = 2
-	# 	elif p == 2:
-	# 		s = 1
-	# 	else:
-	# 		s = 0
-
-	# 	# For non-Omega terms (where the first number in a row is not 9):
-	# 	mask = arg_array[:, 0] != 9
-	# 	periodic_corr = 0.0
-	# 	if np.any(mask):
-	# 		# For each non-Omega term, compute:
-	# 		#   sin_argument = dot(fundamental_arguments[1:4], arg_row[1:4])
-	# 		sin_arguments = np.dot(arg_array[mask, 1:4], fundamental_arguments[1:4])
-	# 		sin_vals = ce.sin(sin_arguments)
-	# 		# Multiply by the coefficient and the eccentricity factor (fundamental_arguments[0] raised to arg_row[0])
-	# 		periodic_corr += np.sum(
-	# 			coeff_array[mask, s] * (fundamental_arguments[0] ** arg_array[mask, 0]) * sin_vals
-	# 		)
-	# 	# For Omega terms (first number equals 9), the sine argument is simply fundamental_arguments[4].
-	# 	if np.any(~mask):
-	# 		sin_omega = ce.sin(fundamental_arguments[4])
-	# 		periodic_corr += np.sum(
-	# 			coeff_array[~mask, s] * (fundamental_arguments[0] ** 0) * sin_omega
-	# 		)
-	# 	phase += periodic_corr
-
-	# 	# === Additional A-Term Corrections ===
-	# 	# Use vectorized dot product (after converting the a_sin_args list to an array).
-	# 	a_term_corr = np.dot(a_coeffs, ce.sin(a_sin_args))
-	# 	phase += a_term_corr
-
-	# 	# === Apply W Factor for First and Last Quarters ===
-	# 	if p == 1:
-	# 		phase += w
-	# 	elif p == 3:
-	# 		phase -= w
-
-	# 	# === Adjust from Terrestrial Dynamical Time (TD) to UT.
-	# 	phase -= te.delta_t_approx(date.year, date.month) / 86400
-
-	# 	# === Convert from JD to Gregorian.
-	# 	moon_phases[p] = te.jd_to_gregorian(phase)
-
-	# return moon_phases
 
 # Refer to Chapter 48 of AA
 def moon_illumination(sun_dec: Angle, sun_ra: Angle, moon_dec: Angle, moon_ra: Angle, sun_earth_distance: Distance, moon_earth_distance: Distance) -> float:
@@ -878,19 +638,20 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
 def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set', sun_nutation = np.inf) -> datetime:
 	"""
-    Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
+	Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 
-    Parameters:
-        observer_date (DateTimeInfo): The date and time of the observer.
+	Parameters:
+		observer_date (DateTimeInfo): The date and time of the observer.
 		observer (ObserverInfo): The observer's coordinates and elevation.
-        rise_or_set (str): Find either the setting or rising option. Default is set to 'set'.
+		rise_or_set (str): Find either the setting or rising option. Default is set to 'set'.
 		sun_nutation (List[float]): The nutation in longitude and obliquity (in degrees). Default is `np.inf`. This should only be used if user understands the C code.
 
-    Returns:
-        datetime: The date and time of the moon event. If the moon event is not found (does not set or rise), returns `math.inf`.
+	Returns:
+		datetime: The date and time of the moon event. If the moon event is not found (does not set or rise), returns `math.inf`.
 
-    Raises:
-        ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
+	Raises:
+		ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
+		ArithmeticError: If the moon event does not exist for the given location at the given date & time.
     """
 	import islamic_times.astro_core as fast_astro
 
@@ -911,10 +672,13 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 		delPsi = list(sun_nutation[:3])
 		true_obliquity = list(sun_nutation[-3:])
 
-	moontime: datetime = fast_astro.find_proper_moontime(observer_date.jd, observer_date.deltaT, 
-									observer.latitude.decimal, observer.longitude.decimal, 
-									observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
-									observer_date.utc_offset, delPsi, true_obliquity, event)
+	try:
+		moontime: datetime = fast_astro.find_proper_moontime(observer_date.jd, observer_date.deltaT, 
+										observer.latitude.decimal, observer.longitude.decimal, 
+										observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
+										observer_date.utc_offset, delPsi, true_obliquity, event)
+	except:
+		raise ArithmeticError("Moon event does not exist for the given location at the given date & time.")
 	
 	return moontime.replace(tzinfo=observer_date.date.tzinfo)
 

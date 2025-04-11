@@ -276,6 +276,18 @@ class ITLocation:
             - `datetime_modified` is set to `False` after execution.
         """
 
+        def safe_sun_time(observer_dateinfo, observer_info, event: str) -> datetime | str:
+            try:
+                return se.find_proper_suntime(observer_dateinfo, observer_info, event)
+            except ArithmeticError:
+                return f"Sun{event} does not exist."
+            
+        def safe_moon_time(observer_dateinfo, observer_info, event: str) -> datetime | str:
+            try:
+                return me.find_proper_moontime(observer_dateinfo, observer_info, event)
+            except ArithmeticError:
+                return f"Moon{event} does not exist."
+
         ### Sun & Moon Properties Calculations
         # Get Sun and Moon Objects with their parameters
         self.sun_params: se.Sun = se.sunpos(self.observer_dateinfo, self.observer_info)
@@ -283,9 +295,9 @@ class ITLocation:
 
         # Important Sun Factors placed SunInfo
         self.sun_info = SunInfo(
-            sunrise=se.find_proper_suntime(self.observer_dateinfo, self.observer_info, 'rise'),
+            sunrise=safe_sun_time(self.observer_dateinfo, self.observer_info, 'rise'),
             sun_transit=se.find_sun_transit(self.observer_dateinfo, self.observer_info),
-            sunset=se.find_proper_suntime(self.observer_dateinfo, self.observer_info, 'set'),
+            sunset=safe_sun_time(self.observer_dateinfo, self.observer_info, 'set'),
             apparent_altitude=self.sun_params.true_altitude,
             true_azimuth=self.sun_params.true_azimuth,
             geocentric_distance=self.sun_params.geocentric_distance,
@@ -305,9 +317,9 @@ class ITLocation:
 
         # Important Moon Factors placed into MoonInfo
         self.moon_info = MoonInfo(
-            moonrise=me.find_proper_moontime(self.observer_dateinfo, self.observer_info, 'rise'),
+            moonrise=safe_moon_time(self.observer_dateinfo, self.observer_info, 'rise'),
             moon_transit=me.find_moon_transit(self.observer_dateinfo, self.observer_info),
-            moonset=me.find_proper_moontime(self.observer_dateinfo, self.observer_info, 'set'),
+            moonset=safe_moon_time(self.observer_dateinfo, self.observer_info, 'set'),
             illumination=illumination,
             apparent_altitude=self.moon_params.apparent_altitude,
             true_azimuth=self.moon_params.true_azimuth,
@@ -658,18 +670,6 @@ class ITLocation:
             raise ValueError("Cannot print dates and times without calculating the astronomical parameters. First call `calculate_astro()`.")
 
         return self.moon_info
-
-        # return {
-        #         "moonrise" : self.moonrise.strftime("%X %d-%m-%Y"),
-        #         "moon_transit" : self.moon_transit.strftime("%X %d-%m-%Y"),
-        #         "moonset" : self.moonset.strftime("%X %d-%m-%Y"),
-        #         "declination" : round(self.moon_declination, 3),
-        #         "right_ascension" : f"{self.moon_right_ascension[0]}h {self.moon_right_ascension[1]}m {self.moon_right_ascension[2]:.2f}s",
-        #         "altitude" : round(self.moon_alt, 3),
-        #         "azimuth" : round(self.moon_az, 3),
-        #         "parallax" : round(self.moon_pi * 60, 3),
-        #         "illumination" : round(self.moon_illumin * 100, 2)
-        #     }
     
     def moonphases(self) -> List[Tuple[str, datetime]]:
         """

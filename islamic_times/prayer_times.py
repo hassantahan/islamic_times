@@ -68,6 +68,12 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
 Reference: http://praytimes.org/wiki/Calculation_Methods
 """
 
+def safe_sun_time(observer_date: DateTimeInfo, observer: ObserverInfo, event: str, angle: float) -> datetime:
+    try:
+        return se.find_proper_suntime(observer_date, observer, event, angle)
+    except ArithmeticError:
+        return math.inf
+    
 # Used to calculate islamic midnight
 def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angle: Angle = Angle(5 / 6)) -> datetime:
     """
@@ -89,7 +95,7 @@ def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angl
                                             date=new_date,
                                             jd=observer_date.jd + 1,
                                             deltaT=fast_astro.delta_t_approx(new_date.year, new_date.month))
-    tomorrow_standard_time = se.find_proper_suntime(tomorrow_date, observer, 'rise', angle)
+    tomorrow_standard_time = safe_sun_time(tomorrow_date, observer, 'rise', angle)
 
     return tomorrow_standard_time
 
@@ -178,7 +184,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     """
 
     # Calculate fajr
-    fajr_dt = se.find_proper_suntime(observer_date, observer, 'rise', method.fajr_angle)
+    fajr_dt = safe_sun_time(observer_date, observer, 'rise', method.fajr_angle)
     
     # Calculate ʿAṣr time
     try:
@@ -189,7 +195,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     # Calculate Maghrib time
     # Only if maghrib is not at sunset
     if method.maghrib_angle.decimal > 0:
-        maghrib_dt = se.find_proper_suntime(observer_date, observer, 'set', method.maghrib_angle)
+        maghrib_dt = safe_sun_time(observer_date, observer, 'set', method.maghrib_angle)
     else:
         # Otherwise Maghrib is sunset
         maghrib_dt = sun_info.sunset
@@ -197,7 +203,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     # Calculate ʿishāʾ time
     # If NOT makkah method
     if "Makkah" not in method.name:
-        isha_dt = se.find_proper_suntime(observer_date, observer,  'set', method.isha_angle)
+        isha_dt = safe_sun_time(observer_date, observer,  'set', method.isha_angle)
     # Makkah method is special and will be the only exception
     else:
         # During Ramadan, ʿishāʾ is set to a flat two hours after maghrib

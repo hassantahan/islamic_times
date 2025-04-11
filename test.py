@@ -2,7 +2,7 @@ import numpy as np
 from time import time
 from datetime import datetime, timedelta, timezone
 from islamic_times.islamic_times import ITLocation
-from islamic_times.dataclasses import DateTimeInfo, ObserverInfo
+from islamic_times.dataclasses import *
 
 ENABLE_TIMING = False
 LOCATIONS = {
@@ -24,8 +24,7 @@ LOCATIONS = {
 }
 
 def timing(str_to_print, start_time):
-    if not ENABLE_TIMING: 
-        return
+    if not ENABLE_TIMING: return
     else: return print(f"{str_to_print}: {(time() - start_time)*1000000:.2f}μs")
 
 def update_time(local: ITLocation):
@@ -73,11 +72,8 @@ def main(local: ITLocation, do_update = True):
     # New Moon Visibility
     print(local.visibilities(days=3, criterion=1))
 
-
 if __name__ == '__main__':    
-    # for city, location in LOCATIONS:
-    #     print(f"\n{city}")
-    #     location.visibilities(days=1, criterion=1)
     lat, lon, elev, ac = LOCATIONS["Toronto, ON"]
-    local: ITLocation = ITLocation(latitude=lat, longitude=lon, elevation=elev, find_local_tz=True)
-    main(local)
+    dt = datetime.now()
+    local: ITLocation = ITLocation(latitude=lat, longitude=lon, elevation=elev, date=dt, find_local_tz=True)
+    main(local, False)

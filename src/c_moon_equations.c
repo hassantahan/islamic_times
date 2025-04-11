@@ -14,7 +14,7 @@
    Nutation, Obliquity, and Moon Phases array terms
    ================================ */
 
-static const int __MOON_NUTATION_ARGUMENTS_LR[] = {
+static const int MOON_NUTATION_ARGUMENTS_LR[] = {
 //	D		 M		 M'		 F
     0,		 0,		 1,		 0,
     2,		 0,		-1,		 0,
@@ -78,7 +78,7 @@ static const int __MOON_NUTATION_ARGUMENTS_LR[] = {
     2,		 0,		-1,		-2
 };
     
-static const int __MOON_NUTATION_ARGUMENTS_B[] = {
+static const int MOON_NUTATION_ARGUMENTS_B[] = {
 //  D		 M		 M'		 F
     0,		 0,		 0,		 1,
     0,		 0,		 1,		 1,
@@ -142,7 +142,7 @@ static const int __MOON_NUTATION_ARGUMENTS_B[] = {
     2,		-2,		 0,		 1
 };
     
-static const int __MOON_NUTATION_COEFF_LR[] = {
+static const int MOON_NUTATION_COEFF_LR[] = {
 //  	   l		 	 r
         6288774,	-20905355,
         1274027,	-3699111,
@@ -206,7 +206,7 @@ static const int __MOON_NUTATION_COEFF_LR[] = {
         0,			8752
 };
 
-static const int __MOON_NUTATION_COEFF_B[] = {
+static const int MOON_NUTATION_COEFF_B[] = {
         5128122,
         280602,
         277693,
@@ -269,8 +269,8 @@ static const int __MOON_NUTATION_COEFF_B[] = {
         107
 };
 
-/* __MOON_PHASE_CORRECTIONS_COEFF: 25 rows x 3 columns */
-static const double __MOON_PHASE_CORRECTIONS_COEFF[NUM_CORRECTION_TERMS][3] = {
+/* MOON_PHASE_CORRECTIONS_COEFF: 25 rows x 3 columns */
+static const double MOON_PHASE_CORRECTIONS_COEFF[NUM_CORRECTION_TERMS][3] = {
     {-0.40720, -0.40614, -0.62801},
     { 0.17241,  0.17302,  0.17172},
     { 0.01608,  0.01614, -0.01183},
@@ -298,8 +298,8 @@ static const double __MOON_PHASE_CORRECTIONS_COEFF[NUM_CORRECTION_TERMS][3] = {
     { 0.00002,  0.00002, -0.00002}
 };
 
-/* __MOON_PHASE_CORRECTIONS_ARG: 2 sets (for different phases) of 25 rows x 4 columns */
-static const int __MOON_PHASE_CORRECTIONS_ARG[2][NUM_CORRECTION_TERMS][4] = {
+/* MOON_PHASE_CORRECTIONS_ARG: 2 sets (for different phases) of 25 rows x 4 columns */
+static const int MOON_PHASE_CORRECTIONS_ARG[2][NUM_CORRECTION_TERMS][4] = {
     {   // New & Full Moon
         {0,  0,  1,  0},
         {1,  1,  0,  0},
@@ -356,8 +356,8 @@ static const int __MOON_PHASE_CORRECTIONS_ARG[2][NUM_CORRECTION_TERMS][4] = {
     }
 };
 
-/* __A_SIN_TERM_PHASES_COEFF: variable-length rows (using up to 3 coefficients here) */
-static const double __A_SIN_TERM_PHASES_COEFF[NUM_A_SIN_TERMS][14] = {
+/* A_SIN_TERM_PHASES_COEFF: variable-length rows (using up to 3 coefficients here) */
+static const double A_SIN_TERM_PHASES_COEFF[NUM_A_SIN_TERMS][14] = {
     {299.77,  0.1074080, -0.009173},
     {251.88,  0.0163210},
     {251.83, 26.651886},
@@ -374,13 +374,13 @@ static const double __A_SIN_TERM_PHASES_COEFF[NUM_A_SIN_TERMS][14] = {
     {331.55,  3.5925180}
 };
 
-/* Lengths of each row in __A_SIN_TERM_PHASES_COEFF */
+/* Lengths of each row in A_SIN_TERM_PHASES_COEFF */
 static const int A_SIN_TERM_LENGTH[NUM_A_SIN_TERMS] = {
     3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
 };
 
-/* __A_COEFFS array */
-static const double __A_COEFFS[NUM_A_COEFFS] = {
+/* A_COEFFS array */
+static const double A_COEFFS[NUM_A_COEFFS] = {
     0.000325, 0.000165, 0.000164,
     0.000126, 0.000110, 0.000062,
     0.000060, 0.000056, 0.000047,
@@ -419,10 +419,10 @@ MoonNutationResult moon_nutation(double jde) {
     double eccentricity = 1 - 0.002516 * t - 0.0000074 * t2;
 
     for (int i = 0; i < MOON_NUTATION_ARGUMENTS_LR_SIZE; i++) {
-        int d = __MOON_NUTATION_ARGUMENTS_LR[i * 4];
-        int m = __MOON_NUTATION_ARGUMENTS_LR[i * 4 + 1];
-        int mp = __MOON_NUTATION_ARGUMENTS_LR[i * 4 + 2];
-        int f = __MOON_NUTATION_ARGUMENTS_LR[i * 4 + 3];
+        int d = MOON_NUTATION_ARGUMENTS_LR[i * 4];
+        int m = MOON_NUTATION_ARGUMENTS_LR[i * 4 + 1];
+        int mp = MOON_NUTATION_ARGUMENTS_LR[i * 4 + 2];
+        int f = MOON_NUTATION_ARGUMENTS_LR[i * 4 + 3];
 
         double temp_lr = d * fundamental_arguments[0] + m * fundamental_arguments[1] +
                          mp * fundamental_arguments[2] + f * fundamental_arguments[3];
@@ -431,15 +431,15 @@ MoonNutationResult moon_nutation(double jde) {
 
         double eccentricity_comp = (m == 0) ? 1.0 : pow(eccentricity, abs(m));
 
-        sum_l += eccentricity_comp * __MOON_NUTATION_COEFF_LR[i * 2] * sin(temp_lr_rad);
-        sum_r += eccentricity_comp * __MOON_NUTATION_COEFF_LR[i * 2 + 1] * cos(temp_lr_rad);
+        sum_l += eccentricity_comp * MOON_NUTATION_COEFF_LR[i * 2] * sin(temp_lr_rad);
+        sum_r += eccentricity_comp * MOON_NUTATION_COEFF_LR[i * 2 + 1] * cos(temp_lr_rad);
     }
 
-    for (int i = 0; i < sizeof(__MOON_NUTATION_ARGUMENTS_B) / (4 * sizeof(int)); i++) {
-        int d = __MOON_NUTATION_ARGUMENTS_B[i * 4];
-        int m = __MOON_NUTATION_ARGUMENTS_B[i * 4 + 1];
-        int mp = __MOON_NUTATION_ARGUMENTS_B[i * 4 + 2];
-        int f = __MOON_NUTATION_ARGUMENTS_B[i * 4 + 3];
+    for (int i = 0; i < sizeof(MOON_NUTATION_ARGUMENTS_B) / (4 * sizeof(int)); i++) {
+        int d = MOON_NUTATION_ARGUMENTS_B[i * 4];
+        int m = MOON_NUTATION_ARGUMENTS_B[i * 4 + 1];
+        int mp = MOON_NUTATION_ARGUMENTS_B[i * 4 + 2];
+        int f = MOON_NUTATION_ARGUMENTS_B[i * 4 + 3];
 
         double temp_b = d * fundamental_arguments[0] + m * fundamental_arguments[1] +
                         mp * fundamental_arguments[2] + f * fundamental_arguments[3];
@@ -447,7 +447,7 @@ MoonNutationResult moon_nutation(double jde) {
 
         double eccentricity_comp = (m == 0) ? 1.0 : pow(eccentricity, abs(m));
 
-        sum_b += eccentricity_comp * __MOON_NUTATION_COEFF_B[i] * sin(RADIANS(temp_b));
+        sum_b += eccentricity_comp * MOON_NUTATION_COEFF_B[i] * sin(RADIANS(temp_b));
     }
 
     sum_l += 3958 * sin(RADIANS(a[0])) +
@@ -954,7 +954,7 @@ void next_phases_of_moon_utc(datetime date, datetime phases[4]) {
             double sum = 0.0;
             for (int j = 0; j < L; j++) {
                 double multiplier = (j == 0) ? 1.0 : (j == 1 ? k : t2);
-                sum += __A_SIN_TERM_PHASES_COEFF[i][j] * multiplier;
+                sum += A_SIN_TERM_PHASES_COEFF[i][j] * multiplier;
             }
             a_sin_args[i] = normalize_angle(sum);
         }
@@ -972,17 +972,17 @@ void next_phases_of_moon_utc(datetime date, datetime phases[4]) {
         double periodic_corr = 0.0;
         for (int i = 0; i < NUM_CORRECTION_TERMS; i++) {
             double term = 0.0;
-            if (__MOON_PHASE_CORRECTIONS_ARG[p % 2][i][0] != 9) {
-                double dot = __MOON_PHASE_CORRECTIONS_ARG[p % 2][i][1] * F[1] +
-                                __MOON_PHASE_CORRECTIONS_ARG[p % 2][i][2] * F[2] +
-                                __MOON_PHASE_CORRECTIONS_ARG[p % 2][i][3] * F[3];
+            if (MOON_PHASE_CORRECTIONS_ARG[p % 2][i][0] != 9) {
+                double dot = MOON_PHASE_CORRECTIONS_ARG[p % 2][i][1] * F[1] +
+                                MOON_PHASE_CORRECTIONS_ARG[p % 2][i][2] * F[2] +
+                                MOON_PHASE_CORRECTIONS_ARG[p % 2][i][3] * F[3];
                 double sin_val = sin(RADIANS(dot));
-                term = __MOON_PHASE_CORRECTIONS_COEFF[i][s] *
-                        pow(F[0], __MOON_PHASE_CORRECTIONS_ARG[p % 2][i][0]) *
+                term = MOON_PHASE_CORRECTIONS_COEFF[i][s] *
+                        pow(F[0], MOON_PHASE_CORRECTIONS_ARG[p % 2][i][0]) *
                         sin_val;
             } else {
                 double sin_omega = sin(RADIANS(F[4]));
-                term = __MOON_PHASE_CORRECTIONS_COEFF[i][s] * sin_omega;
+                term = MOON_PHASE_CORRECTIONS_COEFF[i][s] * sin_omega;
             }
             periodic_corr += term;
         }
@@ -991,7 +991,7 @@ void next_phases_of_moon_utc(datetime date, datetime phases[4]) {
         /* Additional A-Term Corrections */
         double a_term_corr = 0.0;
         for (int i = 0; i < NUM_A_COEFFS; i++) {
-            a_term_corr += __A_COEFFS[i] * sin(RADIANS(a_sin_args[i]));
+            a_term_corr += A_COEFFS[i] * sin(RADIANS(a_sin_args[i]));
         }
         phase_jde += a_term_corr;
 
