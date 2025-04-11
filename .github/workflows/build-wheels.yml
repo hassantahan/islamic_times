@@ -34,6 +34,11 @@ jobs:
           CIBW_ARCHS_LINUX: auto
           CIBW_ARCHS_WINDOWS: auto
 
+      - name: Upload built wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels
+          path: dist
 
   publish:
     needs: build

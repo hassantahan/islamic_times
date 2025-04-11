@@ -1,9 +1,11 @@
 # Python artifacts
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *.log
 *.tmp
 *.bak
+*.pdb
 
 # Build artifacts
 build/
@@ -19,6 +21,7 @@ islamic_times/_version.py
 
 # Local junk
 misc/
+shp_files/
 
 # Virtualenvs
 .env/
