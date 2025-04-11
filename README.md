@@ -218,7 +218,7 @@ if __name__ == "__main__":
 
 Below is an example of a generated visibility map for the new moon crescent on **2025-04-27 (Dhū al-Qaʿdah 1446)** using the Yallop criterion:
 
-![2025-04-27 Dhū al-Qaʿdah 1446—Yallop](2025-04-27%20Dhū%20al-Qaʿdah%201446—Yallop)
+![2025-04-27 Dhū al-Qaʿdah 1446—Yallop](https://github.com/hassantahan/islamic_times/blob/master/2025-04-27%20Dh%C5%AB%20al-Qa%CA%BFdah%201446%E2%80%94Yallop.jpg?raw=true)
 
 ## Contributing
 
