@@ -28,6 +28,7 @@ jobs:
       - name: Install build-time dependencies
         run: |
           pip install numpy
+          python -c "import numpy; print('Numpy installed successfully')"
 
       - name: Build wheels with cibuildwheel
         uses: pypa/cibuildwheel@v2.16
@@ -37,6 +38,7 @@ jobs:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_ARCHS_LINUX: auto
           CIBW_ARCHS_WINDOWS: auto
+
 
   publish:
     needs: build
