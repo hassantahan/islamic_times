@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'master'
+      - 'c-extension'
   workflow_dispatch:
 
 jobs:
