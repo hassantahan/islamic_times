@@ -1,10 +1,8 @@
-import numpy as np
 from time import time
 from datetime import datetime, timedelta, timezone
 from islamic_times.islamic_times import ITLocation
 from islamic_times.dataclasses import *
 
-ENABLE_TIMING = False
 LOCATIONS = {
     "Montreal, QC" : (45.508870, -73.554240, 30, False),
     "Ottawa, ON" : (45.425230, -75.699960, 54, False),
@@ -23,14 +21,9 @@ LOCATIONS = {
     "Austin, TX" : (30.264980, -97.746600, 151, False),
 }
 
-def timing(str_to_print, start_time):
-    if not ENABLE_TIMING: return
-    else: return print(f"{str_to_print}: {(time() - start_time)*1000000:.2f}μs")
-
 def update_time(local: ITLocation):
     start_time = time()
     local.update_time(datetime.now())
-    timing("Time to update_time()", (start_time))
     local.calculate_astro()
 
 def main(local: ITLocation, do_update = True):
