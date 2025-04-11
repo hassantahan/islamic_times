@@ -6,8 +6,8 @@ compile_args = []
 link_args = []
 
 if sys.platform == "win32":
-    compile_args = ["/Ox"]
-    link_args = []
+    compile_args = ["/Od", "/Zi"]
+    link_args = ["/DEBUG"]
 else:
     compile_args = ["-O3"]
     link_args = []
@@ -27,7 +27,6 @@ astro_core = Extension(
         "include",
         numpy.get_include()
     ],
-    library_dirs=["C:/Program Files/Python313/libs"],
     extra_compile_args=compile_args,
     extra_link_args=link_args
 )
@@ -57,4 +56,5 @@ setup(
         'Programming Language :: Python :: 3.10',
     ],
     python_requires='>=3.7',
+    license="MIT",
 )

@@ -25,6 +25,12 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Build source distribution (sdist)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          pip install build
+          python -m build --sdist --outdir dist
+
       - name: Build wheels with cibuildwheel
         uses: pypa/cibuildwheel@v2.16
         env:
@@ -34,11 +40,16 @@ jobs:
           CIBW_ARCHS_LINUX: auto
           CIBW_ARCHS_WINDOWS: auto
 
-      - name: Upload built wheels
+      - name: Move wheels to dist folder
+        run: |
+          mkdir -p dist
+          cp wheelhouse/*.whl dist/
+
+      - name: Upload built distributions
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
-          path: dist
+          name: built-wheels
+          path: dist/
 
   publish:
     needs: build
@@ -47,7 +58,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          name: built-wheels
           path: dist
 
       - name: Publish to PyPI
