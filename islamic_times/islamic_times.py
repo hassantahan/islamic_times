@@ -23,6 +23,7 @@ from islamic_times import sun_equations as se
 from islamic_times import moon_equations as me
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
+import islamic_times.astro_core as fast_astro
 
 class ITLocation:
     """
@@ -166,11 +167,11 @@ class ITLocation:
         
         # Determine UTC Offset
         tz = self.get_timezone(find_local_tz, date)
-        self.utc_offset = tz.utcoffset(None).total_seconds() / 3600 * -1
+        self.utc_offset = tz.utcoffset(None).total_seconds() / 3600
         date = date.replace(tzinfo=tz)
 
-        jd = te.gregorian_to_jd(date, -1 * date.utcoffset().total_seconds() / 3600)
-        deltaT = te.delta_t_approx(date.year, date.month)
+        jd = fast_astro.gregorian_to_jd(date, date.utcoffset().total_seconds() / 3600)
+        deltaT = fast_astro.delta_t_approx(date.year, date.month)
         islamic_dates = te.gregorian_to_hijri(date.year, date.month, date.day)
         self.observer_dateinfo: DateTimeInfo = DateTimeInfo(
             date=date,
@@ -178,6 +179,7 @@ class ITLocation:
             jd=jd,
             deltaT=deltaT
         )
+        test = fast_astro.jd_to_gregorian(jd, self.observer_dateinfo.utc_offset)
 
         # Autocalculation for astronomical parameters
         self.auto_calculate = auto_calculate
@@ -236,10 +238,10 @@ class ITLocation:
             raise TypeError(f"'date_time' must be of type `datetime`, but got `{type(new_date).__name__}`.")
 
         if new_date.tzinfo is not None:
-            jd = te.gregorian_to_jd(new_date, -1 * new_date.utcoffset().total_seconds() / 3600)
+            jd = fast_astro.gregorian_to_jd(new_date, new_date.utcoffset().total_seconds() / 3600)
         else:
-            jd = te.gregorian_to_jd(new_date)
-        deltaT = te.delta_t_approx(new_date.year, new_date.month)
+            jd = fast_astro.gregorian_to_jd(new_date, 0)
+        deltaT = fast_astro.delta_t_approx(new_date.year, new_date.month)
         islamic_dates = te.gregorian_to_hijri(new_date.year, new_date.month, new_date.day)
         self.observer_dateinfo: DateTimeInfo = DateTimeInfo(
             date=new_date.replace(tzinfo=self.observer_dateinfo.date.tzinfo),
@@ -274,6 +276,18 @@ class ITLocation:
             - `datetime_modified` is set to `False` after execution.
         """
 
+        def safe_sun_time(observer_dateinfo, observer_info, event: str) -> datetime | str:
+            try:
+                return se.find_proper_suntime(observer_dateinfo, observer_info, event)
+            except ArithmeticError:
+                return f"Sun{event} does not exist."
+            
+        def safe_moon_time(observer_dateinfo, observer_info, event: str) -> datetime | str:
+            try:
+                return me.find_proper_moontime(observer_dateinfo, observer_info, event)
+            except ArithmeticError:
+                return f"Moon{event} does not exist."
+
         ### Sun & Moon Properties Calculations
         # Get Sun and Moon Objects with their parameters
         self.sun_params: se.Sun = se.sunpos(self.observer_dateinfo, self.observer_info)
@@ -281,9 +295,9 @@ class ITLocation:
 
         # Important Sun Factors placed SunInfo
         self.sun_info = SunInfo(
-            sunrise=se.find_proper_suntime(self.observer_dateinfo, self.observer_info, 'rise'),
+            sunrise=safe_sun_time(self.observer_dateinfo, self.observer_info, 'rise'),
             sun_transit=se.find_sun_transit(self.observer_dateinfo, self.observer_info),
-            sunset=se.find_proper_suntime(self.observer_dateinfo, self.observer_info, 'set'),
+            sunset=safe_sun_time(self.observer_dateinfo, self.observer_info, 'set'),
             apparent_altitude=self.sun_params.true_altitude,
             true_azimuth=self.sun_params.true_azimuth,
             geocentric_distance=self.sun_params.geocentric_distance,
@@ -303,9 +317,9 @@ class ITLocation:
 
         # Important Moon Factors placed into MoonInfo
         self.moon_info = MoonInfo(
-            moonrise=me.find_proper_moontime(self.observer_dateinfo, self.observer_info, 'rise'),
+            moonrise=safe_moon_time(self.observer_dateinfo, self.observer_info, 'rise'),
             moon_transit=me.find_moon_transit(self.observer_dateinfo, self.observer_info),
-            moonset=me.find_proper_moontime(self.observer_dateinfo, self.observer_info, 'set'),
+            moonset=safe_moon_time(self.observer_dateinfo, self.observer_info, 'set'),
             illumination=illumination,
             apparent_altitude=self.moon_params.apparent_altitude,
             true_azimuth=self.moon_params.true_azimuth,
@@ -656,20 +670,8 @@ class ITLocation:
             raise ValueError("Cannot print dates and times without calculating the astronomical parameters. First call `calculate_astro()`.")
 
         return self.moon_info
-
-        # return {
-        #         "moonrise" : self.moonrise.strftime("%X %d-%m-%Y"),
-        #         "moon_transit" : self.moon_transit.strftime("%X %d-%m-%Y"),
-        #         "moonset" : self.moonset.strftime("%X %d-%m-%Y"),
-        #         "declination" : round(self.moon_declination, 3),
-        #         "right_ascension" : f"{self.moon_right_ascension[0]}h {self.moon_right_ascension[1]}m {self.moon_right_ascension[2]:.2f}s",
-        #         "altitude" : round(self.moon_alt, 3),
-        #         "azimuth" : round(self.moon_az, 3),
-        #         "parallax" : round(self.moon_pi * 60, 3),
-        #         "illumination" : round(self.moon_illumin * 100, 2)
-        #     }
     
-    def moonphases(self) -> List[Dict[str, datetime]]:
+    def moonphases(self) -> List[Tuple[str, datetime]]:
         """
         Returns the nearest moon phases.
 
@@ -680,26 +682,13 @@ class ITLocation:
         """
 
         # Find Next New Moon (and the rest of the phases)
-        moon_phases = me.next_phases_of_moon_utc(self.observer_dateinfo.date)
-        for i, phase in enumerate(moon_phases):
-            phase_str = ""
-            if i == 0:
-                phase_str = "New Moon"
-            elif i == 1:
-                phase_str = "First Quarter"
-            elif i == 2:
-                phase_str = "Full Moon"
-            else:
-                phase_str = "Last Quarter"
-            
-            moon_phases[i] = {"phase": phase_str, "datetime": phase - timedelta(hours=self.observer_dateinfo.utc_offset)}
+        phases: Tuple[datetime, datetime, datetime, datetime] = me.next_phases_of_moon_utc(self.observer_dateinfo.date)
+        phase_names = ["New Moon", "First Quarter", "Full Moon", "Last Quarter"]
 
-        moon_phases = sorted(moon_phases, key = lambda item: item["datetime"])
-
-        return moon_phases
+        return [(phase_names[i], phase + timedelta(hours=self.utc_offset)) for i, phase in enumerate(phases)]
 
     # Calculate Next New Moon Visibilities
-    def visibilities(self, days: int = 3, criterion: int = 1) -> Dict [datetime, List[str | float]]:
+    def visibilities(self, days: int = 3, criterion: int = 1) -> Visibilities:
         """
         Returns a dictionary describing the visibility of the nearest new moon for the observer.
 
@@ -720,9 +709,7 @@ class ITLocation:
             criterion (int, optional): Which method to classify visibilities. Either 0 (referring to Odeh, 2006) or 1 (referring to Yallop, 1997). Defaults 1.
 
         Returns:
-            list (List[Dict[str, str | float]]): A list of dictionaries containing:
-                - 'datetime': The key of each dictionary which represents the best time to look for the new moon crescent.
-                - 'visibility': Raw number output of the visibility.
+            Visibilities: Dataclass containing visibility information.
         """
 
         if not isinstance(days, int):
@@ -732,143 +719,19 @@ class ITLocation:
             raise ValueError(f"'days' must be greater than 0. Invalid value: {days}.")
         
         if criterion not in (0, 1):
-            raise ValueError(f"'type' must be either 0 or 1. Invalid value: {criterion}.")
+            raise ValueError(f"'criterion' must be either 0 or 1. Invalid value: {criterion}.")
         
         
         if not isinstance(criterion, int):
-            raise TypeError(f"'type' must be of type `int`, but got `{criterion(criterion).__name__}`.")
+            raise TypeError(f"'criterion' must be of type `int`, but got `{criterion(criterion).__name__}`.")
         
         if criterion not in (0, 1):
-            raise ValueError(f"'type' must be either 0 or 1. Invalid value: {criterion}.")
-        
+            raise ValueError(f"'criterion' must be either 0 or 1. Invalid value: {criterion}.")
 
-        # Get New Moon Date from moon_phases list
-        moon_phases = self.moonphases()
-        for item in moon_phases:
-                if item['phase'] == "New Moon":
-                    new_moon = item['datetime']
-                    break
+        visibilities: Visibilities = fast_astro.compute_visibilities(self.observer_dateinfo.date, self.observer_dateinfo.utc_offset, 
+                                              self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, 
+                                              self.observer_info.elevation.in_unit(DistanceUnits.METRE), 
+                                              self.observer_info.temperature, self.observer_info.pressure, 
+                                              days, criterion)
 
-        # Find JD for the given date; adjust day for difference in UTC and local timezone
-        jd_new_moon = te.gregorian_to_jd(new_moon, self.observer_dateinfo.utc_offset * -1)
-        ymd_new_moon = te.jd_to_gregorian(jd_new_moon).replace(tzinfo=self.observer_dateinfo.date.tzinfo)
-        deltaT_new_moon = te.delta_t_approx(ymd_new_moon.year, ymd_new_moon.month)
-        new_moon_dateinfo: DateTimeInfo = DateTimeInfo(
-                                                    date=ymd_new_moon,
-                                                    jd=jd_new_moon,
-                                                    deltaT=deltaT_new_moon
-                                                )
-
-        # Find visibilities for the three days
-        visibilities = []
-        best_jds = []
-        for day in range(days):
-            # First, check if the moonset is before the new moon for the first day
-            if day == 0:
-                nm_moonset = me.find_proper_moontime(new_moon_dateinfo, self.observer_info, 'set')
-                if nm_moonset == datetime.min:
-                    # Moonset doesn't exist, for extreme latitudes
-                    v = -997
-                    visibilities.append(v)
-                    best_jds.append(jd_new_moon)
-                    continue
-                elif nm_moonset < new_moon_dateinfo.date:
-                    # Moon is not visibile before the new moon
-                    v = -999
-                    visibilities.append(v)
-                    best_jds.append(te.gregorian_to_jd(nm_moonset))
-                    continue
-
-            # Set the day parameters
-            test_jd_new_moon = jd_new_moon + day
-            test_ymd_new_moon = te.jd_to_gregorian(test_jd_new_moon).replace(tzinfo=self.observer_dateinfo.date.tzinfo)
-            test_deltaT_new_moon = te.delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month)
-            test_observer_dateinfo: DateTimeInfo = DateTimeInfo(
-                date=test_ymd_new_moon,
-                jd=test_jd_new_moon,
-                deltaT=test_deltaT_new_moon
-            )
-
-            # Set sun parameters
-            nm_sun_params = se.sunpos(test_observer_dateinfo, self.observer_info)
-
-            # Sunset & moonset calculations
-            test_nm_sunset = se.find_proper_suntime(test_observer_dateinfo, self.observer_info, 'set')
-
-            if day == 0:
-                test_nm_moonset = nm_moonset
-            else:
-                test_nm_moonset = me.find_proper_moontime(test_observer_dateinfo, self.observer_info, 'set')
-
-            # For extreme latitudes where the moonset or sunset don't exist:
-            if abs(self.observer_info.latitude.decimal) > 62:
-                if test_nm_sunset == datetime.min and test_nm_moonset == datetime.min:
-                    # Moonset and sunset don't exist
-                    v = -997
-                    visibilities.append(v)
-                    best_jds.append(test_jd_new_moon)
-                    continue
-                elif test_nm_sunset == datetime.min:
-                    # Only sunset doesn't exist
-                    v = -996
-                    visibilities.append(v)
-                    best_jds.append(te.gregorian_to_jd(test_nm_moonset))
-                    continue
-                elif test_nm_moonset == datetime.min:
-                    # Only moonset doesn't exist
-                    v = -995
-                    visibilities.append(v)
-                    best_jds.append(te.gregorian_to_jd(test_nm_sunset))
-                    continue
-            
-            # If moonset is before sunset, continue
-            if test_nm_moonset < test_nm_sunset:
-                v = -998
-                visibilities.append(v)
-                best_jds.append(te.gregorian_to_jd(test_nm_moonset))
-                continue
-
-            # Find the best time which is four ninths the moonset-sunset lag after sunset 
-            lag = (test_nm_moonset - test_nm_sunset).total_seconds() / 3600
-            best_time = (test_nm_sunset + timedelta(hours=4 / 9 * lag)).replace(tzinfo=self.observer_dateinfo.date.tzinfo)
-            best_time_jd = te.gregorian_to_jd(best_time, -1 * self.observer_dateinfo.utc_offset)
-            best_jds.append(best_time_jd)
-
-            best_time_dateinfo: DateTimeInfo = DateTimeInfo(
-                date=best_time,
-                jd=best_time_jd,
-                deltaT=test_deltaT_new_moon
-            )
-
-            # Recalculate sun & calculate moon parameters
-            nm_sun_params = se.sunpos(best_time_dateinfo, self.observer_info)
-            nm_moon_params = me.moonpos(best_time_dateinfo, self.observer_info, nm_sun_params.delta_obliquity, nm_sun_params.true_obliquity)
-
-            # Calculate visibilities
-            if criterion == 1:
-                # Yallop uses geocentric horizontal coordinates
-                sun_geo_alt, sun_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_sun_params.apparent_declination, nm_sun_params.local_hour_angle)
-                moon_geo_alt, moon_geo_az = ce.geocentric_horizontal_coordinates(self.observer_info.latitude, nm_moon_params.declination, nm_moon_params.local_hour_angle)
-                v = me.calculate_visibility(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, criterion)
-            else:
-                # Odeh uses the apparent (i.e. adjusted for refraction) topocentric horizontal coordinates
-                v = me.calculate_visibility(nm_sun_params.true_azimuth, nm_sun_params.apparent_altitude, nm_moon_params.true_azimuth, nm_moon_params.apparent_altitude, nm_moon_params.eh_parallax, criterion)
-
-            visibilities.append(v)
-
-        # Arrange and classify visibilties
-        q_values = [[v, me.classify_visibility(v, criterion)] for v in visibilities]
-
-        # Convert best times from JD to datetime
-        best_dates = [
-            te.jd_to_gregorian(jd, self.utc_offset)
-            for jd in best_jds
-        ]
-
-        # Label each q_value to its associated date
-        visibility_dictionary = {
-            dt.strftime('%Y-%m-%d %X'): q_value
-            for dt, q_value in zip(best_dates, q_values)
-        }
-
-        return visibility_dictionary
+        return visibilities

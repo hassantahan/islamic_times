@@ -13,6 +13,7 @@ Contents:
     - MeccaInfo: Provides Qibla direction and distance.
     - SunInfo: Stores information about solar positions and events.
     - MoonInfo: Stores information about lunar positions, events, and illumination.
+    - Visibilities: Stores information about new moon visibility calculations.
 """
 
 
@@ -32,6 +33,9 @@ class Angle:
 
     Attributes:
         decimal (float): The angle in decimal degrees.
+        dms (Tuple[int, int, float]): The angle in degrees, minutes, and seconds.
+        radians (float): The angle in radians.
+        dms_str (str): The angle formatted as a DMS string.
     """
 
     decimal: float
@@ -77,6 +81,11 @@ class RightAscension:
 
     Attributes:
         decimal_hours (float): Right ascension in decimal hours.
+        hms (Tuple[int, int, float]): Right ascension in hours, minutes, and seconds.
+        decimal_degrees (Angle): Right ascension in degrees.
+        radians (float): Right ascension in radians.
+        dms (Tuple[int, int, float]): Right ascension in degrees, minutes, and seconds.
+        dms_str (str): Right ascension formatted as a DMS string.
     """
     decimal_hours: float
 
@@ -166,7 +175,16 @@ class DistanceUnit:
         return self.symbol
 
 class DistanceUnits:
-    """Standard distance units used throughout the application."""
+    """Standard distance units used throughout the application.
+    
+    Attributes:
+        METRE (DistanceUnit): Meter unit.
+        KILOMETRE (DistanceUnit): Kilometer unit.
+        AU (DistanceUnit): Astronomical unit.
+        NAUTICAL_MILE (DistanceUnit): Nautical mile unit.
+        MILE (DistanceUnit): Mile unit.
+        FOOT (DistanceUnit): Foot unit.
+    """
     METRE = DistanceUnit("meter", "m", 1)
     KILOMETRE = DistanceUnit("kilometer", "km", 1_000)
     AU = DistanceUnit("astronomical unit", "AU", 149_597_870_691)
@@ -182,6 +200,8 @@ class Distance:
     Attributes:
         value (float): The numerical value.
         unit (DistanceUnit): The distance unit.
+        in_unit (float): Converts the distance to the target unit.
+        to (Distance): Returns a new Distance object in the target unit.
     """
     value: float
     unit: DistanceUnit = DistanceUnits.METRE
@@ -214,8 +234,12 @@ class Distance:
         if self.unit == DistanceUnits.METRE:
             return f"{self.value:.2f} {self.unit}"
         else:
-            m_equiv = self.in_unit(DistanceUnits.METRE)
-            return f"{self.value:.2f} {self.unit} ({m_equiv:.2f} m)"
+            if self.unit == DistanceUnits.AU:
+                km_equiv = self.in_unit(DistanceUnits.KILOMETRE)
+                return f"{self.value:.6f} {self.unit} ({km_equiv:.2} km)"
+            else:
+                m_equiv = self.in_unit(DistanceUnits.METRE)
+                return f"{self.value:.2f} {self.unit} ({m_equiv:.2f} m)"
 
 
 # === Data Classes ===
@@ -327,7 +351,7 @@ class DateTimeInfo:
     
     @property
     def utc_offset(self) -> float:
-        return self.date.utcoffset().total_seconds() / 3600 * -1
+        return self.date.utcoffset().total_seconds() / 3600
     
     @property
     def jde(self) -> float:
@@ -346,7 +370,7 @@ class DateTimeInfo:
                 f"\tIslamic Date:\t\t{self.hijri.full_date(self.date.strftime("%A"))}\n"
                 f"\t24h-Time:\t\t{self.clock}\n"
                 f"\tTime Zone:\t\t{self.timezone} {self.format_utc_offset()}\n"
-                f"\tLocal JD:\t\t{self.jd}\n"
+                f"\tJulian Day:\t\t{self.jd}\n"
                 f"\tEstimated ΔT:\t\t{self.deltaT:.2f} s")
 
 @dataclass(frozen=True, slots=True)
@@ -484,14 +508,22 @@ class SunInfo:
     greenwich_hour_angle: Angle
     local_hour_angle: Angle
 
+    def sun_time_str(self, time: datetime | str) -> str:
+        if isinstance(time, datetime):
+            return time.strftime("%X %d-%m-%Y")
+        elif isinstance(time, str):
+            return time
+        else:
+            return str(time)
+
     def __str__(self):
         return ("The Sun\n"
-                f"\tSunrise:\t\t{self.sunrise.strftime("%X %d-%m-%Y")}\n"
+                f"\tSunrise:\t\t{self.sun_time_str(self.sunrise)}\n"
                 f"\tSun Transit:\t\t{self.sun_transit.strftime("%X %d-%m-%Y")}\n"
-                f"\tSunset:\t\t\t{self.sunset.strftime("%X %d-%m-%Y")}\n"
+                f"\tSunset:\t\t\t{self.sun_time_str(self.sunset)}\n"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tApp. Azimuth:\t\t{self.true_azimuth}\n"
-                f"\tDistance:\t\t{self.geocentric_distance.in_unit(DistanceUnits.KILOMETRE)}\n"
+                f"\tDistance:\t\t{self.geocentric_distance}\n"
                 f"\tApp. Declination:\t{self.apparent_declination}\n"
                 f"\tApp. Right Ascension:\t{self.apparent_right_ascension}\n"
                 f"\tGreenwich Hour Angle:\t{self.greenwich_hour_angle}\n"
@@ -517,9 +549,9 @@ class MoonInfo:
         local_hour_angle (Angle): Local hour angle.
     """
 
-    moonrise: datetime
+    moonrise: datetime | str
     moon_transit: datetime
-    moonset: datetime
+    moonset: datetime | str
     illumination: float
     apparent_altitude: Angle
     true_azimuth: Angle
@@ -530,17 +562,53 @@ class MoonInfo:
     greenwich_hour_angle: Angle
     local_hour_angle: Angle
 
+    def moon_time_str(self, time: datetime | str) -> str:
+        if isinstance(time, datetime):
+            return time.strftime("%X %d-%m-%Y")
+        elif isinstance(time, str):
+            return time
+        else:
+            return str(time)
+
     def __str__(self):
         return ("The Moon\n"
-                f"\tMoonrise:\t\t{self.moonrise.strftime("%X %d-%m-%Y")}\n"
+                f"\tMoonrise:\t\t{self.moon_time_str(self.moonrise)}\n"
                 f"\tMoon Transit:\t\t{self.moon_transit.strftime("%X %d-%m-%Y")}\n"
-                f"\tMoonset:\t\t{self.moonset.strftime("%X %d-%m-%Y")}\n"
-                f"\tIllumination:\t\t{self.illumination * 100:.2f}%"
+                f"\tMoonset:\t\t{self.moon_time_str(self.moonset)}\n"
+                f"\tIllumination:\t\t{self.illumination * 100:.2f}%\n"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tAzimuth:\t\t{self.true_azimuth}\n"
-                f"\tDistance:\t\t{self.geocentric_distance.in_unit(DistanceUnits.KILOMETRE)}\n"
+                f"\tDistance:\t\t{self.geocentric_distance}\n"
                 f"\tParallax:\t\t{self.parallax}\n"
                 f"\tTop. Declination:\t{self.topocentric_declination}\n"
                 f"\tTop. Right Ascension:\t{self.topocentric_right_ascension}\n"
                 f"\tGreenwich Hour Angle:\t{self.greenwich_hour_angle}\n"
                 f"\tLocal Hour Angle:\t{self.local_hour_angle}")
+
+@dataclass(frozen=True, slots=True)
+class Visibilities:
+    """
+    Contains visibility information for the new moon crescent.
+
+    Attributes:
+        criterion (str): Visibility criterion used.
+        dates (Tuple[datetime]): Dates of visibility calculations.
+        q_values (Tuple[float]): Q values for each date.
+        classifications (Tuple[str]): Classifications for each date.
+    """
+    criterion: str
+    dates: Tuple[datetime]
+    q_values: Tuple[float]
+    classifications: Tuple[str]
+
+    def __str__(self):
+        base: str = f"Visibility of New Moon Crescent:\n\tCriterion:\t\t{self.criterion}\n"
+        for i, q in enumerate(self.q_values):
+            if q == 0:
+                return f"{0:.{3}f}"
+            int_digits = int(math.log10(abs(q))) + 1
+            decimal_digits = max(4 - int_digits, 0)
+            formated_q = f"{q:+.{decimal_digits}f}"
+
+            base += f"\t{self.dates[i].strftime("%X %d-%m-%Y")}:\t{formated_q}\t{self.classifications[i]}\n"
+        return base

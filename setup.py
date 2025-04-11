@@ -1,8 +1,40 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
+import numpy
+import sys
+
+compile_args = []
+link_args = []
+
+if sys.platform == "win32":
+    compile_args = ["/Ox"]
+    link_args = []
+else:
+    compile_args = ["-O3"]
+    link_args = []
+
+astro_core = Extension(
+    name="islamic_times.astro_core",
+    sources=[
+        "src/astro_core.c",
+        "src/c_visibilities.c",
+        "src/c_moon_equations.c",
+        "src/c_sun_equations.c",
+        "src/c_time_equations.c",
+        "src/c_calculation_equations.c",
+        "src/c_datetime.c"
+    ],
+    include_dirs=[
+        "include",
+        numpy.get_include()
+    ],
+    library_dirs=["C:/Program Files/Python313/libs"],
+    extra_compile_args=compile_args,
+    extra_link_args=link_args
+)
 
 setup(
     name='islamic_times',
-    version='1.7.3',
+    version='2.0.0',
     description='Various calculations for Islamic purposes',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
@@ -13,6 +45,7 @@ setup(
     install_requires=[
         'numpy', 'timezonefinder', 'pytz', 'matplotlib', 'shapely', 'geopandas'
     ],
+    ext_modules=[astro_core],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
