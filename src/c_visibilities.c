@@ -93,15 +93,14 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         results[0].q_value = -995.0;
         results[0].classification = classify_visibility(results[0].q_value, criterion);
         best_jds[0] = jd_new_moon;
-        jd_to_gregorian(best_jds[0], utc_offset, &results[0].best_dt);
+        results[0].best_dt = new_moon_dt;
         start++; // Skip day 0
     }
     else if (compare_datetime(&new_moon_dt, &nm_moonset) == 1) {
         // Moon is not visibile before the new moon
         results[0].q_value = -999.0;
         results[0].classification = classify_visibility(results[0].q_value, criterion);
-        best_jds[0] = gregorian_to_jd(nm_moonset, utc_offset);
-        jd_to_gregorian(best_jds[0], utc_offset, &results[0].best_dt);
+        results[0].best_dt = nm_moonset;
         start++; // Skip day 0
     }
 
