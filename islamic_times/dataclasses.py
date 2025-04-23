@@ -367,7 +367,7 @@ class DateTimeInfo:
     def __str__(self):
         return ("Time & Date\n"
                 f"\tGregorian Date:\t\t{self.gregorian_date}\n"
-                f"\tIslamic Date:\t\t{self.hijri.full_date(self.date.strftime("%A"))}\n"
+                f"\tIslamic Date:\t\t{self.hijri.full_date(self.date.strftime('%A'))}\n"
                 f"\t24h-Time:\t\t{self.clock}\n"
                 f"\tTime Zone:\t\t{self.timezone} {self.format_utc_offset()}\n"
                 f"\tJulian Day:\t\t{self.jd}\n"
@@ -519,7 +519,7 @@ class SunInfo:
     def __str__(self):
         return ("The Sun\n"
                 f"\tSunrise:\t\t{self.sun_time_str(self.sunrise)}\n"
-                f"\tSun Transit:\t\t{self.sun_transit.strftime("%X %d-%m-%Y")}\n"
+                f"\tSun Transit:\t\t{self.sun_transit.strftime('%X %d-%m-%Y')}\n"
                 f"\tSunset:\t\t\t{self.sun_time_str(self.sunset)}\n"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tApp. Azimuth:\t\t{self.true_azimuth}\n"
@@ -573,7 +573,7 @@ class MoonInfo:
     def __str__(self):
         return ("The Moon\n"
                 f"\tMoonrise:\t\t{self.moon_time_str(self.moonrise)}\n"
-                f"\tMoon Transit:\t\t{self.moon_transit.strftime("%X %d-%m-%Y")}\n"
+                f"\tMoon Transit:\t\t{self.moon_transit.strftime('%X %d-%m-%Y')}\n"
                 f"\tMoonset:\t\t{self.moon_time_str(self.moonset)}\n"
                 f"\tIllumination:\t\t{self.illumination * 100:.2f}%\n"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
@@ -610,5 +610,5 @@ class Visibilities:
             decimal_digits = max(4 - int_digits, 0)
             formated_q = f"{q:+.{decimal_digits}f}"
 
-            base += f"\t{self.dates[i].strftime("%X %d-%m-%Y")}:\t{formated_q}\t{self.classifications[i]}\n"
+            base += f"\t{self.dates[i].strftime('%X %d-%m-%Y')}:\t{formated_q}\t{self.classifications[i]}\n"
         return base
