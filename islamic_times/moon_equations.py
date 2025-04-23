@@ -23,7 +23,7 @@ from islamic_times.dataclasses import *
 from datetime import datetime, timedelta
 from dataclasses import dataclass, replace
 from typing import List, Tuple
-from warnings import deprecated
+from warnings import warn
 import numpy as np
 import math
 
@@ -320,7 +320,6 @@ class Moon:
 	apparent_altitude: Angle
 
 # Chapter 47
-@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_moon()" or "islamic_times.sun_equations.compute_moon()" instead.')
 def moon_nutation(jde: float) -> Tuple[float, float, float]:
 	"""
 	Calculate the Moon's nutation in for a given Julian Ephemeris Day. See Chapter 47 of *Astronomical Algorithms* for more information.
@@ -331,6 +330,7 @@ def moon_nutation(jde: float) -> Tuple[float, float, float]:
 	Returns:
 		List[float]: The nutation in longitude and obliquity (in degrees).
 	"""
+	warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_moon()" or "islamic_times.sun_equations.compute_moon()" instead.', DeprecationWarning)
 
 	t = (jde - te.J2000) / te.JULIAN_CENTURY
 	t2 = t ** 2
@@ -532,7 +532,6 @@ def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_n
 	# return moon_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 
 # Refer to Chapter 15 of AA
-@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.find_proper_moontime()" or "islamic_times.sun_equations.find_proper_moontime()" instead.')
 def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set') -> datetime:
 	"""
 	Calculate the time of moonset for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
@@ -545,6 +544,7 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 	Returns:
 		datetime: The time of moonset.
 	"""
+	warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.find_proper_moontime()" or "islamic_times.sun_equations.find_proper_moontime()" instead.', DeprecationWarning)
 
 	# Validate the input
 	if rise_or_set not in ['rise', 'set', 'moonrise', 'moonset']:
@@ -685,7 +685,6 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 # Visibility calculations either:
 # Criterion 0: Odeh, 2006
 # Criterion 1: HMNAO TN No. 69, a.k.a. Yallop, 1997
-@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.islamic_times.ITLocation.visibilities()" instead.')
 def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt: Angle, moon_pi: Angle, criterion: int = 0) -> float:
 	"""
 	Calculate the visibility of the Moon's crescent for a given date and observer coordinates.
@@ -701,6 +700,7 @@ def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt
 	Returns:
 		float: The visibility of the Moon's crescent.
 	"""
+	warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.islamic_times.ITLocation.visibilities()" instead.', DeprecationWarning)
 
 	daz = Angle(abs(sun_az.decimal - moon_az.decimal))
 	arcv = Angle(abs(sun_alt.decimal - moon_alt.decimal))
@@ -719,8 +719,9 @@ def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt
 	return q_value
 
 # According to Shaukat (yet to find his paper; reference: https://moonsighting.com/faq_ms.html#Criteria)
-@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.islamic_times.ITLocation.visibilities()" instead.')
 def calculate_visibility_shaukat(sun_az: Angle, sun_long: Angle, moon_long: Angle, moon_lat: Angle, moon_az: Angle, moon_pi: Angle, moon_illumin: float):
+	warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.islamic_times.ITLocation.visibilities()" instead.', DeprecationWarning)
+
 	semi_diameter: float = 0.27245 * (moon_pi.decimal * 60)
 	width: float = 2 * semi_diameter * moon_illumin
 
@@ -734,7 +735,6 @@ def calculate_visibility_shaukat(sun_az: Angle, sun_long: Angle, moon_long: Angl
 	return q_value
 
 # Classification according to Odeh, 2006 or HMNAO TN No.69
-@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.islamic_times.ITLocation.visibilities()" instead.')
 def classify_visibility(q: float, criterion: int = 1) -> str:
 	"""
 	Classify the visibility of the Moon's crescent based on the given q value.
@@ -746,6 +746,7 @@ def classify_visibility(q: float, criterion: int = 1) -> str:
 	Returns:
 		str: The classification of the Moon's crescent visibility.
 	"""
+	warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.islamic_times.ITLocation.visibilities()" instead.', DeprecationWarning)
 	
 	if q == -999: 
 		return "Moonset before the new moon."

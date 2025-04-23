@@ -17,11 +17,11 @@ import math
 import numpy as np
 from typing import List, Tuple
 from datetime import datetime, timedelta
-from dataclasses import dataclass, replace, field
+from dataclasses import dataclass, replace
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
 from islamic_times.dataclasses import *
-from warnings import deprecated
+from warnings import warn
 
 __OBLIQUITY_TERMS = [
     -4680.93,
@@ -213,7 +213,6 @@ class Sun:
     apparent_altitude: Angle
 
 # Chapter 22
-@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_sun()" or "islamic_times.sun_equations.sunpos()" instead.')
 def oblique_eq(jde: float) -> Angle:
     '''
     Calculate the obliquity of the ecliptic for a given Julian Ephemeris Day. See Chapter 22 of *Astronomical Algorthims* for more information.
@@ -224,6 +223,8 @@ def oblique_eq(jde: float) -> Angle:
     Returns:
         Angle: The obliquity of the ecliptic.
     '''
+    warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_sun()" or "islamic_times.sun_equations.sunpos()" instead.', DeprecationWarning)
+
     u = ((jde - te.J2000) / te.JULIAN_CENTURY) / 100
 
     eps = 23 + 26 / 60 + (21.448 / 3600)
@@ -234,7 +235,6 @@ def oblique_eq(jde: float) -> Angle:
     return Angle(eps)
 
 # Chapter 22
-@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_sun()" or "islamic_times.sun_equations.sunpos()" instead.')
 def sun_nutation(jde: float) -> Tuple[Angle, Angle]:
     '''
     Calculate the sun's nutation for a given Julian Ephemeris Day. See Chapter 22 of *Astronomical Algorthims* for more information.
@@ -245,6 +245,7 @@ def sun_nutation(jde: float) -> Tuple[Angle, Angle]:
     Returns:
         tuple (Tuple[Angle, Angle]): The nutation in longitude and obliquity.
     '''
+    warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_sun()" or "islamic_times.sun_equations.sunpos()" instead.', DeprecationWarning)
 
     # Precompute time variables
     t = (jde - te.J2000) / te.JULIAN_CENTURY
@@ -337,7 +338,6 @@ def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> dat
                                                                                       
     return sun_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 
-@deprecated('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.find_proper_suntime()" or "islamic_times.sun_equations.find_proper_suntime()" instead.')
 def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime:
     """
     Calculate either the sunrise or the sunset time for a given date and observer coordinates.
@@ -355,6 +355,7 @@ def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_
     Raises:
         ValueError: If the value of rise_or_set is not recognized.
     """
+    warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.find_proper_suntime()" or "islamic_times.sun_equations.find_proper_suntime()" instead.', DeprecationWarning)
 
     if rise_or_set not in ['rise', 'set', 'sunrise', 'sunset']:
         raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
