@@ -166,7 +166,7 @@ class ITLocation:
         
         # Determine UTC Offset
         tz = self.get_timezone(find_local_tz, date)
-        self.utc_offset = tz.utcoffset(None).total_seconds() / 3600
+        self.utc_offset = tz.utcoffset(date).total_seconds() / 3600
         date = date.replace(tzinfo=tz)
 
         jd = fast_astro.gregorian_to_jd(date, date.utcoffset().total_seconds() / 3600)
@@ -193,7 +193,7 @@ class ITLocation:
         # Prayer setting
         self.set_prayer_method(method, asr_type) # This also calculates the prayer times if `auto_calculate` is True
 
-    def get_timezone(self, find_local_tz: bool, date: datetime) -> timezone | None:
+    def get_timezone(self, find_local_tz: bool, date: datetime) -> timezone:
         """ Determine UTC offset in hours based on location if needed.
 
         Parameters:
@@ -201,7 +201,7 @@ class ITLocation:
             date (datetime): The date and time to be used for the calculation.
 
         Returns:
-            timezone | None: The timezone object representing the UTC offset.
+            timezone: The timezone object representing the UTC offset.
 
         Notes:  
         - `find_local_tz` is set to `False` by default because the timezonefinder library is computationally expensive.
@@ -214,7 +214,7 @@ class ITLocation:
         elif date.tzinfo == None or date.tzinfo == timezone.utc:
             return timezone.utc
         else:  
-            return
+            return date.tzinfo
 
     # Used to change observe date & time
     # By default, updates to datetime.now() if argument is not specified
@@ -408,7 +408,7 @@ class ITLocation:
         if value is not None:
             if isinstance(value, (int, float)):  # Check if it's a number
                 if value > 0:
-                    setattr(self.method, attribute_name, Angle(value))
+                    self.method = replace(self.method, **{attribute_name: Angle(value)})
                 else:
                     ValueError(f"{attribute_name} must be greater than 0. Invalid value: {value}")
             else:
@@ -441,7 +441,7 @@ class ITLocation:
         self.__validate_and_set('maghrib_angle', maghrib_angle)
         self.__validate_and_set('isha_angle', isha_angle)
 
-        setattr(self.method, "name", "Custom")
+        self.method = replace(self.method, name="Custom")
 
         # Update prayer times
         if self.auto_calculate:
@@ -471,12 +471,12 @@ class ITLocation:
         """
 
         if asr_type in (0, 1):
-            setattr(self.method, "asr_type", asr_type)
+            self.method = replace(self.method, asr_type=asr_type)
         else:
             raise ValueError(f"'asr_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {asr_type}")
 
         # Method is now custom
-        setattr(self.method, "name", "Custom")
+        self.method = replace(self.method, name="Custom")
 
         # Update prayer times
         if self.auto_calculate:
@@ -506,12 +506,12 @@ class ITLocation:
         """
 
         if midnight_type in (0, 1):
-           setattr(self.method, "midnight_type", midnight_type)
+           self.method = replace(self.method, midnight_type=midnight_type)
         else:
             raise ValueError(f"'midnight_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {midnight_type}")
 
         # Method is now custom
-        setattr(self.method, "name", "Custom")
+        self.method = replace(self.method, name="Custom")
 
         # Update prayer times
         if self.auto_calculate:

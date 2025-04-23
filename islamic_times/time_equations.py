@@ -386,7 +386,14 @@ def time_midpoint(datetime1: datetime, datetime2: datetime) -> datetime:
 
     Returns:
         datetime: The midpoint datetime
+
+    Raises:
+        TypeError: If inputs are not `datetime`; relevant if a sun event (e.g. sunset) does not exist.
+        ValueError: If one of the `datetime` inputs does not exist, usually a prayer time.
     '''
+    if type(datetime1) is not datetime or type(datetime2) is not datetime:
+        raise TypeError
+    
     if datetime1 == math.inf or datetime2 == math.inf:
         raise ValueError
 

@@ -219,9 +219,9 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
             midnight_dt = te.time_midpoint(sun_info.sunset, find_tomorrow_time(observer_date, observer, method.fajr_angle))
         else:
             midnight_dt = te.time_midpoint(sun_info.sunset, find_tomorrow_time(observer_date, observer))
-    except ValueError as e:
+    except:
         midnight_dt = math.inf
-
+    
 
     prayer_list = [
         fajr_dt,
