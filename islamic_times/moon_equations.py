@@ -647,7 +647,7 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 		sun_nutation (List[float]): The nutation in longitude and obliquity (in degrees). Default is `np.inf`. This should only be used if user understands the C code.
 
 	Returns:
-		datetime: The date and time of the moon event. If the moon event is not found (does not set or rise), returns `math.inf`.
+		datetime: The date and time of the moon event.
 
 	Raises:
 		ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
@@ -667,7 +667,6 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 	if (sun_nutation == np.inf):
 		delPsi = [-123456.0, -123456.0, -123456.0]
 		true_obliquity = [-123456.0, -123456.0, -123456.0]
-		...
 	else:
 		delPsi = list(sun_nutation[:3])
 		true_obliquity = list(sun_nutation[-3:])

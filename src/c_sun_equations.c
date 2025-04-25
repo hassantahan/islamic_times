@@ -592,11 +592,14 @@ datetime find_proper_suntime(double jd, double utc_offset, double latitude, doub
 /* Python Wrapper */
 PyObject* py_find_proper_suntime(PyObject* self, PyObject* args) {
     double jd, deltaT, latitude, longitude, elevation, temperature, pressure, utc_offset, angle_deg;
+    int event_code;
     char event;
     if (!PyArg_ParseTuple(args, "ddddddddC", &jd, &latitude, &longitude, 
                                               &elevation, &temperature, &pressure, 
-                                              &utc_offset, &angle_deg, &event))
+                                              &utc_offset, &angle_deg, &event_code))
         return NULL;
+
+    event = (char)event_code;
     
     return datetime_to_pydatetime(
         find_proper_suntime(jd, utc_offset, latitude, longitude, elevation, temperature, pressure, angle_deg, event));

@@ -867,11 +867,12 @@ PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
            elevation, temperature, pressure, 
            utc_offset;
     double deltaPsi[3], true_obliquity[3];
+    int event_code;
     char event;
     if (!PyArg_ParseTuple(args, "ddddddddOOC", &jd, &deltaT, &latitude, &longitude, 
                                                &elevation, &temperature, &pressure, 
                                                &utc_offset, &deltaPsi_obj, &true_obliquity_obj, 
-                                               &event))
+                                               &event_code))
         return NULL;
 
     if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 ||
@@ -880,6 +881,8 @@ PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
         PyErr_SetString(PyExc_TypeError, "Expected two sequences of 3 floats.");
         return NULL;
     }
+
+    event = (char)event_code;
 
     for (int i = 0; i < 3; ++i) {
         PyObject* item1 = PySequence_GetItem(deltaPsi_obj, i);
