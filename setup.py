@@ -6,8 +6,8 @@ compile_args = []
 link_args = []
 
 if sys.platform == "win32":
-    compile_args = ["/Od", "/Zi"]
-    link_args = ["/DEBUG"]
+    compile_args = ["/Od", "/Zi", "/fsanitize=address,undefined"]
+    link_args = ["/DEBUG", "/fsanitize=address,undefined"]
 else:
     compile_args = ["-O3"]
     link_args = []

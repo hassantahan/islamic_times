@@ -578,7 +578,7 @@ class MoonInfo:
                 f"\tIllumination:\t\t{self.illumination * 100:.2f}%\n"
                 f"\tApp. Altitude:\t\t{self.apparent_altitude}\n"
                 f"\tAzimuth:\t\t{self.true_azimuth}\n"
-                f"\tDistance:\t\t{self.geocentric_distance}\n"
+                f"\tDistance:\t\t{self.geocentric_distance.value:,.0f} {self.geocentric_distance.unit}\t\t({self.geocentric_distance.in_unit(DistanceUnits.MILE):,.0f} mi)\n"
                 f"\tParallax:\t\t{self.parallax}\n"
                 f"\tTop. Declination:\t{self.topocentric_declination}\n"
                 f"\tTop. Right Ascension:\t{self.topocentric_right_ascension}\n"
