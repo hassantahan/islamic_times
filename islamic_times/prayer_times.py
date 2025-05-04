@@ -20,7 +20,7 @@ adjustments for extreme latitudes.
 import warnings
 from typing import List
 import islamic_times.astro_core as fast_astro
-from islamic_times.dataclasses import *
+from islamic_times.it_dataclasses import *
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from datetime import datetime, timedelta

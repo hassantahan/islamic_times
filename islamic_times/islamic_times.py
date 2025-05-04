@@ -16,7 +16,7 @@ from numbers import Number
 from typing import List
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from islamic_times.dataclasses import *
+from islamic_times.it_dataclasses import *
 from islamic_times import prayer_times as pt
 from islamic_times import sun_equations as se
 from islamic_times import moon_equations as me
@@ -26,39 +26,12 @@ import islamic_times.astro_core as fast_astro
 
 class ITLocation:
     """
-    Represents an observer's location and time for Islamic astronomical calculations.
+    The `ITLocation` class is the primary way to interact with the `islamic_times` library. 
+    It is designed to contain all the information and methods necessary to determine all Islamic times and astronomical parameters.
 
     This class provides methods for computing astronomical parameters and Islamic prayer times 
-    based on various calculation methods. It supports Hijri date conversion, new moon visibility 
+    based on various calculation methods. It also supports Hijri date conversion, new moon visibility 
     calculations, and Qibla direction determination.
-
-    ### Features:
-    - Calculates prayer times using multiple predefined methods.
-    - Computes astronomical parameters (Sun/Moon position, Julian Date, Delta T, etc.).
-    - Supports custom prayer time calculations by modifying solar hour angles.
-    - Determines Qibla direction and distance to Mecca.
-    - Converts Gregorian dates to Hijri (Islamic calendar).
-    - Estimates new moon visibility and moon phases.
-    - Supports both automatic and manual calculation modes.
-
-    ### Attributes:
-    - `latitude` (float): Observer's latitude (-90 to 90 degrees).
-    - `longitude` (float): Observer's longitude (-180 to 180 degrees).
-    - `elevation` (float): Elevation above sea level (meters).
-    - `temperature` (float): Local temperature (°C).
-    - `pressure` (float): Atmospheric pressure (kPa).
-    - `today` (datetime): The observer's date and time.
-    - `find_local_tz` (bool): Whether to automatically determine the time zone.
-    - `utc_offset` (float): UTC offset in hours.
-    - `auto_calculate` (bool): Whether astronomical calculations are performed automatically.
-    - `asr_type` (int): Type of Asr calculation method (0 = standard, 1 = Hanafi).
-    - `method` (str): The selected prayer calculation method.
-    - `fajr_angle` (float): Solar angle for Fajr prayer.
-    - `isha_angle` (float): Solar angle for Isha prayer.
-    - `maghrib_angle` (float): Solar angle for Maghrib prayer.
-    - `midnight_type` (int): Midnight calculation method (0 = sunset to sunrise, 1 = sunset to Fajr).
-    - `datetime_modified` (bool): Indicates if the date/time has been manually modified.
-    - `prayers_modified` (bool): Indicates if prayer times have been manually modified.
 
     ### Methods:
     - `update_time(date_time)`: Updates the observer's time.
@@ -69,16 +42,12 @@ class ITLocation:
     - `set_asr_type(asr_type)`: Sets the Asr prayer calculation method.
     - `set_midnight_type(midnight_type)`: Sets the Islamic midnight calculation method.
     - `observer()`: Returns observer location parameters.
-    - `dates_times()`: Returns observer’s date and time details.
+    - `dates_times()`: Returns observer's date and time details.
     - `prayer_times()`: Returns calculated prayer times.
     - `mecca()`: Returns observer's distance and direction to Mecca.
     - `sun()`: Returns properties and position of the Sun.
     - `moon()`: Returns properties and position of the Moon.
     - `moonphases()`: Returns the nearest moon phases.
-
-    ### References:
-    - Jean Meeus, "Astronomical Algorithms"
-    - Prayer times calculation methods: [PrayTimes Wiki](http://praytimes.org/wiki/Calculation_Methods)
     """
 
     # TODO: I might want to add slots to save memory and freeze the class
@@ -93,23 +62,19 @@ class ITLocation:
                  method: str = 'JAFARI',
                  asr_type: int = 0,
                  find_local_tz: bool = False,
-                 auto_calculate: bool = True
-                 ) -> None:
+                 auto_calculate: bool = True) -> None:
         """
-        Initializes an ITLocation instance with geolocation and astronomical parameters.
-
-        This constructor sets up the ITLocation object, which is used to calculate astronomical 
-        parameters and Islamic prayer times. The default location is the Royal Greenwich Observatory.
+        `ITLocation` is initialized with the observer's geographical location, date and time, and other parameters. The default location is the Royal Greenwich Observatory.
 
         Parameters:
-            latitude (float, optional): Geographical latitude in decimal degrees (-90 to 90). Defaults to 51.477928.
-            longitude (float, optional): Geographical longitude in decimal degrees (-180 to 180). Defaults to -0.001545.
-            elevation (float, optional): Elevation above sea level in meters. Defaults to 76.
-            temperature (float, optional): Temperature in degrees Celsius. Defaults to 10.
-            pressure (float, optional): Atmospheric pressure in kPa. Defaults to 101.325.
-            today (datetime, optional): Current date and time (UTC). Defaults to `datetime.now(timezone.utc)`.
+            latitude (float, optional): Geographical latitude in decimal degrees (-90 to 90). Defaults to 51.477928°.
+            longitude (float, optional): Geographical longitude in decimal degrees (-180 to 180). Defaults to -0.001545°.
+            elevation (float, optional): Elevation above sea level in meters. Defaults to 76 m.
+            temperature (float, optional): Temperature in degrees Celsius. Defaults to 10°C.
+            pressure (float, optional): Atmospheric pressure in kPa. Defaults to 101.325 kPa.
+            date (datetime, optional): Current date and time. Defaults to `datetime.now(timezone.utc)`.
             method (str, optional): Prayer calculation method (e.g., 'JAFARI', 'ISNA', etc.). Defaults to 'JAFARI'.
-            asr_type (int, optional): Asr calculation type (0 for standard, 1 for Hanafi). Defaults to 0.
+            asr_type (int, optional): ʿAṣr calculation type (0 for standard, 1 for Ḥanafī). Defaults to 0.
             find_local_tz (bool, optional): Whether to determine the local time zone automatically. Defaults to True.
             auto_calculate (bool, optional): Whether to compute astronomical parameters upon initialization. Defaults to True.
 
@@ -236,12 +201,16 @@ class ITLocation:
         if not isinstance(new_date, datetime):
             raise TypeError(f"'date_time' must be of type `datetime`, but got `{type(new_date).__name__}`.")
 
-        if new_date.tzinfo is not None:
-            jd = fast_astro.gregorian_to_jd(new_date, new_date.utcoffset().total_seconds() / 3600)
-        else:
-            jd = fast_astro.gregorian_to_jd(new_date, 0)
+
+        # If TZ is NOT specified in new datetime, but a TZ *is* specified in old datetime, add the TZ into the new datetime
+        if new_date.tzinfo is None and self.observer_dateinfo.date.tzinfo is not None:
+            new_date = datetime.replace(new_date, tzinfo=self.observer_dateinfo.date.tzinfo)
+
+        # Calculate DateInfo params
+        jd = fast_astro.gregorian_to_jd(new_date, new_date.utcoffset().total_seconds() / 3600)
         deltaT = fast_astro.delta_t_approx(new_date.year, new_date.month)
         islamic_dates = te.gregorian_to_hijri(new_date.year, new_date.month, new_date.day)
+
         self.observer_dateinfo: DateTimeInfo = DateTimeInfo(
             date=new_date.replace(tzinfo=self.observer_dateinfo.date.tzinfo),
             hijri=IslamicDateInfo(*islamic_dates),

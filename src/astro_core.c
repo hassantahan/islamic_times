@@ -80,7 +80,7 @@ PyMODINIT_FUNC PyInit_astro_core(void) {
     // islamic_times module imports
     PyObject *mod_sun = PyImport_ImportModule("islamic_times.sun_equations");
     PyObject *mod_moon = PyImport_ImportModule("islamic_times.moon_equations");
-    PyObject *mod_dc  = PyImport_ImportModule("islamic_times.dataclasses");
+    PyObject *mod_dc  = PyImport_ImportModule("islamic_times.it_dataclasses");
 
     if (!mod_sun || !mod_moon || !mod_dc) return NULL;
 

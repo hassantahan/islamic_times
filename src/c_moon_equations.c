@@ -435,7 +435,8 @@ MoonNutationResult moon_nutation(double jde) {
         sum_r += eccentricity_comp * MOON_NUTATION_COEFF_LR[i * 2 + 1] * cos(temp_lr_rad);
     }
 
-    for (int i = 0; i < sizeof(MOON_NUTATION_ARGUMENTS_B) / (4 * sizeof(int)); i++) {
+    const size_t n_args = sizeof(MOON_NUTATION_ARGUMENTS_B) / (4 * sizeof(int));
+    for (size_t i = 0; i < n_args / (4 * sizeof(int)); i++) {
         int d = MOON_NUTATION_ARGUMENTS_B[i * 4];
         int m = MOON_NUTATION_ARGUMENTS_B[i * 4 + 1];
         int mp = MOON_NUTATION_ARGUMENTS_B[i * 4 + 2];
@@ -485,7 +486,6 @@ void compute_moon_result(double jde, double deltaT, double local_latitude, doubl
     double t = (jde - J2000) / JULIAN_CENTURY;
     double t2 = t * t;
     double t3 = t2 * t;
-    double t4 = t3 * t;
 
     // Compute nutation
     MoonNutationResult nutation_result = moon_nutation(jde);
@@ -628,8 +628,6 @@ int find_moon_transit(datetime date, double utc_offset, double local_latitude, d
                     double deltaPsi[3], double true_obliquity[3],
                     datetime* moon_event) {
 
-    double lat_rad = RADIANS(local_latitude);
-    double lon_rad = RADIANS(local_longitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
     double new_deltaT = delta_t_approx(date.year, date.month);
 
@@ -640,7 +638,7 @@ int find_moon_transit(datetime date, double utc_offset, double local_latitude, d
         jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
         double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
         double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
-        if (deltaPsi[i] = CALCULATE_SUN_PARAMS_FOR_MOON_TIME) {   
+        if (deltaPsi[i] == CALCULATE_SUN_PARAMS_FOR_MOON_TIME) {   
             compute_sun_result(t_jde, t_deltaT, 
                 local_latitude, local_longitude, elevation, temperature, pressure, 
                 &temp_sun_param);
@@ -691,9 +689,7 @@ PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
                                               &utc_offset, &deltaPsi_obj, &true_obliquity_obj))
         return NULL;
     
-        if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 ||
-        !PySequence_Check(true_obliquity_obj) || PySequence_Size(true_obliquity_obj) != 3) {
-
+    if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 || !PySequence_Check(true_obliquity_obj) || PySequence_Size(true_obliquity_obj) != 3) {
         PyErr_SetString(PyExc_TypeError, "Expected two sequences of 3 floats.");
         return NULL;
     }
@@ -741,7 +737,6 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
                         datetime* moon_event) {
     
     double lat_rad = RADIANS(local_latitude);
-    double lon_rad = RADIANS(local_longitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
     double new_deltaT = delta_t_approx(date.year, date.month);
 

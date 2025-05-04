@@ -76,7 +76,6 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
     // Get the JD and ΔT for the new moon
     new_moon_dt = add_days(new_moon_dt, utc_offset / 24.0);
     double jd_new_moon = gregorian_to_jd(new_moon_dt, utc_offset);
-    double deltaT_new_moon = delta_t_approx(new_moon_dt.year, new_moon_dt.month);
 
     // Initialize best_jds array
     double* best_jds = malloc(sizeof(double) * days);

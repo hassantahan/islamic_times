@@ -129,7 +129,7 @@ The package is organized into several modules:
 - **`islamic_times.py`**:  
   Contains the `ITLocation` class and functions to integrate astronomical calculations with Islamic timings.
 
-- **`dataclasses.py`**:  
+- **`it_dataclasses.py`**:  
   Defines core data structures (e.g., `Angle`, `RightAscension`, `Distance`, `ObserverInfo`, `IslamicDateInfo`, and `PrayerMethod`) used across the package.
 
 - **`moon_equations.py`**:  

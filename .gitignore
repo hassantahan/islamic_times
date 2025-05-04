@@ -15,6 +15,7 @@ dist/
 *.whl
 *.tar.gz
 *.pyd
+*.so
 
 # setuptools_scm version file
 islamic_times/_version.py

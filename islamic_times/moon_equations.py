@@ -19,7 +19,7 @@ References:
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
-from islamic_times.dataclasses import *
+from islamic_times.it_dataclasses import *
 from datetime import datetime, timedelta
 from dataclasses import dataclass, replace
 from typing import List, Tuple
@@ -482,54 +482,6 @@ def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_n
 									observer_date.utc_offset, delPsi, true_obliquity)
 	
 	return moon_transit.replace(tzinfo=observer_date.date.tzinfo)
-
-	# # First find the Year Month Day at UT 0h from JDE
-	# ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
-	# new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
-	# new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
-
-	# # Calculate new moon params with the new_jd
-	# moon_params: List[Moon] = []
-	# for i in range(3):
-	# 	ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
-	# 	delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-	# 	sun_params = se.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer)
-	# 	delPsi = sun_params.nutation[0]
-	# 	moon_params.append(
-	# 						moonpos(
-	# 							replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp),
-	# 							observer, delPsi, sun_params.true_obliquity
-	# 						)
-	# 					)
-
-	# # Greenwich Mean Sidereal Time (GMST)
-	# sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
-
-	# # Transit approximation (m0)
-	# m0 = (moon_params[1].right_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
-
-	# # Iteratively refine transit time
-	# for _ in range(3):
-	# 	little_theta_zero = Angle((sidereal_time.decimal + 360.985647 * m0) % 360)
-	# 	n = m0 + new_deltaT / 86400
-
-	# 	interpolated_moon_ra = RightAscension(ce.interpolation(n,
-	# 											moon_params[0].right_ascension.decimal_degrees.decimal,
-	# 											moon_params[1].right_ascension.decimal_degrees.decimal,
-	# 											moon_params[2].right_ascension.decimal_degrees.decimal) / 15
-	# 										)
-
-	# 	lunar_local_hour_angle = Angle((little_theta_zero.decimal - (-observer.longitude.decimal) - interpolated_moon_ra.decimal_degrees.decimal) % 360)
-
-	# 	m0 -= lunar_local_hour_angle.decimal / 360
-
-	# # Normalize m0 to [0,1]
-	# m0 %= 1
-
-	# # Compute final transit datetime
-	# moon_transit_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m0) - timedelta(hours=observer_date.utc_offset)
-
-	# return moon_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 
 # Refer to Chapter 15 of AA
 def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set') -> datetime:
