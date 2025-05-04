@@ -476,7 +476,7 @@ class MeccaInfo:
 
     def __str__(self):
         return ("Mecca\n"
-                f"\tDistance:\t\t{self.distance.value:.0f} {self.distance.unit}\n"
+                f"\tDistance:\t\t{self.distance.value:,.0f} {self.distance.unit}\t\t({self.distance.in_unit(DistanceUnits.MILE):,.0f} mi)\n"
                 f"\tDirection:\t\t{self.cardinal}\t\t\t({self.angle})")
 
 @dataclass(frozen=True, slots=True)
