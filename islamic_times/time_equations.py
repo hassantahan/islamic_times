@@ -22,7 +22,7 @@ from typing import Tuple, Dict
 from warnings import warn
 from datetime import datetime, time
 from timezonefinder import TimezoneFinder
-from islamic_times.dataclasses import Angle
+from islamic_times.it_dataclasses import Angle
 
 # Constants used in astronomical calculations.
 J2000: float                = 2451545.0

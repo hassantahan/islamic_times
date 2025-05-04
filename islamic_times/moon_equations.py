@@ -19,7 +19,7 @@ References:
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
-from islamic_times.dataclasses import *
+from islamic_times.it_dataclasses import *
 from datetime import datetime, timedelta
 from dataclasses import dataclass, replace
 from typing import List, Tuple

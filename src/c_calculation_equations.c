@@ -73,7 +73,6 @@ void correct_ra_dec(double* ra_deg, double* dec_deg, double lha_deg, double para
     double a = dist_km;
     double b = a * (1 - EARTH_FLATTENING_FACTOR);
 
-    double ra_rad = RADIANS(*ra_deg);
     double dec_rad = RADIANS(*dec_deg);
     double lha_rad = RADIANS(lha_deg);
     double lat_rad = RADIANS(lat_deg);
@@ -116,7 +115,6 @@ void compute_gha_lha(double true_obliquity_deg, double nut_lon_deg, double gmst_
 void compute_horizontal_coordinates(double ra_deg, double dec_deg, double lha_deg, double lat_deg, double* az_deg, double* alt_deg) {
     // See Chapter 13 of *Astronomical Algorithms* (pg. 93)
 
-    double ra_rad = RADIANS(ra_deg);
     double dec_rad = RADIANS(dec_deg);
     double lha_rad = RADIANS(lha_deg);
     double lat_rad = RADIANS(lat_deg);

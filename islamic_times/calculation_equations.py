@@ -9,7 +9,7 @@ import math
 import numpy as np
 from typing import Tuple
 from islamic_times.time_equations import EARTH_RADIUS_KM
-from islamic_times.dataclasses import Angle, RightAscension, Distance, DistanceUnits
+from islamic_times.it_dataclasses import Angle, RightAscension, Distance, DistanceUnits
 
 def sin(angle: float) -> float:
     '''sin(x) function that auto-converts the argument from degrees to radians before evaluating.

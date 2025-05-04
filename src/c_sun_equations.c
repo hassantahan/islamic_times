@@ -403,8 +403,6 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
 int find_sun_transit(datetime date, double utc_offset, double local_latitude, double local_longitude,
                     double elevation, double temperature, double pressure, datetime* sun_event) {
 
-    double lat_rad = RADIANS(local_latitude);
-    double lon_rad = RADIANS(local_longitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
     double new_deltaT = delta_t_approx(date.year, date.month);
 
@@ -475,7 +473,6 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
                         double elevation, double temperature, double pressure, char event_type, double angle_deg, datetime* sun_event) {
     
     double lat_rad = RADIANS(local_latitude);
-    double lon_rad = RADIANS(local_longitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
     double new_deltaT = delta_t_approx(date.year, date.month);
 
@@ -591,7 +588,7 @@ datetime find_proper_suntime(double jd, double utc_offset, double latitude, doub
 
 /* Python Wrapper */
 PyObject* py_find_proper_suntime(PyObject* self, PyObject* args) {
-    double jd, deltaT, latitude, longitude, elevation, temperature, pressure, utc_offset, angle_deg;
+    double jd, latitude, longitude, elevation, temperature, pressure, utc_offset, angle_deg;
     int event_code;
     char event;
     if (!PyArg_ParseTuple(args, "ddddddddC", &jd, &latitude, &longitude, 
@@ -612,7 +609,6 @@ int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_
     double* deltaPsi, double* true_obliquity, datetime* sun_event) {
 
     double lat_rad = RADIANS(local_latitude);
-    double lon_rad = RADIANS(local_longitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
     double new_deltaT = delta_t_approx(date.year, date.month);
 

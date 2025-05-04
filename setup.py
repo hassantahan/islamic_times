@@ -27,6 +27,7 @@ astro_core = Extension(
         "include",
         numpy.get_include()
     ],
+    define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
     extra_compile_args=compile_args,
     extra_link_args=link_args
 )

@@ -16,7 +16,7 @@ from numbers import Number
 from typing import List
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from islamic_times.dataclasses import *
+from islamic_times.it_dataclasses import *
 from islamic_times import prayer_times as pt
 from islamic_times import sun_equations as se
 from islamic_times import moon_equations as me

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, replace
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
-from islamic_times.dataclasses import *
+from islamic_times.it_dataclasses import *
 from warnings import warn
 
 __OBLIQUITY_TERMS = [
