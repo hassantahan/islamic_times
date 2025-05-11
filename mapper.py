@@ -128,8 +128,10 @@ REGION_CITIES: dict[str, list[str]] = {
 }
 
 class Tee:
-    def __init__(self, filename, mode="w", encoding="utf-8"):
-        self.file = open(filename, mode, encoding=encoding)
+    def __init__(self, filename, log_dir="mapper_logs", mode="w+", encoding="utf-8"):
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        self.file = open(f"{log_dir}/{filename}", mode, encoding=encoding)
         self.stdout = sys.stdout
 
     def write(self, message):
@@ -148,8 +150,8 @@ def split_lat_chunks(lat_vals, n_chunks):
 
 def batch_worker(lat_chunk, lon_vals, dt, days, criterion, utc_offset, elev, temp, press, mode_byte):
     lats, lons = np.meshgrid(lat_chunk, lon_vals, indexing="ij")
-    lats_flat = lats.ravel()
-    lons_flat = lons.ravel()
+    lats_flat = np.ascontiguousarray(lats.ravel(),  dtype=np.float64)
+    lons_flat = np.ascontiguousarray(lons.ravel(),  dtype=np.float64)
     result_flat = fast_astro.compute_visibilities_batch(lats_flat, lons_flat, dt, days, criterion,
                                                 utc_offset, elev, temp, press, mode_byte)
     ny, nx = lats.shape
@@ -159,7 +161,8 @@ def compute_visibility_map_parallel(lon_vals, lat_vals, new_moon_date, days, cri
                                     utc_offset=0.0, elev=0.0, temp=20.0, press=101.325,
                                     mode="category", num_workers=cpu_count()):
     mode_byte: str = 'r' if mode == "raw" else 'c'
-    lat_chunks = split_lat_chunks(lat_vals, num_workers)
+    num_workers = min(num_workers, len(lat_vals))
+    lat_chunks = [c for c in np.array_split(lat_vals, num_workers) if c.size]
 
     print_ts(f"Conjunction Date: {new_moon_date.strftime("%Y-%m-%d %X")}")
 
@@ -362,7 +365,7 @@ def annotate_plot(fig, start_date, criterion, days, islamic_month_name, islamic_
                 f"{days}-Day New Moon Crescent Visibility Map for {islamic_month_name}, {islamic_year} A.H.",
                 ha="center", fontsize=16)
 
-def name_fig(start_date, islamic_month_name, islamic_year, mode):
+def name_fig(start_date, islamic_month_name, islamic_year, criterion, mode):
     name = f"{start_date.strftime('%Y-%m-%d')} {islamic_month_name} {islamic_year}"
     name += "—Yallop" if criterion == 1 else "Odeh"
     qual = 95 if mode == "raw" else 90
@@ -373,7 +376,7 @@ def name_fig(start_date, islamic_month_name, islamic_year, mode):
 
 def plot_map(lon_vals, lat_vals, visibilities_mapped, states_clip, places_clip,
              unique_categories, category_colors_rgba, start_date, amount, out_dir, 
-             islamic_month_name, islamic_year, mode="category"):
+             islamic_month_name, islamic_year, criterion, days_to_generate, mode="category"):
     # Set up the color mapping and obtain epsilon if in raw mode.
     print_ts("Plotting: Setting up colour map...")
     cmap, norm, epsilon = setup_color_mapping(mode, visibilities_mapped, unique_categories, category_colors_rgba)
@@ -414,14 +417,14 @@ def plot_map(lon_vals, lat_vals, visibilities_mapped, states_clip, places_clip,
 
     print_ts("Plotting: Annotating plot...")
     annotate_plot(fig, start_date, criterion, days_to_generate, islamic_month_name, islamic_year)
-    name, qual = name_fig(start_date, islamic_month_name, islamic_year, mode)
+    name, qual = name_fig(start_date, islamic_month_name, islamic_year, criterion, mode)
 
     print_ts("Plotting: Saving...")
     plt.savefig(os.path.join(out_dir, name), format='jpg',
                 pil_kwargs={'optimize': True, 'progressive': True, 'quality': qual})
     plt.close()
 
-def plotting_loop(new_moon_date: datetime, map_params: Tuple, mode: str = "category", region: str = 'WORLD', 
+def plotting_loop(new_moon_date: datetime, map_params: Tuple, master_path: str = "maps/", mode: str = "category", region: str = 'WORLD', 
                   amount: int = 1, visibility_criterion: int = 0):
     # Start timing for the month
     month_start_time: float = time()
@@ -440,7 +443,7 @@ def plotting_loop(new_moon_date: datetime, map_params: Tuple, mode: str = "categ
     states_clip, places_clip, lon_vals, lat_vals, nx, ny = map_params
 
     # Create path
-    path = f"{master_path}{map_region.replace('_', ' ').title()}/{islamic_year}/"
+    path = f"{master_path}{region.replace('_', ' ').title()}/{islamic_year}/"
     if not os.path.exists(path):
         print_ts(f"Creating {path}...")
         os.makedirs(path)
@@ -474,15 +477,19 @@ def plotting_loop(new_moon_date: datetime, map_params: Tuple, mode: str = "categ
              list(categories.keys()) if mode == "category" else [], 
              colors_rgba if mode == "category" else {}, 
              new_moon_date, amount, path, 
-             islamic_month_name, islamic_year, mode)
+             islamic_month_name, islamic_year, visibility_criterion, amount, mode)
     print_ts(f"Time taken: {(time() - t1):.2f}s")
 
     # Finished
     print_ts(f"===Map for {islamic_month_name}, {islamic_year} Complete===")
     print_ts(f"Time to generate map for {islamic_month_name}, {islamic_year}: {(time() - month_start_time):.2f}s")
 
-def main():
-    sys.stdout = Tee(f'mapper_logs/mapper_{datetime.fromtimestamp(time()).strftime("%Y-%m-%d_%H%M%S")}.log')
+def main(today: datetime = datetime.now(), master_path: str = "maps/", total_months: int = 1, map_region: str = "WORLD", 
+         map_mode: str = "category", resolution: int = 300, days_to_generate: int = 3, criterion: int = 1, save_logs: bool = False):
+    
+    map_region = map_region.upper()
+    if save_logs:
+        sys.stdout = Tee(f'mapper_{datetime.fromtimestamp(time()).strftime("%Y-%m-%d_%H%M%S")}.log')
     start_time: float = time()
 
     # Select region 
@@ -510,21 +517,10 @@ def main():
         assert map_mode in ("raw", "category"), f"Invalid mode: {map_mode}"
         new_moon_date: datetime = fast_astro.next_phases_of_moon_utc(today + timedelta(days=month * AVERAGE_LUNAR_MONTH_DAYS))[0]
 
-        plotting_loop(new_moon_date, map_params=(states_clip, places_clip, lon_vals, lat_vals, nx, ny), region=map_region, amount=days_to_generate, 
+        plotting_loop(new_moon_date, map_params=(states_clip, places_clip, lon_vals, lat_vals, nx, ny), master_path=master_path, region=map_region, amount=days_to_generate, 
                       visibility_criterion=criterion, mode=map_mode)
 
     print_ts(f"~~~ --- === Total time taken: {(time() - start_time):.2f}s === --- ~~~")
 
 if __name__ == "__main__":
-    # Vars
-    today = datetime(1996, 9, 12) # .now() - timedelta(days=365.25*30)
-    master_path: str = "B:/Personal/New Moon Visibilities/Experiment/C-Rewrite/Full-Test/"
-    total_months: int = 1
-    map_region: str = "WORLD" # 'NORTH_AMERICA' 'EUROPE' 'MIDDLE_EAST' 'IRAN' 'WORLD' 'WORLD_FULL'
-    map_mode: str = "category" #"raw" # "category"
-    resolution: int = 300
-    days_to_generate: int = 3
-    criterion: int = 1 # Either 0 (Odeh, 2006), or 1 (Yallop, 1997)
-
-    map_region = map_region.upper()
-    main()
+    main(save_logs=False)

@@ -318,13 +318,18 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     //Input parsing
     PyObject *lats_obj, *lons_obj, *new_moon_obj;
     datetime new_moon_dt;
-    int days, criterion;
+    int days, criterion, type_code;
     double utc_offset, elev, temp, press;
-    char type;
-    if (!PyArg_ParseTuple(args, "OOOiiddddC", &lats_obj, &lons_obj, &new_moon_obj, &days, &criterion, &utc_offset, 
-                        &elev, &temp, &press, &type)) {
+    if (!PyArg_ParseTuple(args,
+            "OOOiiddddC",
+            &lats_obj, &lons_obj, &new_moon_obj,
+            &days, &criterion,
+            &utc_offset, &elev, &temp, &press,
+            &type_code)) {
         return NULL;
     }
+    char type = (char)type_code;
+
 
     // New moon datetime parsing
     fill_in_datetime_values(&new_moon_dt, new_moon_obj);

@@ -23,6 +23,7 @@ islamic_times/_version.py
 # Local junk
 misc/
 shp_files/
+maps/
 
 # Virtualenvs
 .env/
