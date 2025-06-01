@@ -78,7 +78,7 @@ Below is a basic example on how to calculate prayer times for a given location a
 ```python
 from datetime import datetime
 from islamic_times.islamic_times import ITLocation
-from islamic_times.dataclasses import PrayerTimes, Visibilities
+from islamic_times.it_dataclasses import PrayerTimes, Visibilities
 
 location: ITLocation = ITLocation(
     latitude=43.651070,    # Toronto latitude
