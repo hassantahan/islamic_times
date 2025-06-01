@@ -17,6 +17,7 @@ LOCATIONS = {
     "Houston, TX" : (29.760800, -95.369510, 12),
     "Dallas, TX" : (32.777980, -96.796210, 152),
     "Austin, TX" : (30.264980, -97.746600, 151),
+    "Johannesburg, ZA" : (-26.204103, 28.047305, 1750),
 }
 
 def update_time(local: ITLocation):
@@ -63,7 +64,7 @@ def main(local: ITLocation, do_update = True):
     print(local.visibilities(days=3, criterion=1))
 
 if __name__ == '__main__':    
-    lat, lon, elev = LOCATIONS["Toronto, ON"]
+    lat, lon, elev = LOCATIONS["Johannesburg, ZA"]
     dt = datetime.now()
     local: ITLocation = ITLocation(latitude=lat, longitude=lon, elevation=elev, date=dt, find_local_tz=True)
     main(local, True)
