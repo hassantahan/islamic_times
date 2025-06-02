@@ -108,8 +108,10 @@ def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 0) -> datetime:
 
     The ʿaṣr prayer time is determined based on the length of an object's shadow 
     relative to its height. Two methodologies exist:
-    - Standard Method (`t=1`): Shadow is equal to the object's height.
-    - Ḥanafī Method (`t=2`): Shadow is **twice** the object's height.
+    - Standard Method (`t=1`): Shadow is equal to the object's height + 
+    the height of it's shadow at noon.
+    - Ḥanafī Method (`t=2`): Shadow is **twice** the object's height + 
+    the height of it's shadow at noon.
 
     Parameters:
         noon (datetime): Time of ẓuhr/solar noon/sun transit/sun culmination.
@@ -118,24 +120,34 @@ def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 0) -> datetime:
         ts (int, optional): ʿaṣr calculation method:
             - 0 (Standard) → Shadow ratio of 1:1.
             - 1 (Ḥanafī) → Shadow ratio of 2:1.  
-
+    
     Returns:
         float/math.inf: Number of hours after solar noon when ʿaṣr occurs, or ʿaṣr cannot be calculated due to extreme solar geometry.
 
     Notes:
         - If the sun never reaches the required shadow ratio, the function returns `math.inf`.
     """
-
-    temp_num = math.sin(math.atan2(1, 1 + ts + math.tan(lat.radians - dec.radians))) - math.sin(lat.radians) * math.sin(dec.radians)
-    temp_denom = math.cos(lat.radians) * math.cos(dec.radians)
+    # Convert shadow factor from 0/1 to 1/2 for actual calculation
+    shadow_factor = ts + 1
     
-    # Sometimes, ʿaṣr cannot be calculated because the sun's geometry at the given date and coordintes does not satisfy the shadow ratio
-    # In such a scenario, it will just return that message.
-    # TODO: Another fix might be needed.
-    if temp_num > temp_denom:
-        raise ArithmeticError("ʿAṣr time cannot be calculated because the sun's geometry at the given date and coordintes does not satisfy the shadow ratio.")
-    else:
-        asr_hours = 1 / 15 * math.degrees(math.acos(temp_num / temp_denom))
+    # Calculate noon shadow length
+    noon_shadow = abs(math.tan(math.radians(lat.decimal - dec.decimal)))
+    
+    # Total shadow length = object height + (shadow_factor * noon shadow)
+    total_shadow = 1 + (shadow_factor * noon_shadow)
+    
+    # Calculate angle using inverse tangent
+    angle_rad = math.atan(1.0 / total_shadow)
+    
+    # Check if ʿAṣr is possible at this location and date
+    temp_num = (math.sin(angle_rad) - math.sin(lat.radians) * math.sin(dec.radians))
+    temp_denom = (math.cos(lat.radians) * math.cos(dec.radians))
+    
+    if abs(temp_num) > abs(temp_denom):
+        raise ArithmeticError("ʿAṣr prayer time cannot be calculated - sun never reaches required shadow length")
+    
+    # Convert to hours from noon
+    asr_hours = 1/15.0 * math.degrees(math.acos(temp_num / temp_denom))
     
     return noon + timedelta(hours=asr_hours)
 
