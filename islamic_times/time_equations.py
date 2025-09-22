@@ -349,7 +349,7 @@ def delta_t_approx(year: int, month: int) -> float:
 
 # The most computationally expensive function
 # Finds the UTC offset given a date and coordinates
-def find_utc_offset(lat, long, day) -> Tuple[str, float]:
+def find_utc_offset(lat: float, long: float, day: datetime) -> Tuple[str, float]:
     '''Determine the local timezone and its UTC offset in hours for a given geographic location and date. Uses the timezonefinder library.
 
     This is a computationally expensive function and should be used sparingly.

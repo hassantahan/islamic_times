@@ -320,7 +320,7 @@ class Moon:
 	apparent_altitude: Angle
 
 # Chapter 47
-def moon_nutation(jde: float) -> Tuple[float, float, float]:
+def moon_nutation(jde: float) -> Tuple[np.ndarray, float, float, float]:
 	"""
 	Calculate the Moon's nutation in for a given Julian Ephemeris Day. See Chapter 47 of *Astronomical Algorithms* for more information.
 
@@ -455,7 +455,7 @@ def moon_illumination(sun_dec: Angle, sun_ra: Angle, moon_dec: Angle, moon_ra: A
 	fraction_illuminated = (1 + math.cos(phase_angle.radians)) / 2
 	return fraction_illuminated
 
-def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_nutation = np.inf) -> datetime:
+def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_nutation: List[float] = np.inf) -> datetime:
 	"""
 	Calculate transit of the moon (specifically culmination) for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
@@ -484,7 +484,7 @@ def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_n
 	return moon_transit.replace(tzinfo=observer_date.date.tzinfo)
 
 # Refer to Chapter 15 of AA
-def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set') -> datetime:
+def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set') -> datetime | float:
 	"""
 	Calculate the time of moonset for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
@@ -588,7 +588,7 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 	return event_dt
 
 # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
-def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set', sun_nutation = np.inf) -> datetime:
+def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set', sun_nutation: List[float] = np.inf) -> datetime:
 	"""
 	Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 

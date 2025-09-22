@@ -127,7 +127,7 @@ class RightAscension:
 
     @property
     def dms(self) -> Tuple[int, int, float]:
-        deg = self.decimal_degrees
+        deg = self.decimal_degrees.decimal
         degrees = int(deg)
         decimal_minutes = (abs(deg) - degrees) * 60
         minutes = int(decimal_minutes)
@@ -346,7 +346,7 @@ class DateTimeInfo:
         return self.date.strftime("%X")
     
     @property
-    def timezone(self) -> str:
+    def timezone(self) -> str | None:
         return self.date.timetz().tzname()
     
     @property

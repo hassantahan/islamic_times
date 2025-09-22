@@ -68,11 +68,11 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
 Reference: http://praytimes.org/wiki/Calculation_Methods
 """
 
-def safe_sun_time(observer_date: DateTimeInfo, observer: ObserverInfo, event: str, angle: float) -> datetime:
+def safe_sun_time(observer_date: DateTimeInfo, observer: ObserverInfo, event: str, angle: Angle) -> datetime:
     try:
         return se.find_proper_suntime(observer_date, observer, event, angle)
     except ArithmeticError:
-        return math.inf
+        raise ArithmeticError
     
 # Used to calculate islamic midnight
 def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angle: Angle = Angle(5 / 6)) -> datetime:
@@ -196,7 +196,10 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     """
 
     # Calculate fajr
-    fajr_dt = safe_sun_time(observer_date, observer, 'rise', method.fajr_angle)
+    try:
+        fajr_dt = safe_sun_time(observer_date, observer, 'rise', method.fajr_angle)
+    except ArithmeticError:
+        fajr_dt = math.inf
     
     # Calculate ʿAṣr time
     try:
@@ -207,7 +210,10 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     # Calculate Maghrib time
     # Only if maghrib is not at sunset
     if method.maghrib_angle.decimal > 0:
-        maghrib_dt = safe_sun_time(observer_date, observer, 'set', method.maghrib_angle)
+        try:
+            maghrib_dt = safe_sun_time(observer_date, observer, 'set', method.maghrib_angle)
+        except:
+            maghrib_dt = math.inf
     else:
         # Otherwise Maghrib is sunset
         maghrib_dt = sun_info.sunset
@@ -215,15 +221,24 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     # Calculate ʿishāʾ time
     # If NOT makkah method
     if "Makkah" not in method.name:
-        isha_dt = safe_sun_time(observer_date, observer,  'set', method.isha_angle)
+        try:
+            isha_dt = safe_sun_time(observer_date, observer,  'set', method.isha_angle)
+        except ArithmeticError:
+            isha_dt = math.inf
     # Makkah method is special and will be the only exception
     else:
         # During Ramadan, ʿishāʾ is set to a flat two hours after maghrib
-        if observer_date.hijri.hijri_month == 9:
-            isha_dt = maghrib_dt + timedelta(hours=2)
+        if observer_date.hijri is not None and observer_date.hijri.hijri_month == 9:
+            if isinstance(maghrib_dt, datetime):
+                isha_dt = maghrib_dt + timedelta(hours=2)
+            else:
+                isha_dt = maghrib_dt 
         # Otherwise, it is set to a flat one hour
         else:
-            isha_dt = maghrib_dt + timedelta(hours=1)
+            if isinstance(maghrib_dt, datetime):
+                isha_dt = maghrib_dt + timedelta(hours=1)
+            else:
+                isha_dt = maghrib_dt 
     
     # Calculate Midnight time
     try:
@@ -231,7 +246,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
             midnight_dt = te.time_midpoint(sun_info.sunset, find_tomorrow_time(observer_date, observer, method.fajr_angle))
         else:
             midnight_dt = te.time_midpoint(sun_info.sunset, find_tomorrow_time(observer_date, observer))
-    except:
+    except ArithmeticError:
         midnight_dt = math.inf
     
 

@@ -12,17 +12,17 @@ References:
   - Prayer times calculation methods (http://praytimes.org/wiki/Calculation_Methods)
 """
 
+import islamic_times.astro_core as fast_astro
 from numbers import Number
 from typing import List
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from islamic_times.it_dataclasses import *
-from islamic_times import prayer_times as pt
-from islamic_times import sun_equations as se
-from islamic_times import moon_equations as me
-from islamic_times import time_equations as te
-from islamic_times import calculation_equations as ce
-import islamic_times.astro_core as fast_astro
+from islamic_times import prayer_times as pt,         \
+                        sun_equations as se,        \
+                        moon_equations as me,       \
+                        time_equations as te,       \
+                        calculation_equations as ce
 
 class ITLocation:
     """

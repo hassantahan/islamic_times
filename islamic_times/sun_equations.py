@@ -338,7 +338,7 @@ def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> dat
                                                                                       
     return sun_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 
-def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime:
+def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime | float:
     """
     Calculate either the sunrise or the sunset time for a given date and observer coordinates.
     This function computes only the requested event (sunrise or sunset) without calculating both.
@@ -378,7 +378,7 @@ def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_
                     )
 
     # Compute H0: the hour angle corresponding to the desired altitude.
-    h_zero: Angle = Angle(-angle)
+    h_zero: Angle = Angle(-angle.decimal)
     cosH_zero: float = (math.sin(h_zero.radians) - math.sin(observer.latitude.radians) * math.sin(sun_params[1].apparent_declination.radians)) / \
                 (math.cos(observer.latitude.radians) * math.cos(sun_params[1].apparent_declination.radians))
     
