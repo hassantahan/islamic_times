@@ -428,15 +428,15 @@ def next_phases_of_moon_utc(date: datetime) -> Tuple[datetime, datetime, datetim
 	return fast_astro.next_phases_of_moon_utc(date)
 
 # Refer to Chapter 48 of AA
-def moon_illumination(sun_dec: Angle, sun_ra: Angle, moon_dec: Angle, moon_ra: Angle, sun_earth_distance: Distance, moon_earth_distance: Distance) -> float:
+def moon_illumination(sun_dec: Angle, sun_ra: RightAscension, moon_dec: Angle, moon_ra: RightAscension, sun_earth_distance: Distance, moon_earth_distance: Distance) -> float:
 	"""
 	Calculate the fraction of the Moon illuminated for a given date. See Chapter 48 of *Astronomical Algorithms* for more information.
 
 	Parameters:
 		sun_dec (Angle): The Sun's declination.
-		sun_ra (Angle): The Sun's Right Ascension.
+		sun_ra (RightAscension): The Sun's Right Ascension.
 		moon_dec (Angle): The Moon's declination.
-		moon_ra (Angle): The Moon's Right Ascension.
+		moon_ra (RightAscension): The Moon's Right Ascension.
 		sun_earth_distance (Distance): The Sun-Earth distance.
 		moon_earth_distance (Distance): The Moon-Earth distance.
 
@@ -455,7 +455,7 @@ def moon_illumination(sun_dec: Angle, sun_ra: Angle, moon_dec: Angle, moon_ra: A
 	fraction_illuminated = (1 + math.cos(phase_angle.radians)) / 2
 	return fraction_illuminated
 
-def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_nutation: List[float] = np.inf) -> datetime:
+def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_nutation: List[float] = np.inf) -> datetime: # type: ignore
 	"""
 	Calculate transit of the moon (specifically culmination) for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
@@ -588,7 +588,7 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 	return event_dt
 
 # This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
-def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set', sun_nutation: List[float] = np.inf) -> datetime:
+def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set', sun_nutation: List[float] = np.inf) -> datetime: # type: ignore
 	"""
 	Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 

@@ -351,7 +351,7 @@ class DateTimeInfo:
     
     @property
     def utc_offset(self) -> float:
-        return self.date.utcoffset().total_seconds() / 3600
+        return self.date.utcoffset().total_seconds() / 3600 # type: ignore
     
     @property
     def jde(self) -> float:
@@ -367,7 +367,7 @@ class DateTimeInfo:
     def __str__(self):
         return ("Time & Date\n"
                 f"\tGregorian Date:\t\t{self.gregorian_date}\n"
-                f"\tIslamic Date:\t\t{self.hijri.full_date(self.date.strftime('%A'))}\n"
+                f"\tIslamic Date:\t\t{self.hijri.full_date(self.date.strftime('%A'))}\n" # type: ignore
                 f"\t24h-Time:\t\t{self.clock}\n"
                 f"\tTime Zone:\t\t{self.timezone} {self.format_utc_offset()}\n"
                 f"\tJulian Day:\t\t{self.jd}\n"
@@ -386,6 +386,7 @@ class PrayerMethod:
         maghrib_angle (Angle): Maghrib angle (if applicable).
         asr_type (int): Asr shadow factor type.
         midnight_type (int): Midnight definition type.
+        extreme_lats (str): The method on how to deal with prayer times at extreme latitudes. Default is Nearest Latitude method.
     """
     name: str
     fajr_angle: Angle
@@ -394,6 +395,7 @@ class PrayerMethod:
     maghrib_angle: Angle = Angle(0)
     asr_type: int = 0
     midnight_type: int = 0
+    extreme_lats: str = 'NearestLat'
 
 @dataclass(frozen=True, slots=True)
 class Prayer:

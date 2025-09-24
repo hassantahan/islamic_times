@@ -9,14 +9,14 @@ This module provides the ITLocation class that encapsulates calculations for:
 
 References:
   - Jean Meeus, *Astronomical Algorithms*, 2nd Edition, Willmann-Bell, Inc., 1998.
-  - Prayer times calculation methods (http://praytimes.org/wiki/Calculation_Methods)
+  - Prayer times calculation methods (https://praytimes.org/docs/calculation)
 """
 
 import islamic_times.astro_core as fast_astro
 from numbers import Number
 from typing import List
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from islamic_times.it_dataclasses import *
 from islamic_times import prayer_times as pt,         \
                         sun_equations as se,        \
@@ -131,10 +131,10 @@ class ITLocation:
         
         # Determine UTC Offset
         tz = self.get_timezone(find_local_tz, date)
-        self.utc_offset = tz.utcoffset(date).total_seconds() / 3600
+        self.utc_offset = tz.utcoffset(date).total_seconds() / 3600 # type: ignore
         date = date.replace(tzinfo=tz)
 
-        jd = fast_astro.gregorian_to_jd(date, date.utcoffset().total_seconds() / 3600)
+        jd = fast_astro.gregorian_to_jd(date, date.utcoffset().total_seconds() / 3600) # type: ignore
         deltaT = fast_astro.delta_t_approx(date.year, date.month)
         islamic_dates = te.gregorian_to_hijri(date.year, date.month, date.day)
         self.observer_dateinfo: DateTimeInfo = DateTimeInfo(
@@ -158,7 +158,7 @@ class ITLocation:
         # Prayer setting
         self.set_prayer_method(method, asr_type) # This also calculates the prayer times if `auto_calculate` is True
 
-    def get_timezone(self, find_local_tz: bool, date: datetime) -> timezone:
+    def get_timezone(self, find_local_tz: bool, date: datetime) -> timezone | tzinfo:
         """ Determine UTC offset in hours based on location if needed.
 
         Parameters:
@@ -183,7 +183,7 @@ class ITLocation:
 
     # Used to change observe date & time
     # By default, updates to datetime.now() if argument is not specified
-    def update_time(self, new_date: datetime = None) -> None:
+    def update_time(self, new_date: datetime = None) -> None: # type: ignore
         """
         Updates the observer's time.
 
@@ -207,7 +207,7 @@ class ITLocation:
             new_date = datetime.replace(new_date, tzinfo=self.observer_dateinfo.date.tzinfo)
 
         # Calculate DateInfo params
-        jd = fast_astro.gregorian_to_jd(new_date, new_date.utcoffset().total_seconds() / 3600)
+        jd = fast_astro.gregorian_to_jd(new_date, new_date.utcoffset().total_seconds() / 3600) # type: ignore
         deltaT = fast_astro.delta_t_approx(new_date.year, new_date.month)
         islamic_dates = te.gregorian_to_hijri(new_date.year, new_date.month, new_date.day)
 
@@ -263,9 +263,9 @@ class ITLocation:
 
         # Important Sun Factors placed SunInfo
         self.sun_info = SunInfo(
-            sunrise=safe_sun_time(self.observer_dateinfo, self.observer_info, 'rise'),
+            sunrise=safe_sun_time(self.observer_dateinfo, self.observer_info, 'rise'), # type: ignore
             sun_transit=se.find_sun_transit(self.observer_dateinfo, self.observer_info),
-            sunset=safe_sun_time(self.observer_dateinfo, self.observer_info, 'set'),
+            sunset=safe_sun_time(self.observer_dateinfo, self.observer_info, 'set'), # type: ignore
             apparent_altitude=self.sun_params.true_altitude,
             true_azimuth=self.sun_params.true_azimuth,
             geocentric_distance=self.sun_params.geocentric_distance,
@@ -337,7 +337,7 @@ class ITLocation:
         Sets the prayer time calculation method.
 
         The available methods follow those documented at:
-        http://praytimes.org/wiki/Calculation_Methods.
+        https://praytimes.org/docs/calculation.
 
         Parameters:
             method_key (str): The name of the prayer calculation method (e.g., 'JAFARI', 'ISNA', etc.). Defaults to 'JAFARI'.
@@ -354,7 +354,7 @@ class ITLocation:
         method_key = method_key.strip().upper()
     
         for method in pt.DEFAULT_PRAYER_METHODS:
-            if method_key in (key.upper() for key in method.keys):
+            if method_key in (key.upper() for key in method.keys): # type: ignore
                 if asr_type not in (0, 1):
                     raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
 
@@ -368,7 +368,7 @@ class ITLocation:
                 
                 return
 
-        valid_options = [method.keys[0] for method in pt.DEFAULT_PRAYER_METHODS]
+        valid_options = [method.keys[0] for method in pt.DEFAULT_PRAYER_METHODS] # type: ignore
         raise ValueError(
             f"Invalid prayer method '{method_key}'. Valid options are: {', '.join(valid_options)}")
     
@@ -384,7 +384,7 @@ class ITLocation:
                 raise ValueError(f"{attribute_name} must be a number. Invalid value: {value}")
 
     # Alows user to set their own solar hour angles for prayer time calculations.
-    def set_custom_prayer_angles(self, fajr_angle: float = None, maghrib_angle: float = None, isha_angle: float = None) -> None:
+    def set_custom_prayer_angles(self, fajr_angle: float = None, maghrib_angle: float = None, isha_angle: float = None) -> None: # type: ignore
         """
         Customizes solar hour angles for prayer time calculations.
 

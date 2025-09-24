@@ -369,7 +369,7 @@ def find_utc_offset(lat: float, long: float, day: datetime) -> Tuple[str, float]
     timezone_str = tf.certain_timezone_at(lat=lat, lng=long)
 
     # Get the timezone object for the given name
-    timezone = pytz.timezone(timezone_str)
+    timezone = pytz.timezone(timezone_str) # type: ignore
 
     # Localize the given date with the timezone
     localized_datetime = timezone.localize(datetime.combine(day, datetime.min.time()))
@@ -378,7 +378,7 @@ def find_utc_offset(lat: float, long: float, day: datetime) -> Tuple[str, float]
     utc_offset = localized_datetime.utcoffset()
 
     # Calculate the UTC offset in hours
-    return (timezone_str, utc_offset.total_seconds() / 3600)
+    return (timezone_str, utc_offset.total_seconds() / 3600) # type: ignore
 
 # Finds the middle time between two datetimes. Used to find islamic midnight (usually either between sunset & sunrise, or sunrise & fajr).
 def time_midpoint(datetime1: datetime, datetime2: datetime) -> datetime:
