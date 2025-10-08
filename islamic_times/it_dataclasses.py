@@ -395,7 +395,7 @@ class PrayerMethod:
     maghrib_angle: Angle = Angle(0)
     asr_type: int = 0
     midnight_type: int = 0
-    extreme_lats: str = 'NearestLat'
+    extreme_lats: str = 'ANGLEBASED'
 
 @dataclass(frozen=True, slots=True)
 class Prayer:

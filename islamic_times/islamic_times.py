@@ -86,10 +86,10 @@ class ITLocation:
             ValueError: If `asr_type` is not 0 or 1.
             ValueError: If the provided prayer calculation method is invalid.
             
-        Notes:
-            - **DO NOT UNDER ANY CIRCUMSTANCES MANUALLY CHANGE THE `auto_calculate` PARAMETER**
-            - If `auto_calculate` is True, `calculate_astro()` is called to compute astronomical parameters. Otherwise, it must be called manually.
-            - The selected prayer calculation method must be among the supported ones, otherwise, an error is raised.
+        ## Notes:
+        - **DO NOT UNDER ANY CIRCUMSTANCES MANUALLY CHANGE THE `auto_calculate` PARAMETER**
+        - If `auto_calculate` is True, `calculate_astro()` is called to compute astronomical parameters. Otherwise, it must be called manually.
+        - The selected prayer calculation method must be among the supported ones, otherwise, an error is raised.
         """
 
         #  Check the numerical inputs
@@ -168,7 +168,7 @@ class ITLocation:
         Returns:
             timezone: The timezone object representing the UTC offset.
 
-        Notes:  
+        ## Notes:  
         - `find_local_tz` is set to `False` by default because the timezonefinder library is computationally expensive.
         """
         # Find UTC Offset According to Lat/Long datetime
@@ -239,9 +239,9 @@ class ITLocation:
 
         The computed values are stored in instance attributes for later use in prayer time calculations.
 
-        Notes:
-            - If `auto_calculate` is enabled, this method is called automatically when needed. Otherwise, it must be called manually after changing the observer's time or when initializing the object.
-            - `datetime_modified` is set to `False` after execution.
+        ## Notes:
+        - If `auto_calculate` is enabled, this method is called automatically when needed. Otherwise, it must be called manually after changing the observer's time or when initializing the object.
+        - `datetime_modified` is set to `False` after execution.
         """
 
         def safe_sun_time(observer_dateinfo, observer_info, event: str) -> datetime | str:
@@ -346,9 +346,9 @@ class ITLocation:
         Raises:
             ValueError: If the method is not among the supported options.
 
-        Notes:
-            - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
-            - To revert to a default method after using `set_custom_prayer_angles()`, this method must be called again.
+        ## Notes:
+        - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
+        - To revert to a default method after using `set_custom_prayer_angles()`, this method must be called again.
         """
 
         method_key = method_key.strip().upper()
@@ -399,10 +399,10 @@ class ITLocation:
             ValueError: If any provided angle is not a positive number.
             TypeError: If any provided angle is not a number.
 
-        Notes:
-            - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
-            - `self.method` is set to 'Custom' after calling this method.
-            - Call `set_prayer_method()` to reset to a predefined method.
+        ## Notes:
+        - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
+        - `self.method` is set to 'Custom' after calling this method.
+        - Call `set_prayer_method()` to reset to a predefined method.
         """
 
         # Validate and set each angle
@@ -433,7 +433,7 @@ class ITLocation:
         Raises:
             ValueError: If `asr_type` is not 0 or 1.
 
-        Notes:
+        ## Notes:
         - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
         - `self.method` is set to 'Custom' after calling this method.
         - Call `set_prayer_method()` to reset to a predefined method.
@@ -458,7 +458,7 @@ class ITLocation:
         """
         Sets the calculation method for Islamic midnight.
 
-        Options:
+        ## Options:
         - `0`: Midpoint between sunset and sunrise (majority method).
         - `1`: Midpoint between sunset and Fajr (Jaʿfarī method).
 
@@ -468,10 +468,10 @@ class ITLocation:
         Raises:
             ValueError: If `midnight_type` is not 0 or 1.
 
-        Notes:
-            - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
-            - `self.method` is set to 'Custom' after calling this method.
-            - Call `set_prayer_method()` to reset to a predefined method.
+        ## Notes:
+        - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
+        - `self.method` is set to 'Custom' after calling this method.
+        - Call `set_prayer_method()` to reset to a predefined method.
         """
 
         if midnight_type in (0, 1):
@@ -487,6 +487,43 @@ class ITLocation:
             self.calculate_prayer_times()
         else:
             self.prayers_modified = True
+        
+    def set_extreme_latitude_rule(self, rule: str = 'ANGLEBASED') -> None:
+        """
+        Sets the prayer time adjustment method for locations at extreme latitudes.
+
+        ## Options:
+        - `ANGLEBASED`: Night split into 1/60 parts with evening prayers occuring at the first α/60 part, and for Fajr, the last α/60. 
+            - α is the respective solar angle.
+        - `ONESEVENTH`: Night split into 1/7 parts, with ʾIshāʾ at the end of the first seventh, and Fajr at the beginning of the last seventh.
+        - `MIDDLENIGHT`: Night split into two halves, with ʾIshāʾ and Fajr being at the middle.
+        - `NEARESTLAT`: Prayer times are calculated by looking at the closest latitude with proper timings. Calculated by 90 - axial tilt - largest prayer angle.
+        - `NONE`: No adjustment.
+
+        Parameters:
+            rule (str): String to select the rule.
+
+        Raises:
+            TypeError: If `rule` is not a string.
+            ValueError: If `rule` is not one of the built-in rules.
+
+        ## Note:
+        - `ANGLEBASED` is the current default.
+        """
+        EXTREME_LATITUDE_RULES: List[str] = ['NONE', 'NEARESTLAT', 'MIDDLENIGHT', 'ONESEVENTH', 'ANGLEBASED']
+        
+        if not isinstance(rule, str):
+            raise TypeError(f"'rule' must be a string type.")
+        elif rule.upper() not in EXTREME_LATITUDE_RULES:
+            raise ValueError(f'The value of {rule} for \'rule\' is not a valid rule. Please select from among the following: {EXTREME_LATITUDE_RULES}')
+        
+        self.method = replace(self.method, extreme_lats=rule)
+
+        # Update prayer times
+        if self.auto_calculate:
+            self.calculate_prayer_times()
+        else:
+            self.prayers_modified = True
 
     # Return Observer Parameters
     def observer(self) -> ObserverInfo:
@@ -496,7 +533,7 @@ class ITLocation:
         Returns:
             ObserverInfo: Information about the observer's location and conditions.
 
-        Notes:
+        ## Notes:
         - The returned object contains:
             - **latitude** (*Angle*): Latitude of the observer
             - **longitude** (*Angle*): Longitude of the observer
@@ -515,7 +552,7 @@ class ITLocation:
         Returns:
             DateTimeInfo: Information about the observer's date and time.
 
-        Notes:
+        ## Notes:
         - The returned object contains:
             - **date** (*datetime*): The observer's date and time
             - **hijri** (*IslamicDateInfo*): Islamic date information
@@ -543,7 +580,7 @@ class ITLocation:
         Returns:
             PrayerTimes: Dictionary containing prayer times.
 
-        Notes:
+        ## Notes:
         - The returned object contains:
             - **fajr** (*datetime*): Fajr prayer time
             - **sunrise** (*datetime*): Sunrise time
@@ -569,7 +606,7 @@ class ITLocation:
         Returns:
             MeccaInfo: Information about the distance and direction to Mecca.
         
-        Notes:
+        ## Notes:
         - The returned object contains:
             - **distance** (*Distance*): Distance to Mecca
             - **angle** (*Angle*): Angle to Mecca
@@ -593,7 +630,7 @@ class ITLocation:
         Returns:
             SunInfo: Information about the Sun's position and properties.
 
-        Notes:
+        ## Notes:
         - The returned object contains:
             - **sunrise** (*datetime*): Sunrise time.
             - **sun_transit** (*datetime*): Solar noon time.
@@ -619,7 +656,7 @@ class ITLocation:
         Returns:
             MoonInfo: Information about the Moon's position and properties.
 
-        Notes:
+        ## Notes:
         - The returned object contains:
             - **moonrise** (*datetime*): Moonrise time.
             - **moon_transit** (*datetime*): Moon transit time.
@@ -644,9 +681,12 @@ class ITLocation:
         Returns the nearest moon phases.
 
         Returns:
-            list: List of dictionaries containing:
-                - 'phase': Moon phase name
-                - 'datetime': Date & time of the phase
+            List[Tuple[str, datetime]]: List of 2-Tuples for the moonphases.
+
+        ## Notes:
+        - Each 2-Tuple is each made up of:
+            1. `str`: phase name.
+            2. `datetime`: phase date and time.
         """
 
         # Find Next New Moon (and the rest of the phases)
