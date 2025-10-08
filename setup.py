@@ -6,11 +6,44 @@ compile_args = []
 link_args = []
 
 if sys.platform == "win32":
-    compile_args = ["/Od", "/Zi", "/fsanitize=address,undefined"]
-    link_args = ["/DEBUG", "/fsanitize=address,undefined"]
+    compile_args = [
+        "/O2",
+        "/GL",
+        "/GS",
+        "/guard:cf",
+        "/Zc:inline",
+        "/Oi",
+        "/Gy",
+        "/DNDEBUG",
+        "/MD"
+    ]
+    link_args = [
+        "/LTCG",
+        "/OPT:REF",
+        "/OPT:ICF",
+        "/DYNAMICBASE",
+        "/NXCOMPAT",
+        "/DEBUG:NONE"
+    ]
 else:
-    compile_args = ["-O3"]
-    link_args = []
+    compile_args = [
+        "-O3"
+        "-flto",
+        "-fPIC",
+        "-fvisibility=hidden",
+        "-fno-strict-aliasing",
+        "-fwrapv",
+        "-fstack-protector-strong",
+        "-D_FORTIFY_SOURCE=3",
+        "-DNDEBUG"
+    ]
+    link_args = [
+        "-flto",
+        "-Wl,-O3",
+        "-Wl,-z,relro",
+        "-Wl,-z,now",
+        "-Wl,--as-needed"
+    ]
 
 astro_core = Extension(
     name="islamic_times.astro_core",
