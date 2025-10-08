@@ -25,7 +25,6 @@ from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from datetime import datetime, timedelta
 from dataclasses import replace
-import numpy as np
 
 ##### Prayer Methods #####
 # Source: https://praytimes.org/docs/calculation

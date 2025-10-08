@@ -19,9 +19,9 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone, tzinfo
 from islamic_times.it_dataclasses import *
 from islamic_times import prayer_times as pt,         \
-                        sun_equations as se,        \
-                        moon_equations as me,       \
-                        time_equations as te,       \
+                        sun_equations as se,          \
+                        moon_equations as me,         \
+                        time_equations as te,         \
                         calculation_equations as ce
 
 class ITLocation:
