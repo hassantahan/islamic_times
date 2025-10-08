@@ -40,9 +40,6 @@ else:
     link_args = [
         "-flto",
         "-Wl,-O3",
-        "-Wl,-z,relro",
-        "-Wl,-z,now",
-        "-Wl,--as-needed"
     ]
 
 astro_core = Extension(
