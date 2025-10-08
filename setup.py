@@ -27,7 +27,7 @@ if sys.platform == "win32":
     ]
 else:
     compile_args = [
-        "-O3"
+        "-O3",
         "-flto",
         "-fPIC",
         "-fvisibility=hidden",
