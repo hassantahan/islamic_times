@@ -187,7 +187,7 @@ def main(local: ITLocation, do_update = True):
     print(local.visibilities(days=3, criterion=1))
 
 if __name__ == '__main__':    
-    lat, lon, elev = LOCATIONS["Oslo"]
-    dt = datetime.now() + timedelta(days=2)
-    local: ITLocation = ITLocation(latitude=lat, longitude=lon, elevation=elev, date=dt, find_local_tz=True)
-    main(local, True)
+    lat, lon, elev = LOCATIONS["Toronto"]
+    dt = datetime.now()
+    local: ITLocation = ITLocation(latitude=lat, longitude=lon, elevation=elev, date=dt, find_local_tz=False, method='Jafari')
+    main(local, False)

@@ -175,7 +175,10 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
     # Local constants and small helpers kept inside per request
     IDX_SUNRISE = 1
     IDX_SUNSET = 4
+    IDX_MAGHRIB = 5
     IDX_MIDNIGHT = -1
+
+    STANDARD_SUN_ANGLE = Angle(5/6)
 
     FACTOR = {
         'MIDDLENIGHT': 1 / 2,
@@ -199,14 +202,33 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
     nearest_lat = 90.0 - eps.decimal - lowest_angle - 0.01
     adjusted_obs = replace(observer, latitude=Angle(lat_sign*nearest_lat))
 
-    # polar_lat_ex = 90.0 - eps.decimal - 0.01
+    # If it is only sunrise and sunset that are the issue, no need to fix anything else; personal opinion
+    polar_lat_ex = 90.0 - eps.decimal - 0.01
 
-    # only_sunrise_sunset_undef = (
-    #     all(prayer_list[i].time == math.inf for i in [IDX_SUNRISE, IDX_SUNSET, IDX_MIDNIGHT])
-    #     and all(prayer_list[j].time != math.inf for j in range(3) if j not in [IDX_SUNRISE, IDX_SUNSET, IDX_MIDNIGHT])
-    # )
+    try: 
+        only_sunrise_sunset_undef = (
+            all((prayer_list[i].time == math.inf or 'does not exist' in prayer_list[i].time) for i in [IDX_SUNRISE, IDX_SUNSET, IDX_MAGHRIB, IDX_MIDNIGHT]) # type: ignore[arg-type]
+            and all((prayer_list[j].time != math.inf or not ('does not exist' in prayer_list[j].time)) for j in range(3) if j not in [IDX_SUNRISE, IDX_SUNSET, IDX_MAGHRIB, IDX_MIDNIGHT]) # type: ignore[arg-type]
+        )
 
-    # print(only_sunrise_sunset_undef)
+        if only_sunrise_sunset_undef:
+            polar_obs_ex = replace(observer, latitude=Angle(lat_sign*abs(polar_lat_ex)))
+            out[IDX_SUNRISE] = replace(out[IDX_SUNRISE], time=safe_sun_time(observer_date, polar_obs_ex, 'rise', STANDARD_SUN_ANGLE))
+            out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, polar_obs_ex, 'set', STANDARD_SUN_ANGLE))
+            out[IDX_MAGHRIB] = replace(out[IDX_MAGHRIB], time=safe_sun_time(observer_date, polar_obs_ex, 'set', method.maghrib_angle))
+            out[IDX_MAGHRIB+1] = replace(out[IDX_MAGHRIB+1], time=safe_sun_time(observer_date, polar_obs_ex, 'set', method.isha_angle))
+
+            if method.midnight_type:
+                out[IDX_MIDNIGHT] = replace(out[IDX_MIDNIGHT], time=te.time_midpoint(out[IDX_SUNSET].time, find_tomorrow_time(observer_date, polar_obs_ex, method.fajr_angle))) # type: ignore[arg-type]
+            else:
+                out[IDX_MIDNIGHT] = replace(out[IDX_MIDNIGHT], time=te.time_midpoint(out[IDX_SUNSET].time, find_tomorrow_time(observer_date, polar_obs_ex))) # type: ignore[arg-type]
+
+            if isinstance(out[IDX_SUNRISE+2].time, str):
+                out[IDX_SUNRISE + 2] = replace(out[IDX_SUNRISE + 2], time=asr_time(out[IDX_SUNRISE + 1].time, Angle(lat_sign*abs(polar_lat_ex)), sun_dec, method.asr_type)) # type: ignore[arg-type]
+            
+            return out
+    except:
+        ...
 
     # Calculate latitude where minimum night/day length
     H_zero: Angle = Angle(15 / 2 * (24 - 2)) # 2 hour minimum time between sunset and sunrise.
@@ -237,64 +259,63 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
 
     # Recalculate sunset and sunrise times if latitude is above that limit
     if abs(observer.latitude.decimal) > abs(polar_lat):
-        out[IDX_SUNRISE] = replace(out[IDX_SUNRISE], time=safe_sun_time(observer_date, polar_obs, 'rise', Angle(5/6)))
-        out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, polar_obs, 'set', Angle(5/6)))
+        out[IDX_SUNRISE] = replace(out[IDX_SUNRISE], time=safe_sun_time(observer_date, polar_obs, 'rise', STANDARD_SUN_ANGLE))
+        out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, polar_obs, 'set', STANDARD_SUN_ANGLE))
+
+        out[IDX_SUNRISE + 2] = replace(out[IDX_SUNRISE + 2], time=asr_time(out[IDX_SUNRISE + 1].time, Angle(lat_sign*abs(polar_lat)), sun_dec, method.asr_type)) # type: ignore[arg-type]
         
     # Deal with weird issue where suntimes don't match
     if out[IDX_SUNSET].time < out[IDX_SUNRISE].time: # type: ignore[arg-type]
         if observer_date.date.day == out[IDX_SUNRISE].time.day: # type: ignore[arg-type]
             if abs(observer.latitude.decimal) > abs(polar_lat):
-                out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=find_tomorrow_time(observer_date, polar_obs, Angle(5/6), 'set'))
+                out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=find_tomorrow_time(observer_date, polar_obs, STANDARD_SUN_ANGLE, 'set'))
             elif method.extreme_lats == 'NEARESTLAT':
-                out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=find_tomorrow_time(observer_date, adjusted_obs, Angle(5/6), 'set'))
+                out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=find_tomorrow_time(observer_date, adjusted_obs, STANDARD_SUN_ANGLE, 'set'))
         elif observer_date.date.day == out[IDX_SUNSET].time.day: # type: ignore[arg-type]
             if abs(observer.latitude.decimal) > abs(polar_lat):
-                out[IDX_SUNRISE] = replace(out[IDX_SUNRISE], time=find_tomorrow_time(observer_date, polar_obs, Angle(5/6), 'rise', -1))
+                out[IDX_SUNRISE] = replace(out[IDX_SUNRISE], time=find_tomorrow_time(observer_date, polar_obs, STANDARD_SUN_ANGLE, 'rise', -1))
             elif method.extreme_lats == 'NEARESTLAT':
-                out[IDX_SUNRISE] = replace(out[IDX_SUNRISE], time=find_tomorrow_time(observer_date, adjusted_obs, Angle(5/6), 'rise', -1))
+                out[IDX_SUNRISE] = replace(out[IDX_SUNRISE], time=find_tomorrow_time(observer_date, adjusted_obs, STANDARD_SUN_ANGLE, 'rise', -1))
 
     # Nearest latitude method
     if method.extreme_lats == 'NEARESTLAT':
         for i, prayer in enumerate(out):
             if prayer.name in ['Maghrib', 'ʿIshāʾ']:
                 ang = _angle_for(prayer.name, method)
-                out[i] = replace(prayer, time=safe_sun_time(observer_date, adjusted_obs, 'set', ang)) # type: ignore[unbound]
+                out[i] = replace(prayer, time=safe_sun_time(observer_date, adjusted_obs, 'set', ang)) # type: ignore[arg-type]
 
                 # Change sunset and sunrise times so they make more sense.
                 if prayer.name == 'Maghrib':
-                    if out[IDX_SUNRISE].time < out[0].time: # type: ignore[unbound]
-                        out[IDX_SUNRISE] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, adjusted_obs, 'rise', Angle(5/6)))
+                    if out[IDX_SUNRISE].time < out[0].time: # type: ignore[arg-type]
+                        out[IDX_SUNRISE] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, adjusted_obs, 'rise', STANDARD_SUN_ANGLE))
                     
-                    if out[IDX_SUNSET].time > out[5].time: # type: ignore[unbound]
-                        out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, adjusted_obs, 'set', Angle(5/6)))
-
-                # if prayer.name == 'ʿIshāʾ' and out[i].time.time() < out[IDX_SUNRISE].time.time(): # type: ignore[arg-type]
-                #     out[i] = replace(prayer, time=find_tomorrow_time(observer_date, adjusted_obs, ang, 'set')) # type: ignore[unbound]
+                    if out[IDX_SUNSET].time > out[IDX_MAGHRIB].time: # type: ignore[arg-type]
+                        out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, adjusted_obs, 'set', STANDARD_SUN_ANGLE))
 
             elif prayer.name == 'Fajr':
-                out[i] = replace(prayer, time=safe_sun_time(observer_date, adjusted_obs, 'rise', method.fajr_angle)) # type: ignore[unbound]
-                if out[i].time.day != out[IDX_SUNRISE].time.day: # type: ignore[unbound]
+                out[i] = replace(prayer, time=safe_sun_time(observer_date, adjusted_obs, 'rise', method.fajr_angle)) # type: ignore[arg-type]
+                if out[i].time.day != out[IDX_SUNRISE].time.day: # type: ignore[arg-type]
                     out[i] = replace(prayer, time=find_tomorrow_time(observer_date, adjusted_obs, method.fajr_angle, num_days=-1))
             
             elif prayer.name == 'Midnight':
                 if method.midnight_type:
-                    next_target = find_tomorrow_time(observer_date, adjusted_obs, method.fajr_angle) # type: ignore[unbound]
+                    next_target = find_tomorrow_time(observer_date, adjusted_obs, method.fajr_angle) # type: ignore[arg-type]
                 else:
-                    next_target = find_tomorrow_time(observer_date, adjusted_obs) # type: ignore[unbound]
+                    next_target = find_tomorrow_time(observer_date, adjusted_obs) # type: ignore[arg-type]
                 
                 diff = -999
                 if observer_date.date.day + 1 != next_target.day:
                     diff = observer_date.date.day + 2 - next_target.day
                     if method.midnight_type:
-                        next_target = find_tomorrow_time(observer_date, adjusted_obs, method.fajr_angle, num_days=diff) # type: ignore[unbound]
+                        next_target = find_tomorrow_time(observer_date, adjusted_obs, method.fajr_angle, num_days=diff) # type: ignore[arg-type]
                     else:
-                        next_target = find_tomorrow_time(observer_date, adjusted_obs, num_days=diff) # type: ignore[unbound]
+                        next_target = find_tomorrow_time(observer_date, adjusted_obs, num_days=diff) # type: ignore[arg-type]
 
                 out[i] = replace(prayer, time=te.time_midpoint(out[IDX_SUNSET].time, next_target))  # type: ignore[arg-type]
 
-                if out[i].time < out[6].time: # type: ignore[unbound]
+                if out[i].time < out[6].time: # type: ignore[arg-type]
                     next_target = find_tomorrow_time(observer_date, adjusted_obs)
-                    out[i] = replace(prayer, time=te.time_midpoint(out[IDX_SUNSET].time, next_target)) # type: ignore[unbound]
+                    out[i] = replace(prayer, time=te.time_midpoint(out[IDX_SUNSET].time, next_target)) # type: ignore[arg-type]
 
         return out
 
@@ -346,9 +367,9 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
                     next_sunset = find_tomorrow_time(observer_date, adjusted_obs, rise_or_set='set', num_days=2)
             if observer_date.date.day + 1 == next_sunset.day:
                 if abs(observer.latitude.decimal) > abs(polar_lat):
-                    next_sunrise = safe_sun_time(observer_date, polar_obs, 'rise', Angle(5/6))
+                    next_sunrise = safe_sun_time(observer_date, polar_obs, 'rise', STANDARD_SUN_ANGLE)
                 else:
-                    next_sunrise = safe_sun_time(observer_date, polar_obs, 'rise', Angle(5/6))
+                    next_sunrise = safe_sun_time(observer_date, polar_obs, 'rise', STANDARD_SUN_ANGLE)
 
         if getattr(method, 'midnight_type', False):
             try:
