@@ -33,3 +33,6 @@ maps/
 .vscode/
 .idea/
 *.swp
+
+# Editing out maps
+*map*/

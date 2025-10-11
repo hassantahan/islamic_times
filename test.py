@@ -189,5 +189,5 @@ def main(local: ITLocation, do_update = True):
 if __name__ == '__main__':    
     lat, lon, elev = LOCATIONS["Toronto"]
     dt = datetime.now()
-    local: ITLocation = ITLocation(latitude=lat, longitude=lon, elevation=elev, date=dt, find_local_tz=False, method='Jafari')
+    local: ITLocation = ITLocation(latitude=lat, longitude=lon, elevation=elev, date=dt, find_local_tz=True, method='Jafari')
     main(local, False)
