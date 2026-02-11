@@ -1,32 +1,70 @@
-import os, sys, tempfile, gc, psutil, argparse
-
-import numpy as np, geopandas as gpd
-import islamic_times.astro_core as fast_astro
-
+import argparse
+import gc
+import os
+import sys
+import tempfile
+from pathlib import Path
 from time import time
 from typing import List, Tuple
 from datetime import timedelta, datetime
 from multiprocessing import Pool, cpu_count, Process
+
+import numpy as np
+
+# Support running from repository root after migrating to src-layout.
+ROOT_DIR = Path(__file__).resolve().parent
+SRC_DIR = ROOT_DIR / "src"
+if SRC_DIR.exists():
+    sys.path.insert(0, str(SRC_DIR))
+
+import islamic_times.astro_core as fast_astro
 from islamic_times.time_equations import get_islamic_month, gregorian_to_hijri
 
-# Plotting libraries
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-import matplotlib.gridspec as gridspec
+_MAPPER_IMPORT_ERROR: Exception | None = None
+try:
+    import geopandas as gpd
+    import matplotlib.colors as mcolors
+    import matplotlib.gridspec as gridspec
+    import matplotlib.pyplot as plt
+    import psutil
+    from matplotlib.axes import Axes
+    from matplotlib.patches import Rectangle
+    from matplotlib.patheffects import Stroke, Normal
+    from shapely.geometry import box
+    try:
+        from shapely.validation import make_valid  # Shapely >= 2
+    except ImportError:
+        # Fallback for Shapely < 2
+        def make_valid(g):
+            try:
+                return g.buffer(0)
+            except Exception:
+                return g
+except ImportError as exc:
+    gpd = None  # type: ignore[assignment]
+    mcolors = None  # type: ignore[assignment]
+    gridspec = None  # type: ignore[assignment]
+    plt = None  # type: ignore[assignment]
+    psutil = None  # type: ignore[assignment]
+    Axes = object  # type: ignore[assignment,misc]
+    Rectangle = object  # type: ignore[assignment,misc]
+    Stroke = None  # type: ignore[assignment]
+    Normal = None  # type: ignore[assignment]
+    box = None  # type: ignore[assignment]
+    _MAPPER_IMPORT_ERROR = exc
+
+    def make_valid(g):
+        return g
 
 from textwrap import wrap
-from matplotlib.axes import Axes
-from matplotlib.patches import Rectangle
-from matplotlib.patheffects import Stroke, Normal
 
-from shapely.geometry import box
-try:
-    from shapely.validation import make_valid  # Shapely >= 2
-except ImportError:
-    # Fallback for Shapely < 2
-    def make_valid(g):
-        try:    return g.buffer(0)
-        except: return g
+def require_mapper_dependencies() -> None:
+    """Fail fast with actionable guidance when mapper-only deps are missing."""
+    if _MAPPER_IMPORT_ERROR is not None:
+        raise ImportError(
+            "Mapping dependencies are not installed. Install with: "
+            "pip install \"islamic_times[map]\" (or pip install -e \".[map]\" for local development)."
+        ) from _MAPPER_IMPORT_ERROR
 
 AVERAGE_LUNAR_MONTH_DAYS: float = 29.53059
 
@@ -672,7 +710,8 @@ def plotting_loop(new_moon_date: datetime, map_params: Tuple, master_path: str =
 def main(date: datetime = datetime.now(), master_path: str = "maps/", total_months: int = 1, map_region: str = "WORLD", 
          map_mode: str = "category", resolution: int = 300, days_to_generate: int = 3, criterion: int = 1, save_logs: bool = False, 
          max_workers: int = cpu_count()):
-    
+    require_mapper_dependencies()
+
     map_region = map_region.upper()
     if save_logs:
         sys.stdout = Tee(f'mapper_{datetime.fromtimestamp(time()).strftime("%Y-%m-%d_%H%M%S")}.log')

@@ -1,0 +1,6 @@
+include README.md
+include LICENSE
+include CONTRIBUTING.md
+include RELEASE_CHECKLIST.md
+recursive-include src/native/include *.h
+recursive-include src/native *.c

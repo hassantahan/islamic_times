@@ -23,17 +23,87 @@
   Computes the visibility of the nearest new moon for the observer according to either Yallop, 1997 or Odeh, 2006.
   
 - **Heavy Computations Done in C**
-  For blazing fast performace, all the astronomical calculations are done in an integrated C-extension.
+  For blazing fast performance, all the astronomical calculations are done in an integrated C-extension.
   
 - **Extensive Documentation:**  
   Includes detailed API documentation and inline comments for clarity.
 
 ## Installation
 
-You can install the package from PyPI using pip:
+Install the core library from PyPI:
 
 ```bash
 pip install islamic_times
+```
+
+If you want to use the mapping workflow (`mapper.py`), install optional mapping dependencies:
+
+```bash
+pip install "islamic_times[map]"
+```
+
+## Development Setup
+
+### Windows (PowerShell)
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+### Windows (cmd.exe)
+
+```bat
+py -m venv .venv
+.venv\Scripts\activate.bat
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+### Linux/macOS
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+If you also need mapping tools during development:
+
+```bash
+python -m pip install -e ".[map]"
+```
+
+## Running Tests
+
+The package depends on the compiled extension module `islamic_times.astro_core`.  
+Installing with `pip install -e ".[dev]"` builds it for your environment.
+
+Run the full test suite:
+
+```bash
+pytest -q
+```
+
+Run the CI-equivalent coverage command:
+
+```bash
+pytest \
+  --cov=islamic_times.islamic_times \
+  --cov=islamic_times.it_dataclasses \
+  --cov=islamic_times.calculation_equations \
+  --cov=islamic_times.time_equations \
+  --cov-report=term-missing \
+  --cov-fail-under=85
+```
+
+Lint test files:
+
+```bash
+ruff check tests
 ```
 
 ## API Overview
@@ -44,7 +114,7 @@ The core of the package is the `ITLocation` class, which encapsulates both the o
 
 - **Initialization:**
   - `latitude`, `longitude`, `elevation`: Geographic position (i.e. specifically, geodetic). Default is the Greenwich Observatory.
-  - `temperature`, `pressure`: Environmental details. Default is 10°C and 101.325 kPA.
+  - `temperature`, `pressure`: Environmental details. Default is 10°C and 101.325 kPa.
   - `date`: Datetime information. Default is current UTC.
   - `method`: Standard Prayer calculation method (e.g., 'JAFARI', 'ISNA', etc.).
   - `find_local_tz`: Automatically find the local timezone. Default is `False` (computationally expensive).
@@ -88,10 +158,10 @@ location: ITLocation = ITLocation(
     pressure=101.325,      # Atmospheric pressure in kPa
     date=datetime(2005, 6, 1, 12, 0, 0, 0),
     method='ISNA',         # Prayer calculation method
-	find_local_tz=True	   # Automatically find the local timezone of the observer
+    find_local_tz=True     # Automatically find the local timezone of the observer
 )
 
-# Calculate prayer times and diplay them
+# Calculate prayer times and display them
 prayers: PrayerTimes = location.prayer_times()
 print(prayers)
 
@@ -120,7 +190,9 @@ Visibility of New Moon Crescent:
         21:54:55 08-06-2005:    +1.517  A: Easily visible.
 ```
 
-Also included is `test.py` which provides a simple example to showcase the package's functionality.
+Also included is `examples/demo.py`, which provides a simple runnable example of the package's functionality.
+An additional runnable example is available at `examples/demo.py`.
+The automated suite is located in `tests/`.
 
 ## Modules
 
@@ -154,7 +226,12 @@ The package requires the following external libraries:
 - **numpy** – for numerical operations.
 - **pytz** – for timezone management.
 - **timezonefinder** – (optional) to auto-determine local timezone based on coordinates.
-- **dataclasses** – used if running on Python versions earlier than 3.7.
+
+Optional mapping dependencies (for `mapper.py`):
+- **matplotlib**
+- **shapely**
+- **geopandas**
+- **psutil**
 
 ## Default Prayer Calculation Methods
 
@@ -175,30 +252,31 @@ You can also define custom solar angles for Fajr, Maghrib, and ʿIshāʾ prayers
 
 ```
 islamic_times/
-├── include/                # Header files for C extensions
-│   ├── c_moon_equations.h
-│   ├── c_sun_equations.h
-│   └── ...
-├── src/                    # Source files for C extensions
-│   ├── c_moon_equations.c
-│   ├── c_sun_equations.c
-│   └── ...
-├── islamic_times/          # Python modules
-│   ├── islamic_times.py    # Main library file
-│   ├── prayer_times.py     # Prayer time calculations
-│   ├── sun_equations.py    # Sun-related calculations
-│   ├── moon_equations.py   # Moon-related calculations
-│   └── ...
-├── mapper.py               # Mapping script for new moon crescent visibilities
-├── test.py                 # Example/testing script
-├── setup.py                # Build and installation script
-└── README.md               # Project documentation
+├── src/
+│   ├── native/                   # Native extension implementation
+│   │   ├── *.c                   # C extension source files
+│   │   └── include/              # Header files for C extension code
+│   └── islamic_times/            # Python package (src-layout)
+│       ├── islamic_times.py      # Main ITLocation API
+│       ├── prayer_times.py       # Prayer time calculations
+│       ├── sun_equations.py      # Sun-related calculations
+│       ├── moon_equations.py     # Moon-related calculations
+│       └── ...
+├── tests/                        # Automated test suite
+├── examples/demo.py              # Runnable package example
+├── mapper.py                     # Optional map generation script
+├── CONTRIBUTING.md               # Contributor workflow
+├── RELEASE_CHECKLIST.md          # Release process checklist
+├── pyproject.toml                # Project metadata and tool config
+├── setup.py                      # Extension build configuration
+└── README.md                     # Project documentation
 ```
 
 ## Mapping New Moon Crescent Visibilities
 
 Included in this package is an efficient mapping tool to map the new moon crescent visibilities for the observer. 
 The mapping is done using the `mapper.py` script, which takes the visibility data and generates a visual representation of the crescent visibility across different locations.
+The mapper relies on optional dependencies and should be installed with `pip install "islamic_times[map]"`.
 
 The more readily available parameters are found in the `if __name__ == '__main__':` of the script and are as follows:
 
@@ -224,7 +302,7 @@ Below is an example of a generated visibility map for the new moon crescent on *
 
 ## Contributing
 
-All contributions are welcome!
+All contributions are welcome. See `CONTRIBUTING.md` for setup and validation steps.
 
 ## License
 
