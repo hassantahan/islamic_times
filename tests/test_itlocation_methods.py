@@ -35,6 +35,12 @@ def test_set_custom_prayer_angles_rejects_non_numeric_input(toronto_observer_kwa
         location.set_custom_prayer_angles(fajr_angle="bad")  # type: ignore[arg-type]
 
 
+def test_set_custom_prayer_angles_negative_value_should_raise(toronto_observer_kwargs: dict[str, object]) -> None:
+    location = ITLocation(**toronto_observer_kwargs)
+    with pytest.raises(ValueError, match="must be greater than 0"):
+        location.set_custom_prayer_angles(fajr_angle=-5.0)
+
+
 def test_set_asr_type_updates_method(toronto_observer_kwargs: dict[str, object]) -> None:
     location = ITLocation(**toronto_observer_kwargs)
     location.set_asr_type(1)
@@ -115,5 +121,11 @@ def test_visibilities_rejects_invalid_days_and_criterion(toronto_observer_kwargs
     with pytest.raises(ValueError, match="'criterion' must be either 0 or 1"):
         location.visibilities(days=1, criterion=3)
 
-    with pytest.raises(ValueError, match="'criterion' must be either 0 or 1"):
+    with pytest.raises(TypeError, match="'criterion' must be of type `int`"):
         location.visibilities(days=1, criterion="1")  # type: ignore[arg-type]
+
+
+def test_visibilities_rejects_non_integer_days(toronto_observer_kwargs: dict[str, object]) -> None:
+    location = ITLocation(**toronto_observer_kwargs)
+    with pytest.raises(TypeError, match="'days' must be of type `int`"):
+        location.visibilities(days="3", criterion=1)  # type: ignore[arg-type]

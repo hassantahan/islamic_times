@@ -260,8 +260,8 @@ class ObserverInfo:
     latitude: Angle
     longitude: Angle
     elevation: Distance
-    pressure: float = 10
-    temperature: float = 101.325
+    pressure: float = 101.325
+    temperature: float = 10
 
     def __str__(self):
         return ("Observer Parameters\n"
@@ -351,7 +351,8 @@ class DateTimeInfo:
     
     @property
     def utc_offset(self) -> float:
-        return self.date.utcoffset().total_seconds() / 3600 # type: ignore
+        tz_delta = self.date.utcoffset()
+        return 0.0 if tz_delta is None else tz_delta.total_seconds() / 3600
     
     @property
     def jde(self) -> float:
@@ -365,9 +366,10 @@ class DateTimeInfo:
         return f"UTC{hours:+03d}:{minutes:02d}"
 
     def __str__(self):
+        hijri_date = self.hijri.full_date(self.date.strftime("%A")) if self.hijri is not None else "N/A"
         return ("Time & Date\n"
                 f"\tGregorian Date:\t\t{self.gregorian_date}\n"
-                f"\tIslamic Date:\t\t{self.hijri.full_date(self.date.strftime('%A'))}\n" # type: ignore
+                f"\tIslamic Date:\t\t{hijri_date}\n"
                 f"\t24h-Time:\t\t{self.clock}\n"
                 f"\tTime Zone:\t\t{self.timezone} {self.format_utc_offset()}\n"
                 f"\tJulian Day:\t\t{self.jd}\n"
@@ -499,9 +501,9 @@ class SunInfo:
         local_hour_angle (Angle): Local hour angle.
     """
 
-    sunrise: datetime
+    sunrise: datetime | str
     sun_transit: datetime
-    sunset: datetime
+    sunset: datetime | str
     apparent_altitude: Angle
     true_azimuth: Angle
     geocentric_distance: Distance
@@ -599,18 +601,19 @@ class Visibilities:
         classifications (Tuple[str]): Classifications for each date.
     """
     criterion: str
-    dates: Tuple[datetime]
-    q_values: Tuple[float]
-    classifications: Tuple[str]
+    dates: Tuple[datetime, ...]
+    q_values: Tuple[float, ...]
+    classifications: Tuple[str, ...]
 
     def __str__(self):
         base: str = f"Visibility of New Moon Crescent:\n\tCriterion:\t\t{self.criterion}\n"
         for i, q in enumerate(self.q_values):
             if q == 0:
-                return f"{0:.{3}f}"
-            int_digits = int(math.log10(abs(q))) + 1
-            decimal_digits = max(4 - int_digits, 0)
-            formated_q = f"{q:+.{decimal_digits}f}"
+                formatted_q = "+0.000"
+            else:
+                int_digits = int(math.log10(abs(q))) + 1
+                decimal_digits = max(4 - int_digits, 0)
+                formatted_q = f"{q:+.{decimal_digits}f}"
 
-            base += f"\t{self.dates[i].strftime('%X %d-%m-%Y')}:\t{formated_q}\t{self.classifications[i]}\n"
+            base += f"\t{self.dates[i].strftime('%X %d-%m-%Y')}:\t{formatted_q}\t{self.classifications[i]}\n"
         return base

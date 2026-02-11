@@ -12,6 +12,7 @@ from islamic_times.it_dataclasses import (
     IslamicDateInfo,
     MeccaInfo,
     MoonInfo,
+    ObserverInfo,
     Prayer,
     PrayerMethod,
     PrayerTimes,
@@ -54,6 +55,12 @@ def test_islamic_date_helpers() -> None:
     assert "Ramaḍān" in islamic.full_date("Friday")
 
 
+def test_observerinfo_defaults_are_physical() -> None:
+    observer = ObserverInfo(latitude=Angle(0), longitude=Angle(0), elevation=Distance(0))
+    assert math.isclose(observer.pressure, 101.325, abs_tol=1e-12)
+    assert math.isclose(observer.temperature, 10.0, abs_tol=1e-12)
+
+
 def test_datetimeinfo_properties() -> None:
     tz = timezone(timedelta(hours=-5))
     dt = datetime(2025, 1, 1, 12, 0, 0, tzinfo=tz)
@@ -81,7 +88,17 @@ def test_prayer_and_prayertimes_string_output() -> None:
         Prayer("ʿIshāʾ", now, method),
         Prayer("Midnight", now, method),
     ]
-    prayer_times = PrayerTimes(method=method, fajr=prayers[0], sunrise=prayers[1], zuhr=prayers[2], asr=prayers[3], sunset=prayers[4], maghrib=prayers[5], isha=prayers[6], midnight=prayers[7])
+    prayer_times = PrayerTimes(
+        method=method,
+        fajr=prayers[0],
+        sunrise=prayers[1],
+        zuhr=prayers[2],
+        asr=prayers[3],
+        sunset=prayers[4],
+        maghrib=prayers[5],
+        isha=prayers[6],
+        midnight=prayers[7],
+    )
 
     assert prayers[0].time_str.endswith("01-06-2025")
     assert "Prayer Times at Observer Timezone" in str(prayer_times)
@@ -128,6 +145,18 @@ def test_mecca_sun_moon_and_visibility_strings() -> None:
         dates=(now, now + timedelta(days=1)),
         q_values=(0.1234, -0.5678),
         classifications=("A: Easily visible.", "F: Not visible."),
+    )
+    rendered = str(vis)
+    assert "Visibility of New Moon Crescent" in rendered
+    assert "Criterion" in rendered
+
+
+def test_visibilities_str_with_zero_q_should_include_context_lines() -> None:
+    vis = Visibilities(
+        criterion="Yallop",
+        dates=(datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc),),
+        q_values=(0.0,),
+        classifications=("A: Easily visible.",),
     )
     rendered = str(vis)
     assert "Visibility of New Moon Crescent" in rendered

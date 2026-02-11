@@ -14,15 +14,27 @@ References:
 
 import islamic_times.astro_core as fast_astro
 from numbers import Number
-from typing import List
+from typing import List, Optional, Tuple
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone, tzinfo
-from islamic_times.it_dataclasses import *
-from islamic_times import prayer_times as pt,         \
-                        sun_equations as se,          \
-                        moon_equations as me,         \
-                        time_equations as te,         \
-                        calculation_equations as ce
+from islamic_times.it_dataclasses import (
+    Angle,
+    DateTimeInfo,
+    Distance,
+    DistanceUnits,
+    IslamicDateInfo,
+    MeccaInfo,
+    MoonInfo,
+    ObserverInfo,
+    PrayerTimes,
+    SunInfo,
+    Visibilities,
+)
+from islamic_times import calculation_equations as ce
+from islamic_times import moon_equations as me
+from islamic_times import prayer_times as pt
+from islamic_times import sun_equations as se
+from islamic_times import time_equations as te
 
 class ITLocation:
     """
@@ -53,16 +65,19 @@ class ITLocation:
     # TODO: I might want to add slots to save memory and freeze the class
     # __slots__ = ()
 
-    def __init__(self, latitude: float = 51.477928,
-                 longitude: float = -0.001545,
-                 elevation: float = 76,
-                 temperature: float = 10,
-                 pressure: float = 101.325,
-                 date: datetime = datetime.now().replace(tzinfo=timezone.utc),
-                 method: str = 'JAFARI',
-                 asr_type: int = 0,
-                 find_local_tz: bool = False,
-                 auto_calculate: bool = True) -> None:
+    def __init__(
+        self,
+        latitude: float = 51.477928,
+        longitude: float = -0.001545,
+        elevation: float = 76,
+        temperature: float = 10,
+        pressure: float = 101.325,
+        date: Optional[datetime] = None,
+        method: str = "JAFARI",
+        asr_type: int = 0,
+        find_local_tz: bool = False,
+        auto_calculate: bool = True,
+    ) -> None:
         """
         `ITLocation` is initialized with the observer's geographical location, date and time, and other parameters. The default location is the Royal Greenwich Observatory.
 
@@ -75,7 +90,7 @@ class ITLocation:
             date (datetime, optional): Current date and time. Defaults to `datetime.now(timezone.utc)`.
             method (str, optional): Prayer calculation method (e.g., 'JAFARI', 'ISNA', etc.). Defaults to 'JAFARI'.
             asr_type (int, optional): ʿAṣr calculation type (0 for standard, 1 for Ḥanafī). Defaults to 0.
-            find_local_tz (bool, optional): Whether to determine the local time zone automatically. Defaults to True.
+            find_local_tz (bool, optional): Whether to determine the local time zone automatically. Defaults to False.
             auto_calculate (bool, optional): Whether to compute astronomical parameters upon initialization. Defaults to True.
 
         Raises:
@@ -91,6 +106,9 @@ class ITLocation:
         - If `auto_calculate` is True, `calculate_astro()` is called to compute astronomical parameters. Otherwise, it must be called manually.
         - The selected prayer calculation method must be among the supported ones, otherwise, an error is raised.
         """
+
+        if date is None:
+            date = datetime.now(timezone.utc)
 
         #  Check the numerical inputs
         float_inputs = {
@@ -121,42 +139,91 @@ class ITLocation:
         #  Check the date if it is valid
         if not isinstance(date, datetime):
             raise TypeError(f"'{date}' must be of type `datetime`, but got `{type(date).__name__}`.")
-        
+
         # Check if find_local_tz is either 0, 1, or a bool value
-        if not isinstance(find_local_tz, bool):
-            if not isinstance(find_local_tz, Number):
-                raise ValueError(f"'find_local_tz' is out of range; it must be of type `bool` or either the numerical value of 0 or 1.")
-            else:
-                raise TypeError(f"'find_local_tz' must be of type `bool` or either the numerical value of 0 or 1, but got `{type(find_local_tz).__name__}`.")
-        
+        find_local_tz_flag = self._resolve_find_local_tz(find_local_tz)
+
         # Determine UTC Offset
-        tz = self.get_timezone(find_local_tz, date)
-        self.utc_offset = tz.utcoffset(date).total_seconds() / 3600 # type: ignore
+        tz = self.get_timezone(find_local_tz_flag, date)
+        tz_offset = tz.utcoffset(date)
+        if tz_offset is None:
+            raise ValueError("Could not determine UTC offset for the provided date and timezone.")
+        self.utc_offset = tz_offset.total_seconds() / 3600
         date = date.replace(tzinfo=tz)
 
-        jd = fast_astro.gregorian_to_jd(date, date.utcoffset().total_seconds() / 3600) # type: ignore
-        deltaT = fast_astro.delta_t_approx(date.year, date.month)
-        islamic_dates = te.gregorian_to_hijri(date.year, date.month, date.day)
-        self.observer_dateinfo: DateTimeInfo = DateTimeInfo(
-            date=date,
-            hijri=IslamicDateInfo(*islamic_dates),
-            jd=jd,
-            deltaT=deltaT
-        )
-        test = fast_astro.jd_to_gregorian(jd, self.observer_dateinfo.utc_offset)
+        self.observer_dateinfo = self._build_observer_dateinfo(date)
 
         # Autocalculation for astronomical parameters
         self.auto_calculate = auto_calculate
         if self.auto_calculate:
             self.calculate_astro()
-            self.datetime_modified = False
-            self.prayers_modified = False
+            self._mark_astro_dirty(False)
+            self._mark_prayers_dirty(False)
         else:
-            self.datetime_modified = True
-            self.prayers_modified = True
-        
+            self._mark_astro_dirty(True)
+            self._mark_prayers_dirty(True)
+
         # Prayer setting
         self.set_prayer_method(method, asr_type) # This also calculates the prayer times if `auto_calculate` is True
+
+    @staticmethod
+    def _resolve_find_local_tz(find_local_tz: bool | int | float) -> bool:
+        if isinstance(find_local_tz, bool):
+            return find_local_tz
+
+        if not isinstance(find_local_tz, Number):
+            raise ValueError(
+                "'find_local_tz' must be of type `bool` or either the numerical value of 0 or 1."
+            )
+
+        if find_local_tz not in (0, 1):
+            raise TypeError(
+                f"'find_local_tz' must be of type `bool` or either the numerical value of 0 or 1, "
+                f"but got `{type(find_local_tz).__name__}`."
+            )
+
+        return bool(find_local_tz)
+
+    @staticmethod
+    def _safe_sun_event(observer_dateinfo: DateTimeInfo, observer_info: ObserverInfo, event: str) -> datetime | str:
+        try:
+            return se.find_proper_suntime(observer_dateinfo, observer_info, event)
+        except ArithmeticError:
+            return f"Sun{event} does not exist."
+
+    @staticmethod
+    def _safe_moon_event(observer_dateinfo: DateTimeInfo, observer_info: ObserverInfo, event: str) -> datetime | str:
+        try:
+            return me.find_proper_moontime(observer_dateinfo, observer_info, event)
+        except ArithmeticError:
+            return f"Moon{event} does not exist."
+
+    def _mark_astro_dirty(self, is_dirty: bool) -> None:
+        self.datetime_modified = is_dirty
+
+    def _mark_prayers_dirty(self, is_dirty: bool) -> None:
+        self.prayers_modified = is_dirty
+
+    def _refresh_prayers(self) -> None:
+        if self.auto_calculate:
+            self.calculate_prayer_times()
+        else:
+            self._mark_prayers_dirty(True)
+
+    def _build_observer_dateinfo(self, date: datetime) -> DateTimeInfo:
+        utc_offset = date.utcoffset()
+        if utc_offset is None:
+            raise ValueError("Input datetime must include timezone information.")
+
+        jd = fast_astro.gregorian_to_jd(date, utc_offset.total_seconds() / 3600)
+        delta_t = fast_astro.delta_t_approx(date.year, date.month)
+        islamic_dates = te.gregorian_to_hijri(date.year, date.month, date.day)
+        return DateTimeInfo(
+            date=date,
+            hijri=IslamicDateInfo(*islamic_dates),
+            jd=jd,
+            deltaT=delta_t,
+        )
 
     def get_timezone(self, find_local_tz: bool, date: datetime) -> timezone | tzinfo:
         """ Determine UTC offset in hours based on location if needed.
@@ -173,21 +240,20 @@ class ITLocation:
         """
         # Find UTC Offset According to Lat/Long datetime
         # This is very computationally expensive
-        if find_local_tz: 
+        if find_local_tz:
             tz_name, utc_offset = te.find_utc_offset(self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, date)
             return timezone(offset=timedelta(hours=utc_offset), name=tz_name)
-        elif date.tzinfo == None or date.tzinfo == timezone.utc:
+        if date.tzinfo is None or date.tzinfo == timezone.utc:
             return timezone.utc
-        else:  
-            return date.tzinfo
+        return date.tzinfo
 
     # Used to change observe date & time
-    # By default, updates to datetime.now() if argument is not specified
-    def update_time(self, new_date: datetime = None) -> None: # type: ignore
+    # By default, updates to current datetime in the observer's timezone when no argument is specified.
+    def update_time(self, new_date: Optional[datetime] = None) -> None:
         """
         Updates the observer's time.
 
-        This method updates the observer's time to either `datetime.now()` (if no argument is provided) 
+        This method updates the observer's time to either the current observer-local time (if no argument is provided)
         or to a specified `datetime` object. After updating the time, `update_astro()` must be called 
         to recalculate astronomical parameters.
 
@@ -198,32 +264,23 @@ class ITLocation:
             TypeError: If `new_date` is not a `datetime` object.
         """
 
-        if not isinstance(new_date, datetime):
-            raise TypeError(f"'date_time' must be of type `datetime`, but got `{type(new_date).__name__}`.")
+        if new_date is None:
+            current_tz = self.observer_dateinfo.date.tzinfo or timezone.utc
+            new_date = datetime.now(current_tz)
+        elif not isinstance(new_date, datetime):
+            raise TypeError(f"'new_date' must be of type `datetime`, but got `{type(new_date).__name__}`.")
 
-
-        # If TZ is NOT specified in new datetime, but a TZ *is* specified in old datetime, add the TZ into the new datetime
+        # If TZ is not specified in new datetime, but a TZ is specified in old datetime, preserve the previous TZ.
         if new_date.tzinfo is None and self.observer_dateinfo.date.tzinfo is not None:
-            new_date = datetime.replace(new_date, tzinfo=self.observer_dateinfo.date.tzinfo)
+            new_date = new_date.replace(tzinfo=self.observer_dateinfo.date.tzinfo)
 
-        # Calculate DateInfo params
-        jd = fast_astro.gregorian_to_jd(new_date, new_date.utcoffset().total_seconds() / 3600) # type: ignore
-        deltaT = fast_astro.delta_t_approx(new_date.year, new_date.month)
-        islamic_dates = te.gregorian_to_hijri(new_date.year, new_date.month, new_date.day)
+        self.observer_dateinfo = self._build_observer_dateinfo(new_date)
 
-        self.observer_dateinfo: DateTimeInfo = DateTimeInfo(
-            date=new_date.replace(tzinfo=self.observer_dateinfo.date.tzinfo),
-            hijri=IslamicDateInfo(*islamic_dates),
-            jd=jd,
-            deltaT=deltaT
-        )
-        
-        # Set bools for astro_calculation stuff
-        if not self.auto_calculate:
-            self.datetime_modified = True
-            self.prayers_modified = True
-        else:
+        if self.auto_calculate:
             self.calculate_astro()
+        else:
+            self._mark_astro_dirty(True)
+            self._mark_prayers_dirty(True)
 
     # Calculates the astronomical variables for the moon and sun
     def calculate_astro(self) -> None:
@@ -244,28 +301,16 @@ class ITLocation:
         - `datetime_modified` is set to `False` after execution.
         """
 
-        def safe_sun_time(observer_dateinfo, observer_info, event: str) -> datetime | str:
-            try:
-                return se.find_proper_suntime(observer_dateinfo, observer_info, event)
-            except ArithmeticError:
-                return f"Sun{event} does not exist."
-            
-        def safe_moon_time(observer_dateinfo, observer_info, event: str) -> datetime | str:
-            try:
-                return me.find_proper_moontime(observer_dateinfo, observer_info, event)
-            except ArithmeticError:
-                return f"Moon{event} does not exist."
-
-        ### Sun & Moon Properties Calculations
+        # Sun & Moon properties calculations
         # Get Sun and Moon Objects with their parameters
         self.sun_params: se.Sun = se.sunpos(self.observer_dateinfo, self.observer_info)
         self.moon_params: me.Moon = me.moonpos(self.observer_dateinfo, self.observer_info, self.sun_params.nutation[0], self.sun_params.true_obliquity)
 
         # Important Sun Factors placed SunInfo
         self.sun_info = SunInfo(
-            sunrise=safe_sun_time(self.observer_dateinfo, self.observer_info, 'rise'), # type: ignore
+            sunrise=self._safe_sun_event(self.observer_dateinfo, self.observer_info, "rise"),
             sun_transit=se.find_sun_transit(self.observer_dateinfo, self.observer_info),
-            sunset=safe_sun_time(self.observer_dateinfo, self.observer_info, 'set'), # type: ignore
+            sunset=self._safe_sun_event(self.observer_dateinfo, self.observer_info, "set"),
             apparent_altitude=self.sun_params.true_altitude,
             true_azimuth=self.sun_params.true_azimuth,
             geocentric_distance=self.sun_params.geocentric_distance,
@@ -285,9 +330,9 @@ class ITLocation:
 
         # Important Moon Factors placed into MoonInfo
         self.moon_info = MoonInfo(
-            moonrise=safe_moon_time(self.observer_dateinfo, self.observer_info, 'rise'),
+            moonrise=self._safe_moon_event(self.observer_dateinfo, self.observer_info, "rise"),
             moon_transit=me.find_moon_transit(self.observer_dateinfo, self.observer_info),
-            moonset=safe_moon_time(self.observer_dateinfo, self.observer_info, 'set'),
+            moonset=self._safe_moon_event(self.observer_dateinfo, self.observer_info, "set"),
             illumination=illumination,
             apparent_altitude=self.moon_params.apparent_altitude,
             true_azimuth=self.moon_params.true_azimuth,
@@ -300,7 +345,7 @@ class ITLocation:
         )
 
         # Astronomical parameters have been calculated so the flag is set to False
-        self.datetime_modified = False
+        self._mark_astro_dirty(False)
 
     # Prayer Time Calculations
     def calculate_prayer_times(self) -> None:
@@ -323,12 +368,15 @@ class ITLocation:
         """
         can_calculate = self.auto_calculate or not self.datetime_modified
         if not can_calculate:
-            raise ValueError("Since auto_calculate has been set to false, prayer times cannot be calculated since astronomical parameters have not been calculated. Call 'cFalculate_astro()' first.")
+            raise ValueError(
+                "Since `auto_calculate` is False, prayer times cannot be calculated until astronomical parameters are updated. "
+                "Call `calculate_astro()` first."
+            )
 
         self.times_of_prayer: PrayerTimes = pt.calculate_prayer_times(self.observer_dateinfo, self.observer_info, self.sun_info, self.method)
 
         # Prayers have been calculated so the flag is set to False
-        self.prayers_modified = False
+        self._mark_prayers_dirty(False)
 
     # Set the method of calculating prayer times among the available default options
     # The default option (from creation) is the Jaʿfarī method.
@@ -354,7 +402,8 @@ class ITLocation:
         method_key = method_key.strip().upper()
     
         for method in pt.DEFAULT_PRAYER_METHODS:
-            if method_key in (key.upper() for key in method.keys): # type: ignore
+            method_keys = method.keys or ()
+            if method_key in (key.upper() for key in method_keys):
                 if asr_type not in (0, 1):
                     raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
 
@@ -363,28 +412,34 @@ class ITLocation:
                 else:
                     self.method = replace(method, asr_type=asr_type)
 
-                if not self.prayers_modified:
-                    self.calculate_prayer_times()
+                self._refresh_prayers()
                 
                 return
 
-        valid_options = [method.keys[0] for method in pt.DEFAULT_PRAYER_METHODS] # type: ignore
+        valid_options = [method.keys[0] for method in pt.DEFAULT_PRAYER_METHODS if method.keys]
         raise ValueError(
             f"Invalid prayer method '{method_key}'. Valid options are: {', '.join(valid_options)}")
     
     # Helper function to validate and set angle
-    def __validate_and_set(self, attribute_name: str, value: float | int) -> None:
-        if value is not None:
-            if isinstance(value, (int, float)):  # Check if it's a number
-                if value > 0:
-                    self.method = replace(self.method, **{attribute_name: Angle(value)})
-                else:
-                    ValueError(f"{attribute_name} must be greater than 0. Invalid value: {value}")
-            else:
-                raise ValueError(f"{attribute_name} must be a number. Invalid value: {value}")
+    def __validate_and_set(self, attribute_name: str, value: Optional[float]) -> None:
+        if value is None:
+            return
+
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise ValueError(f"{attribute_name} must be a number. Invalid value: {value}")
+
+        if value <= 0:
+            raise ValueError(f"{attribute_name} must be greater than 0. Invalid value: {value}")
+
+        self.method = replace(self.method, **{attribute_name: Angle(float(value))})
 
     # Alows user to set their own solar hour angles for prayer time calculations.
-    def set_custom_prayer_angles(self, fajr_angle: float = None, maghrib_angle: float = None, isha_angle: float = None) -> None: # type: ignore
+    def set_custom_prayer_angles(
+        self,
+        fajr_angle: Optional[float] = None,
+        maghrib_angle: Optional[float] = None,
+        isha_angle: Optional[float] = None,
+    ) -> None:
         """
         Customizes solar hour angles for prayer time calculations.
 
@@ -412,11 +467,7 @@ class ITLocation:
 
         self.method = replace(self.method, name="Custom")
 
-        # Update prayer times
-        if self.auto_calculate:
-            self.calculate_prayer_times()
-        else:
-            self.prayers_modified = True
+        self._refresh_prayers()
     
     # Separated from angles since it is defined by shadow ratio
     def set_asr_type(self, asr_type: int = 0) -> None:
@@ -447,11 +498,7 @@ class ITLocation:
         # Method is now custom
         self.method = replace(self.method, name="Custom")
 
-        # Update prayer times
-        if self.auto_calculate:
-            self.calculate_prayer_times()
-        else:
-            self.prayers_modified = True
+        self._refresh_prayers()
 
     # Set to either 0 (sunset to sunrise; the majority method) or 1 (sunset to fajr, the 'Jaʿfarī' method)
     def set_midnight_type(self, midnight_type: int = 0) -> None:
@@ -482,11 +529,7 @@ class ITLocation:
         # Method is now custom
         self.method = replace(self.method, name="Custom")
 
-        # Update prayer times
-        if self.auto_calculate:
-            self.calculate_prayer_times()
-        else:
-            self.prayers_modified = True
+        self._refresh_prayers()
         
     def set_extreme_latitude_rule(self, rule: str = 'ANGLEBASED') -> None:
         """
@@ -513,17 +556,14 @@ class ITLocation:
         EXTREME_LATITUDE_RULES: List[str] = ['NONE', 'NEARESTLAT', 'MIDDLENIGHT', 'ONESEVENTH', 'ANGLEBASED']
         
         if not isinstance(rule, str):
-            raise TypeError(f"'rule' must be a string type.")
-        elif rule.upper() not in EXTREME_LATITUDE_RULES:
+            raise TypeError("'rule' must be a string type.")
+        normalized_rule = rule.strip().upper()
+        if normalized_rule not in EXTREME_LATITUDE_RULES:
             raise ValueError(f'The value of {rule} for \'rule\' is not a valid rule. Please select from among the following: {EXTREME_LATITUDE_RULES}')
         
-        self.method = replace(self.method, extreme_lats=rule)
+        self.method = replace(self.method, extreme_lats=normalized_rule)
 
-        # Update prayer times
-        if self.auto_calculate:
-            self.calculate_prayer_times()
-        else:
-            self.prayers_modified = True
+        self._refresh_prayers()
 
     # Return Observer Parameters
     def observer(self) -> ObserverInfo:
@@ -713,19 +753,15 @@ class ITLocation:
             Visibilities: Dataclass containing visibility information.
         """
 
-        if not isinstance(days, int):
-            raise TypeError(f"'days' must be of type `int`, but got `{criterion(days).__name__}`.")
+        if not isinstance(days, int) or isinstance(days, bool):
+            raise TypeError(f"'days' must be of type `int`, but got `{type(days).__name__}`.")
         
         if days < 1:
             raise ValueError(f"'days' must be greater than 0. Invalid value: {days}.")
-        
-        if criterion not in (0, 1):
-            raise ValueError(f"'criterion' must be either 0 or 1. Invalid value: {criterion}.")
-        
-        
-        if not isinstance(criterion, int):
-            raise TypeError(f"'criterion' must be of type `int`, but got `{criterion(criterion).__name__}`.")
-        
+
+        if not isinstance(criterion, int) or isinstance(criterion, bool):
+            raise TypeError(f"'criterion' must be of type `int`, but got `{type(criterion).__name__}`.")
+
         if criterion not in (0, 1):
             raise ValueError(f"'criterion' must be either 0 or 1. Invalid value: {criterion}.")
 

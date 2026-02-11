@@ -697,8 +697,10 @@ def plotting_loop(new_moon_date: datetime, map_params: Tuple, master_path: str =
     
     finally:
         # Clean up
-        try: os.unlink(vis_file)
-        except FileNotFoundError: pass
+        try:
+            os.unlink(vis_file)
+        except FileNotFoundError:
+            pass
         print_ts(f"Time taken: {(time() - t1):.2f}s")
         gc.collect()
         print_ts(f"RSS after clean-up: {psutil.Process(os.getpid()).memory_info().rss // (1024*1024)} MB")
@@ -739,8 +741,10 @@ def main(date: datetime = datetime.now(), master_path: str = "maps/", total_mont
 
 if __name__ == "__main__":
     import multiprocessing as mp
-    try: mp.set_start_method("spawn")
-    except RuntimeError: pass
+    try:
+        mp.set_start_method("spawn")
+    except RuntimeError:
+        pass
 
     parser = argparse.ArgumentParser(description="Generate new-moon visibility map")
     parser.add_argument("--date",           type=str,   default=None, help="ISO datetime for month/year (e.g. 2025-01-01T00:00:00)")

@@ -19,7 +19,7 @@ References:
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
-from islamic_times.it_dataclasses import *
+from islamic_times.it_dataclasses import Angle, DateTimeInfo, Distance, DistanceUnits, ObserverInfo, RightAscension
 from datetime import datetime, timedelta
 from dataclasses import dataclass, replace
 from typing import List, Tuple
@@ -610,7 +610,7 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 	if rise_or_set not in ['rise', 'set', 'moonrise', 'moonset']:
 		raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
 	
-	if rise_or_set in ["set", "sunset"]:
+	if rise_or_set in ["set", "moonset"]:
 		event = 's'
 	else:
 		event = 'r'
@@ -624,12 +624,21 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 		true_obliquity = list(sun_nutation[-3:])
 
 	try:
-		moontime: datetime = fast_astro.find_proper_moontime(observer_date.jd, observer_date.deltaT, 
-										observer.latitude.decimal, observer.longitude.decimal, 
-										observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
-										observer_date.utc_offset, delPsi, true_obliquity, event)
-	except:
-		raise ArithmeticError("Moon event does not exist for the given location at the given date & time.")
+		moontime: datetime = fast_astro.find_proper_moontime(
+			observer_date.jd,
+			observer_date.deltaT,
+			observer.latitude.decimal,
+			observer.longitude.decimal,
+			observer.elevation.in_unit(DistanceUnits.METRE),
+			observer.temperature,
+			observer.pressure,
+			observer_date.utc_offset,
+			delPsi,
+			true_obliquity,
+			event,
+		)
+	except Exception as exc:
+		raise ArithmeticError("Moon event does not exist for the given location at the given date & time.") from exc
 	
 	return moontime.replace(tzinfo=observer_date.date.tzinfo)
 

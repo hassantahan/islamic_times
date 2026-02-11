@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, replace
 from islamic_times import time_equations as te
 from islamic_times import calculation_equations as ce
-from islamic_times.it_dataclasses import *
+from islamic_times.it_dataclasses import Angle, DateTimeInfo, Distance, DistanceUnits, ObserverInfo, RightAscension
 from warnings import warn
 
 __OBLIQUITY_TERMS = [
@@ -460,11 +460,18 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
         event = 'r'
 
     try:
-        suntime: datetime = fast_astro.find_proper_suntime(observer_date.jd, 
-                                       observer.latitude.decimal, observer.longitude.decimal, 
-                                       observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
-                                       observer_date.utc_offset, angle.decimal, event)
-    except:
-        raise ArithmeticError("Sun event does not exist for the given location at the given date & time.")
+        suntime: datetime = fast_astro.find_proper_suntime(
+            observer_date.jd,
+            observer.latitude.decimal,
+            observer.longitude.decimal,
+            observer.elevation.in_unit(DistanceUnits.METRE),
+            observer.temperature,
+            observer.pressure,
+            observer_date.utc_offset,
+            angle.decimal,
+            event,
+        )
+    except Exception as exc:
+        raise ArithmeticError("Sun event does not exist for the given location at the given date & time.") from exc
     
     return suntime.replace(tzinfo=observer_date.date.tzinfo)

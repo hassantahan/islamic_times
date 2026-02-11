@@ -18,9 +18,10 @@ adjustments for extreme latitudes.
 """
 
 import warnings
+import math
 from typing import List
 import islamic_times.astro_core as fast_astro
-from islamic_times.it_dataclasses import *
+from islamic_times.it_dataclasses import Angle, DateTimeInfo, ObserverInfo, Prayer, PrayerMethod, PrayerTimes, SunInfo
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from datetime import datetime, timedelta
@@ -226,8 +227,8 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
                 out[IDX_SUNRISE + 2] = replace(out[IDX_SUNRISE + 2], time=asr_time(out[IDX_SUNRISE + 1].time, Angle(lat_sign*abs(polar_lat_ex)), sun_dec, method.asr_type)) # type: ignore[arg-type]
             
             return out
-    except:
-        ...
+    except (TypeError, AttributeError, ArithmeticError, ValueError):
+        pass
 
     # Calculate latitude where minimum night/day length
     H_zero: Angle = Angle(15 / 2 * (24 - 2)) # 2 hour minimum time between sunset and sunrise.
@@ -437,13 +438,13 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     if method.maghrib_angle.decimal > 0:
         try:
             maghrib_dt = safe_sun_time(observer_date, observer, 'set', method.maghrib_angle)
-        except:
+        except (ArithmeticError, TypeError, ValueError):
             maghrib_dt = math.inf
     else:
         # Otherwise Maghrib is sunset
         try:
             maghrib_dt = sun_info.sunset + timedelta(minutes=1)
-        except:
+        except (TypeError, ValueError):
             maghrib_dt = math.inf
 
     # Calculate ʿishāʾ time
@@ -489,7 +490,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     # Deal with locations at extreme latitudes
     if abs(observer.latitude.decimal) > 46.5: # 90 - obliquity (23.5) - max fajr angle (20)
         if any(p.time == math.inf for p in prayer_list):
-            warnings.warn(f"Extreme latitude warning. Prayer times at this latitude are not well established.")
+            warnings.warn("Extreme latitude warning. Prayer times at this latitude are not well established.")
             prayer_list = extreme_latitudes(observer_date, observer, prayer_list, sun_info.apparent_declination)
 
     return PrayerTimes(
