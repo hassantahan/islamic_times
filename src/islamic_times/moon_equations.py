@@ -412,7 +412,9 @@ def moonpos(observer_date: DateTimeInfo, observer: ObserverInfo, deltaPsi: Angle
 
 	return the_moon
 
-# TODO: Properly get the next phases instead of all the phases after the next new moon ==> Using round (temp fix)
+# Known limitation:
+# this wrapper returns the four phases following the nearest new moon event
+# from the native implementation.
 # Chapter 49
 def next_phases_of_moon_utc(date: datetime) -> Tuple[datetime, datetime, datetime, datetime]:
 	"""
@@ -468,7 +470,7 @@ def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_n
 	"""
 	import islamic_times.astro_core as fast_astro
 
-	# To be later explained
+	# Sentinel values request internal nutation reuse/auto-computation in C.
 	if (sun_nutation == np.inf):
 		delPsi = [-123456.0, -123456.0, -123456.0]
 		true_obliquity = [-123456.0, -123456.0, -123456.0]
@@ -587,7 +589,7 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 
 	return event_dt
 
-# This is necessary because UTC offsets for coords not near UTC, but also not using local TZ.
+# Normalize moonrise/moonset output so it matches the observer-local calendar day.
 def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set', sun_nutation: List[float] = np.inf) -> datetime: # type: ignore
 	"""
 	Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
@@ -615,7 +617,7 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 	else:
 		event = 'r'
 
-	# To be later explained
+	# Sentinel values request internal nutation reuse/auto-computation in C.
 	if (sun_nutation == np.inf):
 		delPsi = [-123456.0, -123456.0, -123456.0]
 		true_obliquity = [-123456.0, -123456.0, -123456.0]
@@ -678,8 +680,38 @@ def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt
 
 	return q_value
 
-# According to Shaukat (yet to find his paper; reference: https://moonsighting.com/faq_ms.html#Criteria)
+# Shaukat criteria mapping adapted from:
+# https://moonsighting.com/faq_ms.html#Criteria
 def calculate_visibility_shaukat(sun_az: Angle, sun_long: Angle, moon_long: Angle, moon_lat: Angle, moon_az: Angle, moon_pi: Angle, moon_illumin: float):
+	"""Compute crescent-visibility q-value using a Shaukat-style criterion.
+
+	Parameters
+	----------
+	sun_az : Angle
+		Sun azimuth.
+	sun_long : Angle
+		Sun ecliptic longitude.
+	moon_long : Angle
+		Moon ecliptic longitude.
+	moon_lat : Angle
+		Moon ecliptic latitude.
+	moon_az : Angle
+		Moon azimuth.
+	moon_pi : Angle
+		Moon equatorial horizontal parallax.
+	moon_illumin : float
+		Fractional lunar illumination in the range [0, 1].
+
+	Returns
+	-------
+	float
+		Dimensionless visibility score. Larger values indicate better visibility.
+
+	Notes
+	-----
+	This Python helper is deprecated in favor of native visibility routines used
+	by ``ITLocation.visibilities()``.
+	"""
 	warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.islamic_times.ITLocation.visibilities()" instead.', DeprecationWarning)
 
 	semi_diameter: float = 0.27245 * (moon_pi.decimal * 60)

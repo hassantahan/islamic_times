@@ -1,9 +1,10 @@
 #include "c_datetime.h"
 
-// Cumulative days up to the first day of each month (0-indexed)
+// Cumulative days up to the first day of each month (0-indexed, non-leap year).
 static const int month_days[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
 static const int days_per_month[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
+/* Fractional UTC day represented by the datetime fields. */
 double fraction_of_day_datetime(datetime date) {
     return (((double)date.hour / 24.0) +
             ((double)date.minute / 1440.0) +
@@ -11,10 +12,15 @@ double fraction_of_day_datetime(datetime date) {
             ((double)date.microsecond / 86400000000.0));
 }
 
+/* Gregorian leap-year rule. */
 int is_leap_year(int year) {
     return (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
 }
 
+/* Day-of-year in [1, 366], or -1 for obviously invalid month/day inputs.
+ * This helper performs coarse validation only (it does not reject month/day
+ * combinations like April 31).
+ */
 int day_of_year(int year, int month, int day) {
     if (month < 1 || month > 12 || day < 1 || day > 31) return -1;
     int doy = month_days[month - 1] + day;
@@ -22,10 +28,12 @@ int day_of_year(int year, int month, int day) {
     return doy;
 }
 
+/* Month length for Gregorian calendar. */
 int days_in_month(int year, int month) {
     return (month == 2 && is_leap_year(year)) ? 29 : days_per_month[month - 1];
 }
 
+/* Carry/borrow normalize datetime fields into canonical ranges. */
 void normalize_datetime(datetime *dt) {
     // Normalize microseconds to seconds
     dt->second += dt->microsecond / 1000000;
@@ -79,13 +87,14 @@ void normalize_datetime(datetime *dt) {
     }
 }
 
+/* Add a fractional number of days and return the normalized result. */
 datetime add_days(datetime dt, double days_to_add) {
     int whole_days = (int)days_to_add;
     double fractional_day = days_to_add - (double)whole_days;
 
     dt.day += whole_days;
 
-    // Convert fractional day to h:m:s:us
+    // Convert fractional day to h:m:s:us and let normalization handle overflow/underflow.
     double total_hours = fractional_day * 24.0;
     int whole_hours = (int)floor(total_hours);
     
@@ -107,6 +116,7 @@ datetime add_days(datetime dt, double days_to_add) {
     return dt;
 }
 
+/* Extract a Python datetime object into the native datetime struct. */
 void fill_in_datetime_values(datetime* date, PyObject* input_datetime) {
     int year        = PyDateTime_GET_YEAR(input_datetime);
     int month       = PyDateTime_GET_MONTH(input_datetime);
@@ -125,6 +135,7 @@ void fill_in_datetime_values(datetime* date, PyObject* input_datetime) {
     date->microsecond = microsecond;
 }
 
+/* Build a Python datetime object from native datetime fields. */
 PyObject* datetime_to_pydatetime(datetime dt) {
     ENSURE_PYDATETIME()
     // Build the Python datetime object from the struct fields
@@ -145,10 +156,12 @@ PyObject* datetime_to_pydatetime(datetime dt) {
 }
 
 /*
-    1 --> A later than B
-   -1 --> B later than A
-    0 --> A and B are the exact same
-*/
+ * Compare two datetimes.
+ * Returns:
+ *   1  if *a is later than *b
+ *  -1  if *a is earlier than *b
+ *   0  if equal
+ */
 int compare_datetime(const datetime* a, const datetime* b) {
     if (a->year != b->year) return (a->year < b->year) ? -1 : 1;
     if (a->month != b->month) return (a->month < b->month) ? -1 : 1;

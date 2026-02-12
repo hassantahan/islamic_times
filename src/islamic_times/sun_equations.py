@@ -1,17 +1,17 @@
-'''
-Module for Solar astronomical calculations.
+"""
+Solar ephemeris and event-time calculations.
 
-This module provides functions to:
-  - Calculate the Suns's position (declination, right ascension, altitude, azimuth, etc.).
-  - Calculate the Sun's nutation.
-  - Calculate the obliquity of the ecliptic.
-  - Calculate the equation of time offset.
+This module provides low-level solar calculations used by the higher-level prayer
+and calendar APIs, including:
 
-This module should not be used directly unless the user is familiar with the underlying calculations.
+- solar position and topocentric coordinates,
+- solar nutation and obliquity terms,
+- equation-of-time offsets,
+- transit and rise/set event-time solvers.
 
-References:
-  - Jean Meeus, *Astronomical Algorithms*, 2nd Edition, Willmann-Bell, Inc., 1998.
-'''
+Most heavy numerical work is delegated to the native C extension. Prefer using
+the higher-level public APIs unless direct control is required.
+"""
 
 import math
 import numpy as np
@@ -170,9 +170,7 @@ __SUN_NUTATION_COEFFICIENTS = [
 
 @dataclass(frozen=True, slots=True)
 class Sun:
-    '''
-    A class to compute the position of the Sky in the sky based on given astronomical parameters.
-    '''
+    """Container for solar ephemeris values for one observer and instant."""
 
     # Orbital elements
     mean_longitude: Angle
@@ -214,15 +212,23 @@ class Sun:
 
 # Chapter 22
 def oblique_eq(jde: float) -> Angle:
-    '''
-    Calculate the obliquity of the ecliptic for a given Julian Ephemeris Day. See Chapter 22 of *Astronomical Algorthims* for more information.
+    """Compute mean ecliptic obliquity for a Julian Ephemeris Day.
 
-    Parameters:
-        jde (float): The Julian Ephemeris Day.
+    Parameters
+    ----------
+    jde : float
+        Julian Ephemeris Day.
 
-    Returns:
-        Angle: The obliquity of the ecliptic.
-    '''
+    Returns
+    -------
+    Angle
+        Mean obliquity in degrees.
+
+    Notes
+    -----
+    This Python implementation is deprecated in favor of the native C
+    implementation exposed via ``islamic_times.astro_core``.
+    """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_sun()" or "islamic_times.sun_equations.sunpos()" instead.', DeprecationWarning)
 
     u = ((jde - te.J2000) / te.JULIAN_CENTURY) / 100
@@ -236,15 +242,23 @@ def oblique_eq(jde: float) -> Angle:
 
 # Chapter 22
 def sun_nutation(jde: float) -> Tuple[Angle, Angle]:
-    '''
-    Calculate the sun's nutation for a given Julian Ephemeris Day. See Chapter 22 of *Astronomical Algorthims* for more information.
+    """Compute solar nutation in longitude and obliquity for a JDE value.
 
-    Parameters:
-        jde (float): The Julian Ephemeris Day.
+    Parameters
+    ----------
+    jde : float
+        Julian Ephemeris Day.
 
-    Returns:
-        tuple (Tuple[Angle, Angle]): The nutation in longitude and obliquity.
-    '''
+    Returns
+    -------
+    tuple[Angle, Angle]
+        Nutation in longitude and nutation in obliquity, both in degrees.
+
+    Notes
+    -----
+    This Python implementation is deprecated in favor of the native C
+    implementation exposed via ``islamic_times.astro_core``.
+    """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_sun()" or "islamic_times.sun_equations.sunpos()" instead.', DeprecationWarning)
 
     # Precompute time variables
@@ -277,37 +291,50 @@ def sun_nutation(jde: float) -> Tuple[Angle, Angle]:
 
 # Chapter 25
 def sunpos(observer_date: DateTimeInfo, observer: ObserverInfo) -> Sun:
-    '''
-    Calculate the various solar positional parameters for a given Julian Ephemeris Day, ΔT, and observer coordinates. See Chapter 25 of the *Astronomical Algorthims* for more information.
+    """Compute the solar ephemeris for one observer instant.
 
-    Parameters:
-        observer_date (DateTimeInfo): The date and time of the observer.
-        observer (ObserverInfo): The observer's coordinates and elevation.
+    Parameters
+    ----------
+    observer_date : DateTimeInfo
+        Observer date/time metadata, including JD/JDE and Delta T.
+    observer : ObserverInfo
+        Observer latitude, longitude, elevation, and weather context.
 
-    Returns:
-        Sun (obj): A `Sun` object that contains various attributes that describe its position and parameters. 
+    Returns
+    -------
+    Sun
+        Solar position container with orbital, equatorial, topocentric, and
+        horizontal fields.
 
-    Notes: 
-    - The temperature and pressure are used for atmospheric refraction calculations. Currently, this feature is disabled.
-    '''
+    Notes
+    -----
+    The implementation delegates to the native extension
+    ``islamic_times.astro_core.compute_sun``.
+    """
     import islamic_times.astro_core as fast_astro
     the_sun: Sun = fast_astro.compute_sun(observer_date.jde, observer_date.deltaT, observer.latitude.decimal, observer.longitude.decimal, observer.elevation.value, observer.temperature, observer.pressure)
 
     return the_sun
 
 def equation_of_time(deltaPsi: float, L0: float, epsilon: float, alpha: float) -> float:
-    '''
-    Calculate the equation of time offset for a given certain solar parameters. See Chapter 28 of *Astronomical Algorthims* for more information.
+    """Compute equation-of-time offset from solar terms.
 
-    Parameters:
-        deltaPsi (float): The sun's nutation in longitude.
-        L0 (float): The sun's mean longitude.
-        epsilon (float): The obliquity of the ecliptic.
-        alpha (float): The sun's right ascension.
+    Parameters
+    ----------
+    deltaPsi : float
+        Nutation in longitude, in degrees.
+    L0 : float
+        Mean solar longitude, in degrees.
+    epsilon : float
+        True obliquity, in degrees.
+    alpha : float
+        Apparent solar right ascension, in degrees.
 
-    Returns:
-        float: The equation of time offset in minutes.
-    '''
+    Returns
+    -------
+    float
+        Equation-of-time offset in minutes.
+    """
 
     # Only adjust alpha when it appears to have wrapped
     if L0 > 300 and alpha < 50:
@@ -320,15 +347,19 @@ def equation_of_time(deltaPsi: float, L0: float, epsilon: float, alpha: float) -
     return E
 
 def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> datetime:
-    """
-    Calculate the transit of the sun (specifically culmination) for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
+    """Compute the Sun's meridian transit (culmination) time.
 
-    Parameters:
-        observer_date (DateTimeInfo): The date and time of the observer.
-        observer (ObserverInfo): The observer's coordinates and elevation.
+    Parameters
+    ----------
+    observer_date : DateTimeInfo
+        Observer date/time metadata.
+    observer : ObserverInfo
+        Observer location and environment values.
 
-    Returns:
-        datetime: The time of moonset.
+    Returns
+    -------
+    datetime
+        Local datetime of solar transit on the reference civil date.
     """
     import islamic_times.astro_core as fast_astro
     sun_transit_dt: datetime = fast_astro.find_sun_transit(observer_date.jd, observer_date.deltaT, 
@@ -339,21 +370,35 @@ def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> dat
     return sun_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
 
 def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime | float:
-    """
-    Calculate either the sunrise or the sunset time for a given date and observer coordinates.
-    This function computes only the requested event (sunrise or sunset) without calculating both.
-    
-    Parameters:
-        observer_date (DateTimeInfo): The date and time of the observer.
-        observer (ObserverInfo): The observer's coordinates and elevation.
-        rise_or_set (str): 'rise' or 'sunrise' to calculate sunrise; 'set' or 'sunset' to calculate sunset.
-        angle (Angle): The standard altitude of the sun (default is 5/6°).
-        
-    Returns:
-        datetime: The computed time of the requested event (sunrise or sunset).
-        
-    Raises:
-        ValueError: If the value of rise_or_set is not recognized.
+    """Compute either sunrise or sunset for a reference date.
+
+    Parameters
+    ----------
+    observer_date : DateTimeInfo
+        Observer date/time metadata.
+    observer : ObserverInfo
+        Observer location and environment values.
+    rise_or_set : str
+        Event selector: ``"rise"``/``"sunrise"`` or ``"set"``/``"sunset"``.
+    angle : Angle, default Angle(5 / 6)
+        Target altitude magnitude in degrees (typically 0.8333 degrees for the
+        visible horizon event).
+
+    Returns
+    -------
+    datetime | float
+        Event datetime if found; ``math.inf`` when the requested event does not
+        occur at the location/date.
+
+    Raises
+    ------
+    ValueError
+        If ``rise_or_set`` is not one of the supported values.
+
+    Notes
+    -----
+    This pure-Python routine is retained for compatibility and is deprecated in
+    favor of native extension solvers.
     """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.find_proper_suntime()" or "islamic_times.sun_equations.find_proper_suntime()" instead.', DeprecationWarning)
 
@@ -433,21 +478,30 @@ def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_
     return event_dt
 
 def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime:
-    """
-    Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
+    """Return the local sunrise/sunset aligned to the reference civil day.
 
-    Parameters:
-        observer_date (DateTimeInfo): The date and time of the observer.
-        observer (ObserverInfo): The observer's coordinates and elevation.
-        rise_or_set (str): Find either the setting or rising option.
-        angle (Angle): Find the time when the sun reaches the given angle above or below the observer's horizon (controlled by `rise_or_set`). Default is 50 arcminutes (0.8333°) for visible sunset/sunrise.
+    Parameters
+    ----------
+    observer_date : DateTimeInfo
+        Observer date/time metadata.
+    observer : ObserverInfo
+        Observer location and environment values.
+    rise_or_set : str
+        Event selector: ``"rise"``/``"sunrise"`` or ``"set"``/``"sunset"``.
+    angle : Angle, default Angle(5 / 6)
+        Target altitude magnitude in degrees.
 
-    Returns:
-        datetime: The date and time of the sun event. If the sun event is not found (does not set or rise), returns `math.inf`.
+    Returns
+    -------
+    datetime
+        Local datetime of the requested solar event.
 
-    Raises:
-        ValueError: If `rise_or_set` is not set correctly to either 'rise' or 'set'.
-        ArithmeticError: If the sun event does not exist for the given location at the given date & time.
+    Raises
+    ------
+    ValueError
+        If ``rise_or_set`` is not recognized.
+    ArithmeticError
+        If the event does not exist for the given location/date.
     """
     import islamic_times.astro_core as fast_astro
 

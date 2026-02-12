@@ -6,7 +6,9 @@
    ================================ */
 
 /* ================================
-   GMST Calculation
+   GMST calculation
+   Input: Julian Day (UT-based)
+   Output: GMST angle in degrees [0, 360)
    ================================ */
 
 double greenwich_mean_sidereal_time(double julian_day){
@@ -21,7 +23,7 @@ double greenwich_mean_sidereal_time(double julian_day){
     return normalize_angle(theta_zero);
 }
 
-/* Python wrapper */
+/* Python wrapper: greenwich_mean_sidereal_time(jd) -> float */
 PyObject* py_greenwich_mean_sidereal_time(PyObject *self, PyObject *args) {
     double jd;
     if (!PyArg_ParseTuple(args, "d", &jd)) return NULL;
@@ -30,7 +32,8 @@ PyObject* py_greenwich_mean_sidereal_time(PyObject *self, PyObject *args) {
 }
 
 /* ================================
-   Gregorian 2 JD Calculation
+   Gregorian -> Julian Day
+   UTC offset is provided in hours.
    ================================ */
 
 double gregorian_to_jd(datetime date, double utc_offset) {
@@ -52,7 +55,7 @@ double gregorian_to_jd(datetime date, double utc_offset) {
     return jd;
 }
 
-/* Python wrapper */
+/* Python wrapper: gregorian_to_jd(datetime, utc_offset) -> float */
 PyObject* py_gregorian_to_jd(PyObject *self, PyObject *args) {
     ENSURE_PYDATETIME()
     PyObject *input_datetime;
@@ -73,7 +76,8 @@ PyObject* py_gregorian_to_jd(PyObject *self, PyObject *args) {
 
 
 /* ================================
-   JD 2 Gregorian Calculation
+   Julian Day -> Gregorian datetime
+   Returns status code: 0 success, 1 invalid input.
    ================================ */
 
 int jd_to_gregorian(double jd, double utc_offset, datetime* date) {
@@ -131,7 +135,7 @@ int jd_to_gregorian(double jd, double utc_offset, datetime* date) {
     }
 }
 
-/* Python wrapper */
+/* Python wrapper: jd_to_gregorian(jd, utc_offset) -> datetime */
 PyObject* py_jd_to_gregorian(PyObject *self, PyObject *args) {
     ENSURE_PYDATETIME()
     double jd;
@@ -151,7 +155,7 @@ PyObject* py_jd_to_gregorian(PyObject *self, PyObject *args) {
 }
 
 /* ================================
-   Functions for geting the fraction of day as float 
+   Fraction-of-day helpers
    ================================ */
 
 double fraction_of_day_jd(double jd, double utc_offset) {
@@ -159,7 +163,9 @@ double fraction_of_day_jd(double jd, double utc_offset) {
 }
 
 /* ================================
-   DeltaT approximator; from: https://eclipse.gsfc.nasa.gov/LEcat5/deltatpoly.html
+   Delta-T approximation (seconds)
+   Source polynomial sets:
+   https://eclipse.gsfc.nasa.gov/LEcat5/deltatpoly.html
    ================================ */
 
 double delta_t_approx(int year, int month) {
@@ -233,7 +239,7 @@ double delta_t_approx(int year, int month) {
     return dt;
 }
 
-/* Python wrapper */
+/* Python wrapper: delta_t_approx(year, month) -> float */
 PyObject* py_delta_t_approx(PyObject *self, PyObject *args) {
     int year, month; 
 

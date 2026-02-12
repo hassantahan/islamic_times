@@ -1,20 +1,10 @@
-"""
-Module for calculating Islamic prayer times.
+"""Prayer-time calculation algorithms and extreme-latitude adjustments.
 
-This module provides functions to compute Islamic prayer times based on various methodologies.
-It accounts for differences in ʿAṣr calculations, Islamic midnight determination, and prayer 
-adjustments for extreme latitudes.
-
-### Features:
-- Computes **all major prayer times**: Fajr, Sunrise, Solar Noon (Ẓuhr), ʿAṣr, Sunset, Maghrib, ʿIshāʾ, and Midnight.
-- Supports different **Asr calculation methods** (standard & Hanafi).
-- Handles **Makkah-based** Isha timing in Ramadan.
-- Computes **Islamic midnight** based on the next day's Fajr or Solar Midnight.
-- Accounts for **extreme latitude conditions** (work in progress).
-
-### References:
-- Jean Meeus, *Astronomical Algorithms*, 2nd Edition, Willmann-Bell, Inc., 1998.
-- [PrayTimes.org - Prayer Times Calculation Methods](https://praytimes.org/docs/calculation)
+This module computes the canonical prayer-time set used by :class:`ITLocation`:
+Fajr, Sunrise, Ẓuhr, ʿAṣr, Sunset, Maghrib, ʿIshāʾ, and Islamic midnight.
+It includes method profiles from PrayTimes, handling for Makkah-specific ʿIshāʾ
+rules, and fallback strategies for high-latitude locations where standard
+sun-angle events may be unavailable.
 """
 
 import warnings
@@ -27,8 +17,8 @@ from islamic_times import time_equations as te
 from datetime import datetime, timedelta
 from dataclasses import replace
 
-##### Prayer Methods #####
-# Source: https://praytimes.org/docs/calculation
+# Prayer method profiles based on:
+# https://praytimes.org/docs/calculation
 DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
     PrayerMethod(
         name="Muslim World League (MWL)",
@@ -65,28 +55,56 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
         fajr_angle=Angle(16), isha_angle=Angle(14), maghrib_angle=Angle(4), midnight_type=1
     )
 ]
-"""
-Reference: https://praytimes.org/docs/calculation
-"""
-
 def safe_sun_time(observer_date: DateTimeInfo, observer: ObserverInfo, event: str, angle: Angle) -> datetime:
+    """Return a solar event datetime or re-raise an astronomical failure.
+
+    Parameters
+    ----------
+    observer_date : DateTimeInfo
+        Date and time context for the observer.
+    observer : ObserverInfo
+        Observer geodetic and atmospheric configuration.
+    event : str
+        Solar event selector accepted by ``sun_equations.find_proper_suntime``.
+    angle : Angle
+        Solar altitude angle used for event solving.
+
+    Returns
+    -------
+    datetime
+        The resolved event time in observer-local timezone.
+
+    Raises
+    ------
+    ArithmeticError
+        Raised when the requested event does not exist for the given geometry.
+    """
     try:
         return se.find_proper_suntime(observer_date, observer, event, angle)
     except ArithmeticError:
         raise ArithmeticError
     
-# Used to calculate islamic midnight
+# Used by midnight calculations to sample the next/previous day.
 def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angle: Angle = Angle(5 / 6), rise_or_set = 'rise', num_days: int = 1) -> datetime:
-    """
-    Calculates the "rise" time of the sun at a given angle the day after the observer date. This is used to determine Islamic midnight, either from sunset to Fajr, or sunset to sunrise.
+    """Resolve a sun event for a date offset relative to ``observer_date``.
 
-    Parameters:
-    	observer_date (DateTimeInfo): Date information of the observer.
-    	observer (ObserverInfo): Position information of the observer.
-    	angle (Angle): Fajr angle.
+    Parameters
+    ----------
+    observer_date : DateTimeInfo
+        Date/time state for the current observer context.
+    observer : ObserverInfo
+        Observer geodetic and atmospheric configuration.
+    angle : Angle, default=Angle(5 / 6)
+        Target solar altitude angle.
+    rise_or_set : str, default='rise'
+        Event kind forwarded to ``safe_sun_time``.
+    num_days : int, default=1
+        Day offset from ``observer_date.date``. Negative values are supported.
 
-    Returns:
-    	datetime: The calculated fajr time for the next day in local time.
+    Returns
+    -------
+    datetime
+        Event datetime in observer-local timezone.
     """
     new_date: datetime = observer_date.date + timedelta(days=num_days) 
     tomorrow_date: DateTimeInfo = replace(observer_date, 
@@ -98,32 +116,32 @@ def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angl
     return tomorrow_standard_time
 
 # ʿAṣr time
-# Type 0: Most schools
+# Type 0: majority schools
 # Type 1: Ḥanafī definition
 def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 0) -> datetime:
-    """
-    Computes the ʿaṣr prayer time based on the observer's shadow ratio.
+    """Compute ʿAṣr time from solar-noon geometry and shadow-ratio rule.
 
-    The ʿaṣr prayer time is determined based on the length of an object's shadow 
-    relative to its height. Two methodologies exist:
-    - Standard Method (`t=1`): Shadow is equal to the object's height + 
-    the height of it's shadow at noon.
-    - Ḥanafī Method (`t=2`): Shadow is **twice** the object's height + 
-    the height of it's shadow at noon.
+    Parameters
+    ----------
+    noon : datetime
+        Local solar-noon datetime.
+    lat : Angle
+        Observer latitude.
+    dec : Angle
+        Apparent solar declination.
+    ts : int, default=0
+        ʿAṣr method selector: ``0`` for standard (shadow factor 1),
+        ``1`` for Ḥanafī (shadow factor 2).
 
-    Parameters:
-        noon (datetime): Time of ẓuhr/solar noon/sun transit/sun culmination.
-        lat (Angle): Observer's latitude.
-        dec (Angle): Sun's declination.
-        ts (int, optional): ʿaṣr calculation method:
-            - 0 (Standard) → Shadow ratio of 1:1.
-            - 1 (Ḥanafī) → Shadow ratio of 2:1.  
-    
-    Returns:
-        float/math.inf: Number of hours after solar noon when ʿaṣr occurs, or ʿaṣr cannot be calculated due to extreme solar geometry.
+    Returns
+    -------
+    datetime
+        Computed ʿAṣr datetime.
 
-    Notes:
-        - If the sun never reaches the required shadow ratio, the function returns `math.inf`.
+    Raises
+    ------
+    ArithmeticError
+        Raised if the required shadow condition is not reachable.
     """
     # Convert shadow factor from 0/1 to 1/2 for actual calculation
     shadow_factor = ts + 1
@@ -150,23 +168,23 @@ def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 0) -> datetime:
     return noon + timedelta(hours=asr_hours)
 
 def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, prayer_list: List[Prayer], sun_dec: Angle) -> List[Prayer]:
-    """
-    Calculates prayer time adjustments for locations at extreme latitudes according to different methods.
+    """Adjust prayer outputs for locations with extreme-latitude constraints.
 
-    Methods include:
-        - None; just accept the facts (None).
-        - Nearest latitude method (NearestLat).
-        - Middle of the night method (MiddleNight).
-        - 1/7th night division method (OneSeventh).
-        - Angle-based approximation (AngleBased).
+    Parameters
+    ----------
+    observer_date : DateTimeInfo
+        Date/time context used for event solving.
+    observer : ObserverInfo
+        Observer geodetic and atmospheric configuration.
+    prayer_list : list[Prayer]
+        Baseline prayer outputs before extreme-latitude corrections.
+    sun_dec : Angle
+        Apparent solar declination for the working date.
 
-    Parameters:
-        observer_date (DateTimeInfo): Date information of the observer.
-    	observer (ObserverInfo): Position information of the observer.
-        prayer_list (List[Prayer]): List of Prayers that need adjustment.
-
-    Returns:
-        List[Prayer]: It returns the same list with the Prayers already adjusted
+    Returns
+    -------
+    list[Prayer]
+        Adjusted prayer sequence preserving original ordering.
     """
 
     if not prayer_list:
@@ -202,7 +220,8 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
     nearest_lat = 90.0 - eps.decimal - lowest_angle - 0.01
     adjusted_obs = replace(observer, latitude=Angle(lat_sign*nearest_lat))
 
-    # If it is only sunrise and sunset that are the issue, no need to fix anything else; personal opinion
+    # If only sunrise/sunset are undefined, repair those first and preserve
+    # already valid non-solar prayers.
     polar_lat_ex = 90.0 - eps.decimal - 0.01
 
     try: 
@@ -264,7 +283,7 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
 
         out[IDX_SUNRISE + 2] = replace(out[IDX_SUNRISE + 2], time=asr_time(out[IDX_SUNRISE + 1].time, Angle(lat_sign*abs(polar_lat)), sun_dec, method.asr_type)) # type: ignore[arg-type]
         
-    # Deal with weird issue where suntimes don't match
+    # Repair day-boundary ordering when polar adjustments invert sunrise/sunset.
     if out[IDX_SUNSET].time < out[IDX_SUNRISE].time: # type: ignore[arg-type]
         if observer_date.date.day == out[IDX_SUNRISE].time.day: # type: ignore[arg-type]
             if abs(observer.latitude.decimal) > abs(polar_lat):
@@ -402,23 +421,28 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
     return [replace(p, time=msg) for p in out]
 
 def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, sun_info: SunInfo, method: PrayerMethod) -> PrayerTimes:
-    """
-    Computes Islamic prayer times for a given date and location.
+    """Compute daily prayer times for a configured observer and method profile.
 
-    This function calculates the standard prayer times based on astronomical data. It accounts for 
-    different methodologies for Fajr, Maghrib, Isha, ʿAṣr, and Islamic midnight.
+    Parameters
+    ----------
+    observer_date : DateTimeInfo
+        Date/time context for astronomical calculations.
+    observer : ObserverInfo
+        Observer geodetic and atmospheric configuration.
+    sun_info : SunInfo
+        Precomputed solar events and coordinates for the working date.
+    method : PrayerMethod
+        Prayer-angle and rule configuration.
 
-    Parameters:
-    	observer_date (DateTimeInfo): The date and time of the observer.
-        observer (ObserverInfo): The observer's coordinates and elevation.
-        sun_info (SunInfo): The sun's position data (sunrise, sunset, solar noon).
-        method (PrayerMethod): The prayer calculation method to use.
+    Returns
+    -------
+    PrayerTimes
+        Structured prayer output dataclass.
 
-    Returns:
-        PrayerTimes: An object containing the calculated prayer times.
-
-    Notes:
-    - If the sun does not satisfy the required angle for a prayer time, the function returns `"Does not exist."`. Later updates will allow for different approaches.
+    Notes
+    -----
+    When a required solar event cannot be solved directly, this function delegates
+    to ``extreme_latitudes`` for fallback behavior.
     """
 
     # Calculate fajr

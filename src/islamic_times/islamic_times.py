@@ -37,32 +37,19 @@ from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 
 class ITLocation:
-    """
-    The `ITLocation` class is the primary way to interact with the `islamic_times` library. 
-    It is designed to contain all the information and methods necessary to determine all Islamic times and astronomical parameters.
+    """Primary public facade for astronomical and prayer-time calculations.
 
-    This class provides methods for computing astronomical parameters and Islamic prayer times 
-    based on various calculation methods. It also supports Hijri date conversion, new moon visibility 
-    calculations, and Qibla direction determination.
+    ``ITLocation`` encapsulates observer configuration (location, environment,
+    method settings, date/time context) and exposes a high-level API for:
 
-    ### Methods:
-    - `update_time(date_time)`: Updates the observer's time.
-    - `calculate_astro()`: Computes astronomical parameters.
-    - `calculate_prayer_times()`: Computes prayer times based on the selected method.
-    - `set_prayer_method(method)`: Sets the prayer time calculation method.
-    - `set_custom_prayer_angles(fajr_angle, maghrib_angle, isha_angle)`: Customizes solar angles for prayer time calculations.
-    - `set_asr_type(asr_type)`: Sets the Asr prayer calculation method.
-    - `set_midnight_type(midnight_type)`: Sets the Islamic midnight calculation method.
-    - `observer()`: Returns observer location parameters.
-    - `dates_times()`: Returns observer's date and time details.
-    - `prayer_times()`: Returns calculated prayer times.
-    - `mecca()`: Returns observer's distance and direction to Mecca.
-    - `sun()`: Returns properties and position of the Sun.
-    - `moon()`: Returns properties and position of the Moon.
-    - `moonphases()`: Returns the nearest moon phases.
+    - sun and moon coordinates/events,
+    - prayer times,
+    - Hijri date conversion context,
+    - Qibla direction and distance,
+    - nearest new-moon visibility outputs.
     """
 
-    # TODO: I might want to add slots to save memory and freeze the class
+    # Potential future optimization: introduce __slots__ after API stability is finalized.
     # __slots__ = ()
 
     def __init__(
@@ -78,33 +65,38 @@ class ITLocation:
         find_local_tz: bool = False,
         auto_calculate: bool = True,
     ) -> None:
-        """
-        `ITLocation` is initialized with the observer's geographical location, date and time, and other parameters. The default location is the Royal Greenwich Observatory.
+        """Initialize observer state and optional eager calculations.
 
-        Parameters:
-            latitude (float, optional): Geographical latitude in decimal degrees (-90 to 90). Defaults to 51.477928°.
-            longitude (float, optional): Geographical longitude in decimal degrees (-180 to 180). Defaults to -0.001545°.
-            elevation (float, optional): Elevation above sea level in meters. Defaults to 76 m.
-            temperature (float, optional): Temperature in degrees Celsius. Defaults to 10°C.
-            pressure (float, optional): Atmospheric pressure in kPa. Defaults to 101.325 kPa.
-            date (datetime, optional): Current date and time. Defaults to `datetime.now(timezone.utc)`.
-            method (str, optional): Prayer calculation method (e.g., 'JAFARI', 'ISNA', etc.). Defaults to 'JAFARI'.
-            asr_type (int, optional): ʿAṣr calculation type (0 for standard, 1 for Ḥanafī). Defaults to 0.
-            find_local_tz (bool, optional): Whether to determine the local time zone automatically. Defaults to False.
-            auto_calculate (bool, optional): Whether to compute astronomical parameters upon initialization. Defaults to True.
+        Parameters
+        ----------
+        latitude : float, default=51.477928
+            Geodetic latitude in decimal degrees in ``[-90, 90]``.
+        longitude : float, default=-0.001545
+            Geodetic longitude in decimal degrees in ``[-180, 180]``.
+        elevation : float, default=76
+            Elevation above mean sea level in meters.
+        temperature : float, default=10
+            Ambient temperature in degrees Celsius.
+        pressure : float, default=101.325
+            Atmospheric pressure in kPa.
+        date : datetime, optional
+            Observer-local datetime. If ``None``, current UTC time is used.
+        method : str, default='JAFARI'
+            Prayer method key (for example ``'JAFARI'``, ``'ISNA'``, ``'MWL'``).
+        asr_type : int, default=0
+            ʿAṣr rule selector (``0`` standard, ``1`` Ḥanafī).
+        find_local_tz : bool | int | float, default=False
+            If truthy (or numeric 1), infer timezone from coordinates and date.
+        auto_calculate : bool, default=True
+            If ``True``, compute astronomy/prayer values during initialization.
 
-        Raises:
-            TypeError: If latitude, longitude, elevation, temperature, or pressure are not floats.
-            ValueError: If latitude or longitude values are out of range.
-            TypeError: If `today` is not a `datetime` object.
-            TypeError/ValueError: If `find_local_tz` is not a boolean or a valid numerical representation.
-            ValueError: If `asr_type` is not 0 or 1.
-            ValueError: If the provided prayer calculation method is invalid.
-            
-        ## Notes:
-        - **DO NOT UNDER ANY CIRCUMSTANCES MANUALLY CHANGE THE `auto_calculate` PARAMETER**
-        - If `auto_calculate` is True, `calculate_astro()` is called to compute astronomical parameters. Otherwise, it must be called manually.
-        - The selected prayer calculation method must be among the supported ones, otherwise, an error is raised.
+        Raises
+        ------
+        TypeError
+            Raised when numeric inputs or ``date`` have invalid types.
+        ValueError
+            Raised for out-of-range latitude/longitude, unsupported method keys,
+            or invalid method selectors.
         """
 
         if date is None:
@@ -168,6 +160,7 @@ class ITLocation:
 
     @staticmethod
     def _resolve_find_local_tz(find_local_tz: bool | int | float) -> bool:
+        """Normalize timezone-resolution flag from bool/0/1 inputs."""
         if isinstance(find_local_tz, bool):
             return find_local_tz
 
@@ -186,6 +179,7 @@ class ITLocation:
 
     @staticmethod
     def _safe_sun_event(observer_dateinfo: DateTimeInfo, observer_info: ObserverInfo, event: str) -> datetime | str:
+        """Return a sun event datetime or a human-readable unavailable marker."""
         try:
             return se.find_proper_suntime(observer_dateinfo, observer_info, event)
         except ArithmeticError:
@@ -193,24 +187,29 @@ class ITLocation:
 
     @staticmethod
     def _safe_moon_event(observer_dateinfo: DateTimeInfo, observer_info: ObserverInfo, event: str) -> datetime | str:
+        """Return a moon event datetime or a human-readable unavailable marker."""
         try:
             return me.find_proper_moontime(observer_dateinfo, observer_info, event)
         except ArithmeticError:
             return f"Moon{event} does not exist."
 
     def _mark_astro_dirty(self, is_dirty: bool) -> None:
+        """Set astronomy cache dirty flag."""
         self.datetime_modified = is_dirty
 
     def _mark_prayers_dirty(self, is_dirty: bool) -> None:
+        """Set prayer-times cache dirty flag."""
         self.prayers_modified = is_dirty
 
     def _refresh_prayers(self) -> None:
+        """Recompute or mark prayer outputs dirty based on auto-calc mode."""
         if self.auto_calculate:
             self.calculate_prayer_times()
         else:
             self._mark_prayers_dirty(True)
 
     def _build_observer_dateinfo(self, date: datetime) -> DateTimeInfo:
+        """Build DateTimeInfo from a timezone-aware datetime."""
         utc_offset = date.utcoffset()
         if utc_offset is None:
             raise ValueError("Input datetime must include timezone information.")
@@ -226,17 +225,19 @@ class ITLocation:
         )
 
     def get_timezone(self, find_local_tz: bool, date: datetime) -> timezone | tzinfo:
-        """ Determine UTC offset in hours based on location if needed.
+        """Resolve timezone from either coordinates or supplied datetime context.
 
-        Parameters:
-            find_local_tz (bool): Controls whether or not to use the timezonefinder library to fine the timezone of the observer.
-            date (datetime): The date and time to be used for the calculation.
+        Parameters
+        ----------
+        find_local_tz : bool
+            If ``True``, infer timezone from observer coordinates and date.
+        date : datetime
+            Datetime used for timezone interpretation.
 
-        Returns:
-            timezone: The timezone object representing the UTC offset.
-
-        ## Notes:  
-        - `find_local_tz` is set to `False` by default because the timezonefinder library is computationally expensive.
+        Returns
+        -------
+        timezone | tzinfo
+            Timezone object used by the instance.
         """
         # Find UTC Offset According to Lat/Long datetime
         # This is very computationally expensive
@@ -250,18 +251,18 @@ class ITLocation:
     # Used to change observe date & time
     # By default, updates to current datetime in the observer's timezone when no argument is specified.
     def update_time(self, new_date: Optional[datetime] = None) -> None:
-        """
-        Updates the observer's time.
+        """Update the observer datetime and mark/recompute dependent state.
 
-        This method updates the observer's time to either the current observer-local time (if no argument is provided)
-        or to a specified `datetime` object. After updating the time, `update_astro()` must be called 
-        to recalculate astronomical parameters.
+        Parameters
+        ----------
+        new_date : datetime, optional
+            Replacement datetime. If omitted, current time in the instance
+            timezone is used.
 
-        Parameters:
-            new_date (datetime, optional): The new observer time. Defaults to the current time.
-
-        Raises:
-            TypeError: If `new_date` is not a `datetime` object.
+        Raises
+        ------
+        TypeError
+            Raised when ``new_date`` is provided with a non-datetime type.
         """
 
         if new_date is None:
@@ -284,21 +285,13 @@ class ITLocation:
 
     # Calculates the astronomical variables for the moon and sun
     def calculate_astro(self) -> None:
-        """
-        Calculates astronomical parameters.
+        """Compute sun/moon astronomy and refresh cached dataclass outputs.
 
-        This method computes the parameters used in astronomical calculations, such as:
-          - Local Julian Date (JD)
-          - Delta T (ΔT = TT - UT)
-          - Sun and Moon positions (including altitude, azimuth, declination, etc.)
-          - Estimated Islamic (Hijri) date
-          - Moon illumination percentage
-
-        The computed values are stored in instance attributes for later use in prayer time calculations.
-
-        ## Notes:
-        - If `auto_calculate` is enabled, this method is called automatically when needed. Otherwise, it must be called manually after changing the observer's time or when initializing the object.
-        - `datetime_modified` is set to `False` after execution.
+        Notes
+        -----
+        This updates internal ``sun_params``/``moon_params`` and public
+        ``sun_info``/``moon_info`` fields. It also clears the astronomy-dirty
+        flag once complete.
         """
 
         # Sun & Moon properties calculations
@@ -349,22 +342,12 @@ class ITLocation:
 
     # Prayer Time Calculations
     def calculate_prayer_times(self) -> None:
-        """
-        Computes prayer times for the observer.
+        """Compute prayer times from current observer, astronomy, and method state.
 
-        This method calculates the times for:
-          - Fajr
-          - Sunrise
-          - Ẓuhr (solar noon)
-          - ʿAṣr
-          - Maghrib
-          - ʿIshāʾ
-          - Islamic Midnight
-
-        Uses the selected calculation method and astronomical parameters.
-
-        Raises:
-            ValueError: If `auto_calculate` is disabled and astronomical parameters have not been computed.
+        Raises
+        ------
+        ValueError
+            Raised when astronomy is stale while ``auto_calculate`` is disabled.
         """
         can_calculate = self.auto_calculate or not self.datetime_modified
         if not can_calculate:
@@ -381,22 +364,19 @@ class ITLocation:
     # Set the method of calculating prayer times among the available default options
     # The default option (from creation) is the Jaʿfarī method.
     def set_prayer_method(self, method_key: str = 'JAFARI', asr_type: int = 0) -> None:
-        """
-        Sets the prayer time calculation method.
+        """Select one of the predefined prayer profiles.
 
-        The available methods follow those documented at:
-        https://praytimes.org/docs/calculation.
+        Parameters
+        ----------
+        method_key : str, default='JAFARI'
+            Method alias defined in ``prayer_times.DEFAULT_PRAYER_METHODS``.
+        asr_type : int, default=0
+            ʿAṣr selector (``0`` standard, ``1`` Ḥanafī).
 
-        Parameters:
-            method_key (str): The name of the prayer calculation method (e.g., 'JAFARI', 'ISNA', etc.). Defaults to 'JAFARI'.
-            asr_type (int): The ʿaṣr calculation type 0 for standard, 1 for Ḥanafī. Default is set to 0.
-
-        Raises:
-            ValueError: If the method is not among the supported options.
-
-        ## Notes:
-        - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
-        - To revert to a default method after using `set_custom_prayer_angles()`, this method must be called again.
+        Raises
+        ------
+        ValueError
+            Raised for unknown method aliases or invalid ``asr_type`` values.
         """
 
         method_key = method_key.strip().upper()
@@ -422,6 +402,7 @@ class ITLocation:
     
     # Helper function to validate and set angle
     def __validate_and_set(self, attribute_name: str, value: Optional[float]) -> None:
+        """Validate an optional angle input and update method configuration."""
         if value is None:
             return
 
@@ -440,24 +421,21 @@ class ITLocation:
         maghrib_angle: Optional[float] = None,
         isha_angle: Optional[float] = None,
     ) -> None:
-        """
-        Customizes solar hour angles for prayer time calculations.
+        """Override default solar angles used by prayer-time computations.
 
-        This allows users to manually set the angles used to calculate Fajr, Maghrib, and Isha prayers.
+        Parameters
+        ----------
+        fajr_angle : float, optional
+            Fajr angle in degrees below the horizon.
+        maghrib_angle : float, optional
+            Maghrib angle in degrees below the horizon.
+        isha_angle : float, optional
+            ʿIshāʾ angle in degrees below the horizon.
 
-        Parameters:
-            fajr_angle (float, optional): Solar hour angle for Fajr.
-            maghrib_angle (float, optional): Solar hour angle for Maghrib.
-            isha_angle (float, optional): Solar hour angle for Isha.
-
-        Raises:
-            ValueError: If any provided angle is not a positive number.
-            TypeError: If any provided angle is not a number.
-
-        ## Notes:
-        - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
-        - `self.method` is set to 'Custom' after calling this method.
-        - Call `set_prayer_method()` to reset to a predefined method.
+        Raises
+        ------
+        ValueError
+            Raised when a provided value is non-numeric or not strictly positive.
         """
 
         # Validate and set each angle
@@ -471,23 +449,17 @@ class ITLocation:
     
     # Separated from angles since it is defined by shadow ratio
     def set_asr_type(self, asr_type: int = 0) -> None:
-        """
-        Sets the calculation method for Asr prayer.
+        """Set the ʿAṣr shadow-ratio rule.
 
-        Options:
-        - `0`: Shadow ratio of 1:1 (majority method).
-        - `1`: Shadow ratio of 2:1 (Hanafi method).
+        Parameters
+        ----------
+        asr_type : int, default=0
+            ``0`` for the majority rule, ``1`` for the Ḥanafī rule.
 
-        Parameters:
-            asr_type (int): The ʿaṣr calculation type. 0 for standard, 1 for Ḥanafī. Default is set to 0.
-
-        Raises:
-            ValueError: If `asr_type` is not 0 or 1.
-
-        ## Notes:
-        - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
-        - `self.method` is set to 'Custom' after calling this method.
-        - Call `set_prayer_method()` to reset to a predefined method.
+        Raises
+        ------
+        ValueError
+            Raised when ``asr_type`` is not ``0`` or ``1``.
         """
 
         if asr_type in (0, 1):
@@ -502,23 +474,18 @@ class ITLocation:
 
     # Set to either 0 (sunset to sunrise; the majority method) or 1 (sunset to fajr, the 'Jaʿfarī' method)
     def set_midnight_type(self, midnight_type: int = 0) -> None:
-        """
-        Sets the calculation method for Islamic midnight.
+        """Set the Islamic-midnight definition.
 
-        ## Options:
-        - `0`: Midpoint between sunset and sunrise (majority method).
-        - `1`: Midpoint between sunset and Fajr (Jaʿfarī method).
+        Parameters
+        ----------
+        midnight_type : int, default=0
+            ``0`` for midpoint between sunset and sunrise, ``1`` for midpoint
+            between sunset and Fajr.
 
-        Parameters:
-            midnight_type (int): The midnight calculation type.
-
-        Raises:
-            ValueError: If `midnight_type` is not 0 or 1.
-
-        ## Notes:
-        - If `auto_calculate` is enabled, prayer times are recalculated automatically. Otherwise, `calculate_prayer_times()` must be called.
-        - `self.method` is set to 'Custom' after calling this method.
-        - Call `set_prayer_method()` to reset to a predefined method.
+        Raises
+        ------
+        ValueError
+            Raised when ``midnight_type`` is not ``0`` or ``1``.
         """
 
         if midnight_type in (0, 1):
@@ -532,26 +499,20 @@ class ITLocation:
         self._refresh_prayers()
         
     def set_extreme_latitude_rule(self, rule: str = 'ANGLEBASED') -> None:
-        """
-        Sets the prayer time adjustment method for locations at extreme latitudes.
+        """Set the fallback strategy for extreme-latitude prayer calculations.
 
-        ## Options:
-        - `ANGLEBASED`: Night split into 1/60 parts with evening prayers occuring at the first α/60 part, and for Fajr, the last α/60. 
-            - α is the respective solar angle.
-        - `ONESEVENTH`: Night split into 1/7 parts, with ʾIshāʾ at the end of the first seventh, and Fajr at the beginning of the last seventh.
-        - `MIDDLENIGHT`: Night split into two halves, with ʾIshāʾ and Fajr being at the middle.
-        - `NEARESTLAT`: Prayer times are calculated by looking at the closest latitude with proper timings. Calculated by 90 - axial tilt - largest prayer angle.
-        - `NONE`: No adjustment.
+        Parameters
+        ----------
+        rule : str, default='ANGLEBASED'
+            One of ``'NONE'``, ``'NEARESTLAT'``, ``'MIDDLENIGHT'``,
+            ``'ONESEVENTH'``, or ``'ANGLEBASED'``.
 
-        Parameters:
-            rule (str): String to select the rule.
-
-        Raises:
-            TypeError: If `rule` is not a string.
-            ValueError: If `rule` is not one of the built-in rules.
-
-        ## Note:
-        - `ANGLEBASED` is the current default.
+        Raises
+        ------
+        TypeError
+            Raised when ``rule`` is not a string.
+        ValueError
+            Raised when ``rule`` is not a supported option.
         """
         EXTREME_LATITUDE_RULES: List[str] = ['NONE', 'NEARESTLAT', 'MIDDLENIGHT', 'ONESEVENTH', 'ANGLEBASED']
         
@@ -567,42 +528,18 @@ class ITLocation:
 
     # Return Observer Parameters
     def observer(self) -> ObserverInfo:
-        """
-        Returns observer's date and time information.
-
-        Returns:
-            ObserverInfo: Information about the observer's location and conditions.
-
-        ## Notes:
-        - The returned object contains:
-            - **latitude** (*Angle*): Latitude of the observer
-            - **longitude** (*Angle*): Longitude of the observer
-            - **elevation** (*Distance*): Elevation of the observer
-            - **temperature** (*float*): Temperature of the observer
-            - **pressure** (*float*): Pressure of the observer
-        """
+        """Return observer location and environmental configuration."""
 
         return self.observer_info
 
     # Return date and time information
     def dates_times(self) -> DateTimeInfo:
-        """
-        Returns observer's date and time information.
+        """Return datetime, Hijri, Julian-day, and delta-T context.
 
-        Returns:
-            DateTimeInfo: Information about the observer's date and time.
-
-        ## Notes:
-        - The returned object contains:
-            - **date** (*datetime*): The observer's date and time
-            - **hijri** (*IslamicDateInfo*): Islamic date information
-                - **hijri_year** (*int*): Hijri year
-                - **hijri_month** (*int*): Hijri month
-                - **hijri_day** (*int*): Hijri day
-                - **hijri_month_name** (*str*): Hijri month name
-                - **hijri_day_name** (*str*): Hijri day name
-            - **jd** (*float*): Julian Date
-            - **deltaT** (*float*): Delta T value
+        Raises
+        ------
+        ValueError
+            Raised when astronomy context is stale and ``auto_calculate`` is off.
         """
 
         can_print = self.auto_calculate or not self.datetime_modified
@@ -614,21 +551,12 @@ class ITLocation:
 
     # Return prayer times
     def prayer_times(self) -> PrayerTimes:
-        """
-        Returns calculated prayer times.
+        """Return cached prayer-time output dataclass.
 
-        Returns:
-            PrayerTimes: Dictionary containing prayer times.
-
-        ## Notes:
-        - The returned object contains:
-            - **fajr** (*datetime*): Fajr prayer time
-            - **sunrise** (*datetime*): Sunrise time
-            - **dhuhr** (*datetime*): Dhuhr prayer time
-            - **asr** (*datetime*): Asr prayer time
-            - **maghrib** (*datetime*): Maghrib prayer time
-            - **isha** (*datetime*): Isha prayer time
-            - **midnight** (*datetime*): Islamic midnight time
+        Raises
+        ------
+        ValueError
+            Raised when prayer results are stale and ``auto_calculate`` is off.
         """
 
         can_print: bool = self.auto_calculate or not self.prayers_modified
@@ -640,18 +568,7 @@ class ITLocation:
     
     # Return Mecca information
     def mecca(self) -> MeccaInfo:
-        """
-        Returns observer's distance and direction to Mecca.
-
-        Returns:
-            MeccaInfo: Information about the distance and direction to Mecca.
-        
-        ## Notes:
-        - The returned object contains:
-            - **distance** (*Distance*): Distance to Mecca
-            - **angle** (*Angle*): Angle to Mecca
-            - **cardinal** (*str*): Cardinal direction to Mecca
-        """
+        """Return distance and bearing from observer to Mecca."""
 
         mecca_distance, mecca_direction = ce.haversine(self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, te.MECCA_LAT, te.MECCA_LONG)
         mecca_direction %= 360
@@ -664,21 +581,12 @@ class ITLocation:
     
     # Return sun properties and position values
     def sun(self) -> SunInfo:
-        """
-        Returns properties and position of the Sun.
+        """Return cached solar event and coordinate summary.
 
-        Returns:
-            SunInfo: Information about the Sun's position and properties.
-
-        ## Notes:
-        - The returned object contains:
-            - **sunrise** (*datetime*): Sunrise time.
-            - **sun_transit** (*datetime*): Solar noon time.
-            - **sunset** (*datetime*): Sunset time.
-            - **apparent_declination** (*Angle*): Sun's declination angle.
-            - **apparent_right_ascension** (*RigthAscension*): Sun's right ascension.
-            - **apparent_altitude** (*Angle*): Sun's altitude angle.
-            - **true_azimuth** (*Angle*): Sun's azimuth angle.
+        Raises
+        ------
+        ValueError
+            Raised when astronomy context is stale and ``auto_calculate`` is off.
         """
 
         can_print = self.auto_calculate or not self.datetime_modified
@@ -690,23 +598,12 @@ class ITLocation:
     
     # Return moon properties and position values
     def moon(self) -> MoonInfo:
-        """
-        Returns properties and position of the Moon.
+        """Return cached lunar event and coordinate summary.
 
-        Returns:
-            MoonInfo: Information about the Moon's position and properties.
-
-        ## Notes:
-        - The returned object contains:
-            - **moonrise** (*datetime*): Moonrise time.
-            - **moon_transit** (*datetime*): Moon transit time.
-            - **moonset** (*datetime*): Moonset time.
-            - **topocentric_declination** (*Angle*): Moon's declination angle.
-            - **topocentric_right_ascension** (*RightAscension*): Moon's right ascension.
-            - **apparent_altitude** (*Angle*): Moon's altitude angle.
-            - **true_azimuth** (*Angle*): Moon's azimuth angle.
-            - **parallax** (*Angle*): Moon's parallax angle.
-            - **illumination** (*float*): Moon's illumination percentage.
+        Raises
+        ------
+        ValueError
+            Raised when astronomy context is stale and ``auto_calculate`` is off.
         """
 
         can_print = self.auto_calculate or not self.datetime_modified
@@ -717,17 +614,7 @@ class ITLocation:
         return self.moon_info
     
     def moonphases(self) -> List[Tuple[str, datetime]]:
-        """
-        Returns the nearest moon phases.
-
-        Returns:
-            List[Tuple[str, datetime]]: List of 2-Tuples for the moonphases.
-
-        ## Notes:
-        - Each 2-Tuple is each made up of:
-            1. `str`: phase name.
-            2. `datetime`: phase date and time.
-        """
+        """Return upcoming lunar phases as ``(name, datetime)`` tuples."""
 
         # Find Next New Moon (and the rest of the phases)
         phases: Tuple[datetime, datetime, datetime, datetime] = me.next_phases_of_moon_utc(self.observer_dateinfo.date)
@@ -737,20 +624,20 @@ class ITLocation:
 
     # Calculate Next New Moon Visibilities
     def visibilities(self, days: int = 3, criterion: int = 1) -> Visibilities:
-        """
-        Returns a `Visibilities` dataclass ojbect describing the visibility of the nearest new moon 
-        for the observer for the given amount of days according to a selected criterion.
+        """Compute new-moon visibility predictions for the configured observer.
 
-        The `criterion` argument specifies which new moon visibility classification method to use:
-        - Criterion 0: Odeh, 2006
-        - Criterion 1: Yallop, 1997; a.k.a. HMNAO TN No. 69
+        Parameters
+        ----------
+        days : int, default=3
+            Number of consecutive days to evaluate from the nearest new moon.
+        criterion : int, default=1
+            Visibility classifier: ``0`` (Odeh) or ``1`` (Yallop/HMNAO TN 69).
 
-        Parameters:
-            days (int, optional): How many days from the new moon to look at visibilities. Defaults to 3 days.
-            criterion (int, optional): Which method to classify visibilities. Either 0 (referring to Odeh, 2006) or 1 (referring to Yallop, 1997). Defaults 1.
-
-        Returns:
-            Visibilities: Dataclass containing visibility information.
+        Returns
+        -------
+        Visibilities
+            Dataclass containing criterion name, event datetimes, q-values,
+            and textual classifications.
         """
 
         if not isinstance(days, int) or isinstance(days, bool):

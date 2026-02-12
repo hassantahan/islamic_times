@@ -389,9 +389,16 @@ static const double A_COEFFS[NUM_A_COEFFS] = {
 };
 
 /* ================================
-   core method: moon nuation
+   Core calculation: lunar nutation
    ================================ */
 
+/*
+ * Compute lunar nutation series terms for one JDE instant.
+ * Input:
+ *   - jde: Julian Ephemeris Day
+ * Output:
+ *   - MoonNutationResult with fundamental arguments and summed terms.
+ */
 MoonNutationResult moon_nutation(double jde) {
     double t = (jde - J2000) / JULIAN_CENTURY;
     double t2 = t * t;
@@ -436,7 +443,7 @@ MoonNutationResult moon_nutation(double jde) {
     }
 
     const size_t n_args = sizeof(MOON_NUTATION_ARGUMENTS_B) / (4 * sizeof(int));
-    for (size_t i = 0; i < n_args / (4 * sizeof(int)); i++) {
+    for (size_t i = 0; i < n_args; i++) {
         int d = MOON_NUTATION_ARGUMENTS_B[i * 4];
         int m = MOON_NUTATION_ARGUMENTS_B[i * 4 + 1];
         int mp = MOON_NUTATION_ARGUMENTS_B[i * 4 + 2];
@@ -475,9 +482,20 @@ MoonNutationResult moon_nutation(double jde) {
 
 
 /* ================================
-   core method: moon result
+   Core calculation: full lunar result
    ================================ */
 
+/*
+ * Populate MoonResult for one observer/time.
+ * Units:
+ *   - jde: Julian Ephemeris Day
+ *   - deltaT: seconds
+ *   - latitude/longitude: degrees
+ *   - elevation: metres
+ *   - temperature: Celsius
+ *   - pressure: kPa
+ *   - deltaPsi/ecliptic: degrees
+ */
 void compute_moon_result(double jde, double deltaT, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure, 
                         double deltaPsi, double ecliptic, 
@@ -543,7 +561,7 @@ void compute_moon_result(double jde, double deltaT, double local_latitude, doubl
     result->apparent_altitude = result->true_altitude + refraction_correction;
 }
 
-/* Python wrapper */
+/* Python wrapper helpers for constructing dataclass-compatible objects. */
 static PyObject* create_angle_obj_moon(double value) {
     PyObject* py_value = PyFloat_FromDouble(value);
     PyObject* angle_obj;
@@ -705,9 +723,13 @@ error:
 
 
 /* ================================
-   Moon Transit/Culmination calculations
+   Moon transit / culmination solver
    ================================ */
 
+/*
+ * Solve moon transit time for the reference civil date.
+ * Returns 0 on success; non-zero values indicate failure.
+ */
 int find_moon_transit(datetime date, double utc_offset, double local_latitude, double local_longitude,
                     double elevation, double temperature, double pressure, 
                     double deltaPsi[3], double true_obliquity[3],
@@ -766,6 +788,9 @@ int find_moon_transit(datetime date, double utc_offset, double local_latitude, d
     return 0;
 }
 
+/* Python wrapper for find_moon_transit.
+ * The deltaT argument is accepted for API compatibility but recomputed natively.
+ */
 PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
     PyObject *deltaPsi_obj, *true_obliquity_obj;
     double jd, unused_deltaT, latitude, longitude, 
@@ -817,9 +842,16 @@ PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
 
 
 /* ================================
-   moonrise and moonset calculations
+   Moonrise and moonset solver
    ================================ */
 
+/*
+ * Solve moonrise/moonset time for a reference civil date.
+ * Return codes:
+ *   0  -> success
+ *  -1  -> event does not occur on this date/location
+ *  -2  -> invalid event type
+ */
 int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure, char event_type,
                         double deltaPsi[3], double true_obliquity[3], 
@@ -900,6 +932,10 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
     return 0;
 }
 
+/*
+ * Find the first moonrise/moonset event that belongs to the reference civil day.
+ * Returns INVALID_DATETIME when no valid event is found.
+ */
 datetime find_proper_moontime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
                                 double temperature, double pressure, char event, double deltaPsi[3], double true_obliquity[3]) {
     // Get gregorian datetime from JD
@@ -944,7 +980,7 @@ datetime find_proper_moontime(double jd, double utc_offset, double latitude, dou
     }
 }
 
-/* Python Wrapper */
+/* Python wrapper for find_proper_moontime. */
 PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
     PyObject *deltaPsi_obj, *true_obliquity_obj;
     double jd, unused_deltaT, latitude, longitude, 
@@ -993,8 +1029,8 @@ PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
 
 
 /* ================================
-    Calculate Next Phases of Moon
-    ================================ */
+   Calculate next moon phases
+   ================================ */
 
 void next_phases_of_moon_utc(datetime date, datetime phases[4]) {
     int day = day_of_year(date.year, date.month, date.day);

@@ -1,6 +1,6 @@
 # Release Checklist
 
-1. Ensure CI is green on `main` (or your release branch) for the target commit.
+1. Ensure CI is green on `master` for the target commit.
 2. Confirm versioning/tag plan (semantic version and release notes).
 3. Verify core install and optional mapping install paths:
    - `pip install islamic_times`

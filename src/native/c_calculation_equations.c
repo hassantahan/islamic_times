@@ -2,14 +2,14 @@
 #include "c_calculation_equations.h"
 
 /* ================================
-   Definitions & Helper Constants
+   Constants
    ================================ */
 
 #define EARTH_FLATTENING_FACTOR 0.003352810665
 
-/*  ================================
-    Proper modding of angles
-    ================================ */
+/* ================================
+   Angle normalization and interpolation
+   ================================ */
 
 double normalize_angle(double angle_deg) {
     double res = fmod(angle_deg, 360.0);
@@ -18,9 +18,7 @@ double normalize_angle(double angle_deg) {
     return res;
 }
 
-/* ================================
-   Properly interpret angles
-   ================================ */
+/* Signed angular delta in (-180, 180]. */
 
 double angle_diff(double ang1_deg, double ang2_deg) {
     double diff = normalize_angle(ang2_deg - ang1_deg);
@@ -30,6 +28,7 @@ double angle_diff(double ang1_deg, double ang2_deg) {
     return diff;
 }
 
+/* Interpolate using three angular samples while handling wrap-around. */
 double angle_interpolation(double n, double ang1_deg, double ang2_deg, double ang3_deg) {
     double a = angle_diff(ang1_deg, ang2_deg);
     double b = angle_diff(ang2_deg, ang3_deg);
@@ -43,8 +42,8 @@ double angle_interpolation(double n, double ang1_deg, double ang2_deg, double an
 
 
 /* ================================
-    Calculation of Geocentric Equitorial Coordinates 
-    from Ecliptic Coordinates
+   Ecliptic -> geocentric equatorial conversion
+   Note: function name keeps legacy "equitorial" spelling for compatibility.
    ================================ */
 
 void compute_equitorial_coordinates(double apparent_longitude_deg, double true_obliquity_deg, double true_latitude_deg, double* ra_deg, double* dec_deg) {
@@ -63,13 +62,13 @@ void compute_equitorial_coordinates(double apparent_longitude_deg, double true_o
     *dec_deg = DEGREES(dec_rad);
 }
 
-/*  ================================
-    correct_ra_dec 
-    (turn ra/dec into topocentric counterparts)
-    ================================ */
+/* ================================
+   Apparent geocentric -> topocentric correction
+   ================================ */
 
 void correct_ra_dec(double* ra_deg, double* dec_deg, double lha_deg, double parallax_deg, double lat_deg, double elev_km, double dist_km) {
-    // Correct a celestial body's Right Ascension and Declination for apparent position. See Chapter 40 of *Astronomical Algorthims* for more information.
+    // Correct right ascension/declination for topocentric apparent position.
+    // See Chapter 40 of *Astronomical Algorithms*.
     double a = dist_km;
     double b = a * (1 - EARTH_FLATTENING_FACTOR);
 
@@ -94,9 +93,9 @@ void correct_ra_dec(double* ra_deg, double* dec_deg, double lha_deg, double para
     *dec_deg = DEGREES(atan2(numerator_dec, denominator));
 }
 
-/*  ================================
-    GHA and LHA computation
-    ================================ */
+/* ================================
+   Sidereal and hour-angle helpers
+   ================================ */
 
 void compute_gha_lha(double true_obliquity_deg, double nut_lon_deg, double gmst_deg, double observer_longitude_deg, double ra_deg,
     double* gst_deg, double* gha_deg, double* lha_deg) {
@@ -108,8 +107,7 @@ void compute_gha_lha(double true_obliquity_deg, double nut_lon_deg, double gmst_
 }
 
 /* ================================
-    Calculation of Horizontal Coordinates
-    from Geocentric Equatorial Coordinates
+   Equatorial -> horizontal conversion
    ================================ */
 
 void compute_horizontal_coordinates(double ra_deg, double dec_deg, double lha_deg, double lat_deg, double* az_deg, double* alt_deg) {
@@ -137,14 +135,14 @@ void geocentric_horizontal_coordinates(double lat_deg, double body_dec_deg, doub
     double tan_phi = pow(1 - EARTH_FLATTENING_FACTOR, 2) * tan(lat_rad);
     double geo_lat_rad = atan2(tan_phi, 1);
 
-    // Geocentric Altitude
+    // Geocentric altitude.
     double body_geo_alt_rad = asin(sin(geo_lat_rad) * sin(body_dec_rad) + 
                                    cos(geo_lat_rad) * cos(body_dec_rad) * cos(body_lha_rad));
     
     *body_geo_alt_deg = DEGREES(body_geo_alt_rad);
 
-    // Geocentric Azimuth
-    double cos_az = (sin(body_dec_rad) - sin(body_geo_alt_rad) * sin(geo_lat_rad)) / \
+    // Geocentric azimuth.
+    double cos_az = (sin(body_dec_rad) - sin(body_geo_alt_rad) * sin(geo_lat_rad)) /
                     (cos(body_geo_alt_rad) * cos(geo_lat_rad));
 
     double sin_az = (-cos(body_dec_rad) * sin(body_lha_rad)) / (cos(body_geo_alt_rad));

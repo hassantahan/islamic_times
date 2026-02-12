@@ -8,6 +8,7 @@
 #define OBLIQUITY_TERMS_SIZE 10
 #define SUN_NUTATION_COEFFICIENTS_LOOP 63
 #define SUN_NUTATION_ARGUMENTS_LOOP 5
+/* Keep loop constants aligned with the tabulated term dimensions above. */
 
 
 /* ================================
@@ -161,9 +162,17 @@ static const double OBLIQUITY_TERMS[] = {
 
 
 /* ================================
-   Core Calculation: sun_nutation
+   Core calculation: solar nutation
    ================================ */
 
+/*
+ * Compute nutation in longitude and obliquity for a JDE instant.
+ * Inputs:
+ *   - jde: Julian Ephemeris Day
+ * Outputs (degrees via out-pointers):
+ *   - deltaPsi
+ *   - deltaEpsilon
+ */
 void sun_nutation(double jde, double* deltaPsi, double* deltaEpsilon) {
     double t = (jde - J2000) / JULIAN_CENTURY;
     double t2 = t * t;
@@ -185,7 +194,7 @@ void sun_nutation(double jde, double* deltaPsi, double* deltaEpsilon) {
     double dp = 0.0;
     double de = 0.0;
 
-    for (int i = 0; i < SUN_NUTATION_COEFFICIENTS_LOOP; ++i) {  // Replace 63 with the actual count of terms
+    for (int i = 0; i < SUN_NUTATION_COEFFICIENTS_LOOP; ++i) {
         double arg = 0.0;
         for (int j = 0; j < SUN_NUTATION_ARGUMENTS_LOOP; ++j) {
             int local_arg = SUN_NUTATION_ARGUMENTS[i * 5 + j];
@@ -204,11 +213,15 @@ void sun_nutation(double jde, double* deltaPsi, double* deltaEpsilon) {
 
 
 /* ================================
-   Core Calculation: oblique_eq
+   Core calculation: mean obliquity
    ================================ */
 
+/*
+ * Compute mean obliquity of the ecliptic in degrees.
+ * Input t is Julian millennia from J2000.
+ */
 double oblique_eq(double t) {
-    // Calculate the obliquity of the ecliptic for a given Julian Ephemeris Day. See Chapter 22 of *Astronomical Algorthims* for more information.
+    // See Jean Meeus, Astronomical Algorithms, Chapter 22.
     double u = t / 10.0;
     double eps = 23.0 + 26.0 / 60.0 + (21.448 / 3600.0);
 
@@ -224,9 +237,19 @@ double oblique_eq(double t) {
 
 
 /* ================================
-   Core Calculation: compute_sun_result
+   Core calculation: full solar result
    ================================ */
 
+/*
+ * Populate the SunResult struct for one observer/time.
+ * Units:
+ *   - jde: Julian Ephemeris Day
+ *   - deltaT: seconds
+ *   - latitude/longitude: degrees
+ *   - elevation: metres
+ *   - temperature: Celsius
+ *   - pressure: kPa
+ */
 void compute_sun_result(double jde, double deltaT, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure,
                         SunResult* result) {
@@ -291,13 +314,13 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     result->apparent_longitude = app_long;
     
 
-    // True Equitorial Coordinates
+    // True equatorial coordinates
     double ra, dec;
     compute_equitorial_coordinates(app_long, result->true_obliquity, 0, &ra, &dec);
     result->true_right_ascension = ra;
     result->true_declination = dec;
     
-    // Apparent Equitorial Coordinates
+    // Apparent equatorial coordinates
     double epsilon_corr = result->true_obliquity + 0.00256 * cos(omega_rad); // obliquity correction
     double app_ra, app_dec;
     compute_equitorial_coordinates(app_long, epsilon_corr, 0, &app_ra, &app_dec);
@@ -342,7 +365,7 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
 }
 
 
-/* Python wrapper*/
+/* Python wrapper helpers for constructing dataclass-compatible objects. */
 static PyObject* create_angle_obj(double value) {
     PyObject* py_value = PyFloat_FromDouble(value);
     PyObject* angle_obj;
@@ -480,9 +503,13 @@ error:
 
 
 /* ================================
-   Sun Transit/Culmination calculations
+   Sun transit / culmination solver
    ================================ */
 
+/*
+ * Solve transit time for the reference civil date.
+ * Returns 0 on success; non-zero values indicate failure.
+ */
 int find_sun_transit(datetime date, double utc_offset, double local_latitude, double local_longitude,
                     double elevation, double temperature, double pressure, datetime* sun_event) {
 
@@ -532,7 +559,10 @@ int find_sun_transit(datetime date, double utc_offset, double local_latitude, do
     return 0;
 }
 
-/* Python wrapper */
+/* Python wrapper for find_sun_transit.
+ * The deltaT argument from Python is accepted for API compatibility but
+ * recomputed internally per-day inside native logic.
+ */
 PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
     double jd, unused_deltaT, latitude, longitude, elevation, temperature, pressure, utc_offset;
     if (!PyArg_ParseTuple(args, "dddddddd", &jd, &unused_deltaT, &latitude, &longitude, &elevation, &temperature, &pressure, &utc_offset))
@@ -553,9 +583,16 @@ PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
 
 
 /* ================================
-   Sunrise and Sunset calculations
+   Sunrise and sunset solver
    ================================ */
 
+/*
+ * Solve sunrise/sunset time for a reference civil date.
+ * Return codes:
+ *   0  -> success
+ *  -1  -> event does not occur on this date/location
+ *  -2  -> invalid event type
+ */
 int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure, char event_type, double angle_deg, datetime* sun_event) {
     
@@ -627,6 +664,10 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
     return 0;
 }
 
+/*
+ * Find the first sunrise/sunset event that belongs to the reference civil day.
+ * Returns INVALID_DATETIME when no valid event is found.
+ */
 datetime find_proper_suntime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
     double temperature, double pressure, double angle_deg, char event) {
     // Get gregorian datetime from JD
@@ -673,7 +714,7 @@ datetime find_proper_suntime(double jd, double utc_offset, double latitude, doub
     }
 }
 
-/* Python Wrapper */
+/* Python wrapper for find_proper_suntime. */
 PyObject* py_find_proper_suntime(PyObject* self, PyObject* args) {
     double jd, latitude, longitude, elevation, temperature, pressure, utc_offset, angle_deg;
     int event_code;
@@ -689,7 +730,9 @@ PyObject* py_find_proper_suntime(PyObject* self, PyObject* args) {
         find_proper_suntime(jd, utc_offset, latitude, longitude, elevation, temperature, pressure, angle_deg, event));
 }
 
-/* Special sunset function for visibilities */
+/* Specialized rise/set solver used by visibility calculations.
+ * Also returns per-day deltaPsi and obliquity values.
+ */
 
 int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_latitude, double local_longitude,
     double elevation, double temperature, double pressure, char event_type, double angle_deg, 
@@ -765,6 +808,10 @@ int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_
     return 0;
 }
 
+/*
+ * Companion helper for visibility workflows that also exposes nutation terms.
+ * Returns INVALID_DATETIME when no valid event is found.
+ */
 datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double latitude, double longitude, double elevation, 
     double temperature, double pressure, double angle_deg, char event, double* deltaPsi, double* true_obliquity) {
     // Get gregorian datetime from JD

@@ -38,14 +38,18 @@ typedef struct {
     double apparent_altitude;
 } SunResult;
 
+/* Populate solar state for a given JDE and observer configuration. */
 void compute_sun_result(double jde, double deltaT, double local_latitude, double local_longitude,
     double elevation, double temperature, double pressure,
     SunResult* result);
+/* Solve local sunrise/sunset for JD reference day and target altitude. */
 datetime find_proper_suntime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
         double temperature, double pressure, double angle_deg, char event);
+/* Variant that reuses/returns nutation arrays for performance. */
 datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double latitude, double longitude, double elevation, 
         double temperature, double pressure, double angle_deg, char event, double* deltaPsi, double* true_obliquity);
 
+/* Python wrappers exposed by astro_core. */
 PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs);
 PyObject* py_find_sun_transit(PyObject* self, PyObject* args);
 PyObject* py_find_proper_suntime(PyObject* self, PyObject* args);

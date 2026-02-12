@@ -15,11 +15,13 @@
 ## Docstrings (Required)
 - Required for all public classes, methods, and functions.
 - Required for non-trivial internal helpers.
-- Include:
-  - Purpose
-  - Parameter meaning and units where relevant
-  - Return value meaning and units where relevant
-  - Exceptions raised for invalid input
+- Use NumPy-style sections for new/updated Python docstrings.
+- Include, as applicable:
+  - Short purpose statement
+  - `Parameters` with units/semantics
+  - `Returns` with value meaning and units
+  - `Raises` for invalid input paths
+  - `Notes` for numerical assumptions or algorithm limits
 
 ## Comments (Required When Logic Is Non-Obvious)
 - Add comments for algorithmic intent, domain assumptions, and edge-case handling.
@@ -41,6 +43,7 @@
 - When changing C calculations, update related comments and assumptions in code.
 - Keep header/source contracts (`src/native/include/` and `src/native/`) in sync.
 - Prefer deterministic behavior and explicit boundary checks.
+- For externally consumed native functions/wrappers, add concise contract comments in headers and wrappers (inputs, units, return/failure behavior).
 
 ## Domain and Terminology Consistency
 - Preserve established Islamic astronomy/prayer terminology used by the project.

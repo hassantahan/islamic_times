@@ -52,13 +52,17 @@ typedef struct {
 } MoonResult;
 
 
+/* Compute fundamental arguments and periodic nutation terms for the Moon. */
 MoonNutationResult moon_nutation(double jde);
+/* Populate lunar state for a given JDE and observer configuration. */
 void compute_moon_result(double jde, double deltaT, double local_latitude, double local_longitude,
     double elevation, double temperature, double pressure, 
     double deltaPsi, double ecliptic, 
     MoonResult* result);
+/* Solve local moonrise/moonset for JD reference day and event selector. */
 datetime find_proper_moontime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
-		double temperature, double pressure, char event, double deltaPsi[3], double true_obliquity[3]);
+			double temperature, double pressure, char event, double deltaPsi[3], double true_obliquity[3]);
+/* Return next New/First/Full/Last quarter phases in UTC. */
 void next_phases_of_moon_utc(datetime date, datetime phases[4]);
 
 /* Python wrappers */

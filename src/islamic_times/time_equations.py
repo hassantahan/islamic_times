@@ -1,19 +1,14 @@
 """
-Module for astronomical time equations and calendar conversions.
+Astronomical time equations and calendar conversion helpers.
 
-This module includes functions to:
-  - Convert Gregorian dates to Julian Day and vice versa.
-  - Compute the fraction of the day that has passed.
-  - Convert Gregorian dates to Hijri (Islamic) dates.
-  - Retrieve Islamic month and day names.
-  - Approximate ΔT for a given year and month.
-  - Convert solar time (in decimal hours) to standard (local) datetime.
-  - Compute the midpoint between two times.
-  - Determine the local timezone offset using geographic coordinates.
-  
-References:
-  - Jean Meeus, *Astronomical Algorithms*, 2nd Edition, Willmann-Bell, Inc., 1998.
-  - Standard astronomical formulas for time conversion.
+This module provides shared temporal primitives used by the solar/lunar
+calculation layers, including:
+
+- Gregorian <-> Julian Day conversion,
+- Hijri civil-date conversion helpers,
+- Delta T approximations,
+- timezone offset lookup from coordinates,
+- utility helpers for midpoint and offset formatting.
 """
 
 import math
@@ -62,27 +57,35 @@ ISLAMIC_DAYS = {
     }
 
 def fraction_of_day(date: datetime) -> float:
-    '''Calculate the fraction of the day that has passed.
+    """Return elapsed fraction of the civil day for a datetime.
 
-    Parameters:
-        date (datetime): The date and time.
+    Parameters
+    ----------
+    date : datetime
+        Datetime whose elapsed day fraction is required.
 
-    Returns:
-        float: The fraction of the day that has passed.
-    '''
+    Returns
+    -------
+    float
+        Fraction in the range [0, 1).
+    """
     return (date - datetime.combine(date.date(), time(0, tzinfo=date.tzinfo))).total_seconds() / (3600 * 24)
 
 # Taken from pg. 88 of AA 
 # (DOES NOT TAKE JDE)
 def greenwich_mean_sidereal_time(julian_day: float) -> Angle:
-    '''Compute the Greenwich Mean Sidereal Time (GMST) in degrees for a given Julian Day.
+    """Compute Greenwich Mean Sidereal Time (GMST) for a Julian Day.
 
-    Parameters:
-        julian_day (float): The Julian Day.
-    
-    Returns:
-        float: The Greenwich Mean Sidereal Time in degrees.
-    '''
+    Parameters
+    ----------
+    julian_day : float
+        Julian Day.
+
+    Returns
+    -------
+    Angle
+        GMST angle normalized to [0, 360) degrees.
+    """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension as "islamic_times.astro_core.greenwich_mean_sidereal_time()".', DeprecationWarning)
 
     t = (julian_day - J2000) / JULIAN_CENTURY
@@ -96,15 +99,20 @@ def greenwich_mean_sidereal_time(julian_day: float) -> Angle:
 
 # Look to Jean Meeus' "Astronomical Algorithms"
 def gregorian_to_jd(date: datetime, zone: float = 0) -> float:
-    '''Convert a Gregorian date to a Julian Day.
+    """Convert a Gregorian datetime to Julian Day.
 
-    Parameters:
-        date (datetime): The Gregorian date and time.
-        zone (float): The timezone offset in hours.
-    
-    Returns:
-        float: The Julian Day.
-    '''
+    Parameters
+    ----------
+    date : datetime
+        Gregorian datetime.
+    zone : float, default 0
+        Timezone offset in hours applied as ``jd - zone / 24``.
+
+    Returns
+    -------
+    float
+        Julian Day value.
+    """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension as "islamic_times.astro_core.gregorian_to_jd()".', DeprecationWarning)
 
     y = date.year
@@ -123,15 +131,20 @@ def gregorian_to_jd(date: datetime, zone: float = 0) -> float:
 
 # Look to Jean Meeus' "Astronomical Algorithms" pg. 
 def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
-    '''Convert a Julian Day to a Gregorian datetime.
+    """Convert Julian Day to Gregorian datetime.
 
-    Parameters:
-        jd (float): The Julian Day.
-        adjust_for_tz_diff (float): The adjustment for the timezone difference in hours.
-    
-    Returns:
-        datetime: The Gregorian datetime.
-    '''
+    Parameters
+    ----------
+    jd : float
+        Julian Day.
+    adjust_for_tz_diff : float, default 0
+        Hour offset adjustment applied before conversion.
+
+    Returns
+    -------
+    datetime
+        Gregorian datetime. Returns ``datetime.min`` when ``jd == -1``.
+    """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension as "islamic_times.astro_core.jd_to_gregorian()".', DeprecationWarning)
 
     if jd == -1:
@@ -171,20 +184,28 @@ def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
 
     return datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(microsec))
 
-# Look to Jean Meeus' "Astronomical Algorithms"
-# TODO: In the Islamic calendar, new days start after sunset not at midnight, so maybe a fix for this?
+# Look to Jean Meeus' "Astronomical Algorithms".
+# Limitation: this civil-date conversion assumes midnight day boundaries.
+# Religious sunset-based day boundaries are handled at higher application layers.
 def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tuple[int, int, int]:
-    '''Convert a Gregorian date to a Hijri (Islamic) date.
+    """Convert Gregorian civil date to Hijri civil date tuple.
 
-    Parameters:
-        year (int): The Gregorian year.
-        month (int): The Gregorian month.
-        day (float): The Gregorian day.
-        zone (int): The timezone offset in hours.
+    Parameters
+    ----------
+    year : int
+        Gregorian year.
+    month : int
+        Gregorian month.
+    day : float
+        Gregorian day value.
+    zone : int, default 0
+        Retained for compatibility. Currently unused.
 
-    Returns:
-        list (List[int]): The Hijri (Islamic) year, month, and day.
-    '''
+    Returns
+    -------
+    tuple[int, int, int]
+        Hijri year, month, and day.
+    """
     x = year
     m = month
 
@@ -259,45 +280,57 @@ def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tupl
     return (i_year, i_month, i_day)
 
 def get_islamic_month(month: int) -> str:
-    '''Retrieve the Islamic month name for a given month number.
+    """Return Islamic month name for month number.
 
-    Parameters:
-        month (int): The Islamic month number (1-12).
+    Parameters
+    ----------
+    month : int
+        Islamic month number in the range 1-12.
 
-    Returns:
-        str: The Islamic month name.
-    '''
+    Returns
+    -------
+    str
+        Month name, or ``"Invalid month number"`` for invalid input.
+    """
 
     return ISLAMIC_MONTHS.get(month, "Invalid month number")
 
 def get_islamic_day(day: str) -> str:
-    '''Retrieve the Islamic day name for a given day number.
+    """Return Arabic Islamic weekday name for an English weekday key.
 
-    Parameters:
-        day (str): The day of the week.
+    Parameters
+    ----------
+    day : str
+        English weekday name (for example, ``"Friday"``).
 
-    Returns:
-        str: The Islamic day name.
-    '''
+    Returns
+    -------
+    str
+        Islamic weekday name, or ``"Invalid day"`` for invalid input.
+    """
 
     return ISLAMIC_DAYS.get(day, "Invalid day")
 
 # Based off of https://eclipse.gsfc.nasa.gov/LEcat5/deltatpoly.html
 def delta_t_approx(year: int, month: int) -> float:
-    '''Approximate the value of ΔT (Delta T) in seconds for a given year and month.
+    """Approximate Delta T (TT - UT) in seconds.
 
-    ΔT is the difference between Terrestrial Time and Universal Time (TT-UT).
+    Parameters
+    ----------
+    year : int
+        Gregorian year.
+    month : int
+        Gregorian month.
 
-    Parameters:
-        year (int): The year.
-        month (int): The month.
-    
-    Returns:
-        float: The approximate value of ΔT in seconds.
-    
-    References:
-        - https://eclipse.gsfc.nasa.gov/LEcat5/deltatpoly.html
-    '''
+    Returns
+    -------
+    float
+        Approximate Delta T in seconds.
+
+    References
+    ----------
+    https://eclipse.gsfc.nasa.gov/LEcat5/deltatpoly.html
+    """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension as "islamic_times.astro_core.delta_t_approx()".', DeprecationWarning)
     
     y = year + (month - 0.5) / 12
@@ -350,18 +383,28 @@ def delta_t_approx(year: int, month: int) -> float:
 # The most computationally expensive function
 # Finds the UTC offset given a date and coordinates
 def find_utc_offset(lat: float, long: float, day: datetime) -> Tuple[str, float]:
-    '''Determine the local timezone and its UTC offset in hours for a given geographic location and date. Uses the timezonefinder library.
+    """Determine timezone name and UTC offset for a coordinate/date.
 
-    This is a computationally expensive function and should be used sparingly.
+    Parameters
+    ----------
+    lat : float
+        Latitude in decimal degrees.
+    long : float
+        Longitude in decimal degrees.
+    day : datetime
+        Date used for offset resolution (DST-aware).
 
-    Parameters:
-        lat (float): The latitude in decimal degrees.
-        long (float): The longitude in decimal degrees.
-        day (datetime): The date for which the UTC offset is to be determined
+    Returns
+    -------
+    tuple[str, float]
+        IANA timezone name and UTC offset in decimal hours.
 
-    Returns:
-        tuple (Tuple[str, float]): The timezone name and the UTC offset
-    '''
+    Notes
+    -----
+    This function is practically expensive because it performs polygon-based
+    timezone lookup plus timezone-localization work. Call it sparingly and cache
+    results when many calculations reuse the same location/date.
+    """
     # Create a TimezoneFinder object
     tf = TimezoneFinder()
 
@@ -382,19 +425,27 @@ def find_utc_offset(lat: float, long: float, day: datetime) -> Tuple[str, float]
 
 # Finds the middle time between two datetimes. Used to find islamic midnight (usually either between sunset & sunrise, or sunrise & fajr).
 def time_midpoint(datetime1: datetime, datetime2: datetime) -> datetime:
-    '''Compute the midpoint between two datetimes.
+    """Compute midpoint datetime between two datetime values.
 
-    Parameters:
-        datetime1 (datetime): The first datetime.
-        datetime2 (datetime): The second datetime.
+    Parameters
+    ----------
+    datetime1 : datetime
+        First datetime.
+    datetime2 : datetime
+        Second datetime.
 
-    Returns:
-        datetime: The midpoint datetime
+    Returns
+    -------
+    datetime
+        Midpoint between the two inputs.
 
-    Raises:
-        TypeError: If inputs are not `datetime`; relevant if a sun event (e.g. sunset) does not exist.
-        ValueError: If one of the `datetime` inputs does not exist, usually a prayer time.
-    '''
+    Raises
+    ------
+    TypeError
+        If either input is not a ``datetime`` instance.
+    ValueError
+        If either value represents a missing event sentinel.
+    """
     if type(datetime1) is not datetime or type(datetime2) is not datetime:
         raise TypeError
     
@@ -410,15 +461,19 @@ def time_midpoint(datetime1: datetime, datetime2: datetime) -> datetime:
     return midpoint
 
 # Simple way to make the offset look nice
-def format_utc_offset(utc_offset) -> str:
-    '''String formatting for UTC Offsets.
+def format_utc_offset(utc_offset: float) -> str:
+    """Format UTC offset hours as ``UTC+HH:MM``.
 
-    Parameters:
-        utc_offset (float): The UTC offset in hours.
+    Parameters
+    ----------
+    utc_offset : float
+        UTC offset in decimal hours.
 
-    Returns:
-        str: The formatted UTC offset string.
-    '''
+    Returns
+    -------
+    str
+        Formatted offset string.
+    """
     hours = int(utc_offset)
     minutes = int((utc_offset - hours) * 60)
 

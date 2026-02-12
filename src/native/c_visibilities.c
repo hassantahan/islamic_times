@@ -7,7 +7,7 @@
 
 #define MAX_VISIBILITY_DAYS 366
 
-/* Different Visibility Criteria */
+/* Shared visibility-score kernels used by Odeh/Yallop classification paths. */
 
 double yallop_odeh(double sun_az, double sun_alt, double moon_az, double moon_alt, double moon_pi, int criterion) {
     double daz_deg = fabs(sun_az - moon_az);
@@ -25,6 +25,7 @@ double yallop_odeh(double sun_az, double sun_alt, double moon_az, double moon_al
     return arcv_deg - (-0.1018 * pow(w_prime, 3) + 0.7319 * pow(w_prime, 2) - 6.3226 * w_prime + 7.1651);
 }
 
+/* Placeholder for a future native Shaukat implementation. */
 double shaukat() {
     return 0.0;
 }
@@ -69,10 +70,10 @@ const char* classify_visibility(double q, int criterion) {
 }
 
 /* ================================
-    Calculate New Moon Crescent 
-    Visibilities According to Different
-    Criteria 
-    ================================ */
+   Crescent visibility solver
+   Computes q-values and classes for
+   consecutive days after new moon.
+   ================================ */
 
 void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, double lon, double elev, double temp, double press,
     VisibilityResult* results, int days, int criterion) {
@@ -80,26 +81,26 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         return;
     }
 
-    // Get the JD and ΔT for the new moon
+    // Convert new-moon reference to local-day context used by event solvers.
     new_moon_dt = add_days(new_moon_dt, utc_offset / 24.0);
     double jd_new_moon = gregorian_to_jd(new_moon_dt, utc_offset);
     
-    // Find the local moonset on that day
+    // Solve moonset on day 0 to determine whether the first day is valid.
     double temp1[3] = {CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME}; 
     double temp2[3] = {CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME}; 
     datetime nm_moonset = find_proper_moontime(jd_new_moon, utc_offset, lat, lon, elev, temp, press, 's', temp1, temp2);
     
-    // Check if moonset is valid
+    // Handle day-0 invalid cases before entering the main loop.
     int start = 0; // To skip the first day if invalid
     if (compare_datetime(&nm_moonset, &INVALID_DATETIME) == 0) {
-        // Moonset doesn't exist, for extreme latitudes
+        // Day-0 moonset unavailable (common at high latitudes).
         results[0].q_value = -995.0;
         results[0].classification = classify_visibility(results[0].q_value, criterion);
         results[0].best_dt = new_moon_dt;
         start++; // Skip day 0
     }
     else if (compare_datetime(&new_moon_dt, &nm_moonset) == 1) {
-        // Moon is not visibile before the new moon
+        // Moonset occurred before conjunction; mark as not visible.
         results[0].q_value = -999.0;
         results[0].classification = classify_visibility(results[0].q_value, criterion);
         results[0].best_dt = nm_moonset;
@@ -107,12 +108,12 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
     }
 
     for (int i = start; i < days; i++) {
-        // Set the day parameters
+        // Per-day temporal context.
         double test_jd_new_moon = jd_new_moon + i;
         datetime test_ymd_new_moon = add_days(new_moon_dt, i);
         double test_deltaT_new_moon = delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month);
 
-        // Sunset and Moonset calculations
+        // Sunset and moonset calculations, reusing nutation buffers.
         double deltaPsi[3]; double true_obliquity[3]; // To store the nutations and avoid unnecessary computations
         datetime test_nm_sunset = find_proper_suntime_w_nutation(test_jd_new_moon, utc_offset, lat, lon, elev, temp, press, 
             STANDARD_SET_AND_RISE, 's', deltaPsi, true_obliquity);
@@ -124,7 +125,7 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
             test_nm_moonset = find_proper_moontime(test_jd_new_moon, utc_offset, lat, lon, elev, temp, press, 's', deltaPsi, true_obliquity);
         }
 
-        // For extreme latitudes where the moonset or sunset don't exist
+        // Explicit flags for high-latitude no-event scenarios.
         if (fabs(lat) > 62) {
             if (compare_datetime(&test_nm_sunset, &INVALID_DATETIME) == 0 && 
                 compare_datetime(&test_nm_moonset, &INVALID_DATETIME) == 0) {
@@ -148,7 +149,7 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
             }
         }
         
-        // If moonset is before sunset, continue
+        // If moonset precedes sunset, crescent cannot be observed that evening.
         if (compare_datetime(&test_nm_sunset, &test_nm_moonset) == 1) {
             results[i].q_value = -998.0;
             results[i].best_dt = test_nm_moonset;
@@ -156,14 +157,14 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
             continue;
         }
 
-        // Find the best time which is four ninths the moonset-sunset lag after sunset 
+        // Best-time heuristic: 4/9 of lag interval after sunset.
         double test_nm_sunset_jd = gregorian_to_jd(test_nm_sunset, utc_offset);
         double test_nm_moonset_jd = gregorian_to_jd(test_nm_moonset, utc_offset);
 
         double lag_days = fabs(test_nm_sunset_jd - test_nm_moonset_jd);
         double best_time_jd = test_nm_sunset_jd + 4.0 / 9.0 * lag_days;
         
-        // Compute sun and moon position and parameters
+        // Compute sun/moon state at the selected best time.
         double best_time_jde = best_time_jd + test_deltaT_new_moon / SECONDS_IN_DAY;
         SunResult nm_sun_params;
         compute_sun_result(best_time_jde, test_deltaT_new_moon, lat, lon, elev, temp, press, &nm_sun_params);
@@ -172,7 +173,7 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         compute_moon_result(best_time_jde, test_deltaT_new_moon, lat, lon, elev, temp, press, 
             nm_sun_params.nutation_longitude, nm_sun_params.true_obliquity, &nm_moon_params);
         
-        // Compute visibility
+        // Compute criterion-specific q-value.
         switch (criterion) {
             case 0:
                 // Odeh uses topocentric apparent (i.e. corrected for standard refraction) horizontal coordinates
@@ -190,7 +191,7 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
                 }
                 break;
             case 2:
-                // TODO
+                // Not yet implemented in native code; placeholder retained for API compatibility.
                 results[i].q_value = shaukat();
                 break;
             default:
@@ -204,7 +205,7 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
     }
 }
 
-/* Python wrapper */
+/* Python wrapper: returns Visibilities dataclass instance. */
 PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     ENSURE_PYDATETIME();
     PyObject *input_datetime;
@@ -224,19 +225,19 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    // Parse observe datetime
+    // Parse observer datetime.
     datetime date;
     fill_in_datetime_values(&date, input_datetime);
 
-    // Get New Moon Date from moon_phases list
+    // Use nearest new moon as the visibility baseline.
     datetime moon_phases[4];
     next_phases_of_moon_utc(date, moon_phases);
 
-    // New Moon is the first element
+    // New moon is phase index 0.
     datetime new_moon_dt = moon_phases[0];
     
 
-    // Allocate array and compute
+    // Allocate native result buffer and run computation.
     VisibilityResult* c_results = malloc(sizeof(VisibilityResult) * (size_t)days);
     if (!c_results) {
         return PyErr_NoMemory();
@@ -244,11 +245,7 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     compute_visibilities(new_moon_dt, utc_offset, lat, lon, elev, temp, press, 
                         c_results, days, criterion);
 
-    // Construct return tuple
-    // PyObject* result = PyTuple_New(days);
-    // if (!result) {free(c_results); return NULL;}
-
-    // Prepare Python sequences
+    // Prepare Python sequences.
     PyObject* py_dates = PyTuple_New(days);
     PyObject* py_q_values = PyTuple_New(days);
     PyObject* py_classifications = PyTuple_New(days);
@@ -283,7 +280,7 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
 
     free(c_results);
 
-    // Create Visibilities instance
+    // Build Visibilities dataclass instance.
     const char* criterion_name = (criterion == 0) ? "Odeh" :
                                  (criterion == 1) ? "Yallop" :
                                  (criterion == 2) ? "Shaukat" : "Unknown";
@@ -308,9 +305,7 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     return result;
 }
 
-// Batch wrapper that iterates over each coordinate pair.
-// Assumes lats and lons are arrays of length 'count' corresponding to every coordinate pair.
-// For each coordinate, it writes 'days' results sequentially in results.
+// Batch helper: iterates every coordinate pair and writes `days` sequential outputs.
 void compute_visibilities_batch(datetime date, double utc_offset, double* lats, double* lons, int count,
     double elev, double temp, double press, VisibilityResult* results, int days, int criterion)
 {
@@ -321,12 +316,12 @@ void compute_visibilities_batch(datetime date, double utc_offset, double* lats, 
     }
 }
 
-/* Python wrapper */
+/* Python wrapper: returns either raw q-values or category labels as NumPy array. */
 PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     ENSURE_PYDATETIME();
     ENSURE_NUMPY();
     
-    //Input parsing
+    // Input parsing.
     PyObject *lats_obj, *lons_obj, *new_moon_obj;
     datetime new_moon_dt;
     int days, criterion, type_code;
@@ -354,10 +349,10 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     }
 
 
-    // New moon datetime parsing
+    // New moon datetime parsing.
     fill_in_datetime_values(&new_moon_dt, new_moon_obj);
 
-    // Lats and Lons array parsing
+    // Latitude/longitude array parsing.
     if (!PyArray_Check(lats_obj) || !PyArray_Check(lons_obj)) {
         PyErr_SetString(PyExc_TypeError, "lat/lon must be NumPy arrays");
         return NULL;
@@ -368,7 +363,7 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     Py_INCREF(lats_arr);
     Py_INCREF(lons_arr);
     
-    // Validate dtype and memory layout
+    // Validate dtype and memory layout.
     if (PyArray_TYPE(lats_arr) != NPY_DOUBLE || !PyArray_ISCARRAY(lats_arr) ||
         PyArray_TYPE(lons_arr) != NPY_DOUBLE || !PyArray_ISCARRAY(lons_arr)) {
         PyErr_SetString(PyExc_ValueError, "lat/lon arrays must be float64 and C-contiguous");
@@ -383,7 +378,7 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    // Validate array size
+    // Validate array size.
     if (PyArray_SIZE(lats_arr) != PyArray_SIZE(lons_arr)) {
         PyErr_SetString(PyExc_ValueError, "Latitude and longitude arrays must have same size");
         Py_DECREF(lats_arr);
@@ -391,11 +386,11 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    // Get the raw C pointers
+    // Get raw C pointers.
     double* lats = (double*) PyArray_DATA(lats_arr);
     double* lons = (double*) PyArray_DATA(lons_arr);
     
-    // Total coordinate count
+    // Total coordinate count.
     npy_intp count = PyArray_SIZE(lats_arr);
     if (count > INT_MAX) {
         PyErr_SetString(PyExc_ValueError, "Too many coordinates for native batch processing.");
@@ -404,7 +399,7 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
         return NULL;
     }
     
-    // Total computations
+    // Total computations and overflow checks.
     if ((size_t)count > SIZE_MAX / (size_t)days) {
         PyErr_SetString(PyExc_OverflowError, "Requested batch size overflows addressable memory.");
         Py_DECREF(lats_arr);
@@ -426,7 +421,7 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     }
     int total = (int)total_size;
     
-    // Create visibility result
+    // Create native result storage.
     VisibilityResult* results = malloc(sizeof(VisibilityResult) * total_size);
     if (!results) {
         Py_DECREF(lats_arr);
@@ -434,17 +429,17 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
         return PyErr_NoMemory();
     }
     
-    // Batch compute visibilities
+    // Batch compute visibilities.
     Py_BEGIN_ALLOW_THREADS
     compute_visibilities_batch(new_moon_dt, utc_offset, lats, lons, (int)count, elev, temp, press, results, days, criterion);
     Py_END_ALLOW_THREADS
     
-    // Parse results back to python
+    // Convert results back to Python/NumPy.
     npy_intp dims[1] = { (npy_intp)total_size };
     PyArrayObject* arr = NULL;
-    // RAW
+    // RAW q-values
     if (type == 'r') {
-        // Create NumPy array
+        // Create NumPy array.
         arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
         if (!arr) {
             Py_DECREF(lats_arr);
@@ -457,9 +452,9 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
         for (int i = 0; i < total; ++i) {
             q_ptr[i] = results[i].q_value;
         }
-    // CATEGORY
+    // CATEGORY labels
     } else if (type == 'c') {
-        // Create dtype 'U100' (100 unicode characters)
+        // Create dtype 'U100' (100 unicode characters).
         PyObject* dtype_spec = PyUnicode_FromString("U100");
         PyArray_Descr* dtype = NULL;
         if (!dtype_spec) {

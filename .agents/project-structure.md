@@ -13,49 +13,49 @@
 ## Repository Tree (With Short Descriptions)
 ```text
 islamic_times/
-├── .agents/                              # Agent-specific project guidance
-│   ├── README.md                         # Index and read order for agent docs
-│   ├── coding-standards.md               # Required style, typing, docs, comments
-│   ├── project-structure.md              # Repo structure and ownership map
-│   └── workflow-checklist.md             # Implementation and validation checklist
-├── src/                                  # Source root (Python + native)
-│   ├── islamic_times/                    # Python package source (src-layout)
-│   │   ├── __init__.py                   # Package init and version fallback
-│   │   ├── calculation_equations.py      # Pure-Python mathematical utilities
-│   │   ├── islamic_times.py              # `ITLocation` public orchestration class
-│   │   ├── it_dataclasses.py             # Typed dataclasses/value objects
-│   │   ├── moon_equations.py             # Moon position/phase algorithms
-│   │   ├── prayer_times.py               # Prayer-time computation logic
-│   │   ├── sun_equations.py              # Sun position/event algorithms
-│   │   └── time_equations.py             # Calendar/timezone/time conversions
-│   └── native/                           # Native C extension implementation
-│       ├── astro_core.c                  # Python C API module bindings
-│       ├── c_calculation_equations.c     # C math helper implementations
-│       ├── c_datetime.c                  # C datetime conversion implementations
-│       ├── c_moon_equations.c            # C lunar calculation implementations
-│       ├── c_sun_equations.c             # C solar calculation implementations
-│       ├── c_time_equations.c            # C astronomical time implementations
-│       ├── c_visibilities.c              # C crescent visibility implementations
-│       └── include/                      # Headers for native extension modules
-│           ├── astro_core.h              # Top-level C extension interface
-│           ├── c_calculation_equations.h # Math helper declarations
-│           ├── c_datetime.h              # Datetime conversion declarations
-│           ├── c_moon_equations.h        # Lunar calculation declarations
-│           ├── c_sun_equations.h         # Solar calculation declarations
-│           ├── c_time_equations.h        # Astronomical time declarations
-│           └── c_visibilities.h          # Crescent visibility declarations
-├── tests/                                # Automated tests for library behavior
-├── examples/demo.py                      # Small runnable API example
-├── map_shp_files/                        # Shapefiles used by mapping pipeline
-├── test_maps/                            # Generated/fixture visibility map outputs
-├── mapper.py                             # CLI/script for visibility map generation
-├── CONTRIBUTING.md                       # Contributor setup and validation guide
-├── LICENSE                               # Project license
-├── MANIFEST.in                           # Source distribution include rules
-├── pyproject.toml                        # Build-system and tool configuration
-├── README.md                             # Public package docs and usage examples
-├── RELEASE_CHECKLIST.md                  # Release gating checklist
-└── setup.py                              # Package + C-extension build setup
+├── .agents/                                 # Agent-specific project guidance
+│   ├── README.md                            # Index and read order for agent docs
+│   ├── coding-standards.md                  # Required style, typing, docs, comments
+│   ├── project-structure.md                 # Repo structure and ownership map
+│   └── workflow-checklist.md                # Implementation and validation checklist
+├── src/                                     # Source root (Python + native)
+│   ├── islamic_times/                       # Python package source (src-layout)
+│   │   ├── __init__.py                      # Package init and version fallback
+│   │   ├── calculation_equations.py         # Pure-Python mathematical utilities
+│   │   ├── islamic_times.py                 # `ITLocation` public orchestration class
+│   │   ├── it_dataclasses.py                # Typed dataclasses/value objects
+│   │   ├── moon_equations.py                # Moon position/phase algorithms
+│   │   ├── prayer_times.py                  # Prayer-time computation logic
+│   │   ├── sun_equations.py                 # Sun position/event algorithms
+│   │   └── time_equations.py                # Calendar/timezone/time conversions
+│   └── native/                              # Native C extension implementation
+│       ├── astro_core.c                     # Python C API module bindings
+│       ├── c_calculation_equations.c        # C math helper implementations
+│       ├── c_datetime.c                     # C datetime conversion implementations
+│       ├── c_moon_equations.c               # C lunar calculation implementations
+│       ├── c_sun_equations.c                # C solar calculation implementations
+│       ├── c_time_equations.c               # C astronomical time implementations
+│       ├── c_visibilities.c                 # C crescent visibility implementations
+│       └── include/                         # Headers for native extension modules
+│           ├── astro_core.h                 # Top-level C extension interface
+│           ├── c_calculation_equations.h    # Math helper declarations
+│           ├── c_datetime.h                 # Datetime conversion declarations
+│           ├── c_moon_equations.h           # Lunar calculation declarations
+│           ├── c_sun_equations.h            # Solar calculation declarations
+│           ├── c_time_equations.h           # Astronomical time declarations
+│           └── c_visibilities.h             # Crescent visibility declarations
+├── tests/                                   # Automated tests for library behavior
+├── examples/demo.py                         # Small runnable API example
+├── map_shp_files/                           # Shapefiles used by mapping pipeline
+├── test_maps/                               # Generated/fixture visibility map outputs
+├── mapper.py                                # CLI/script for visibility map generation
+├── CONTRIBUTING.md                          # Contributor setup and validation guide
+├── LICENSE                                  # Project license
+├── MANIFEST.in                              # Source distribution include rules
+├── pyproject.toml                           # Build-system and tool configuration
+├── README.md                                # Public package docs and usage examples
+├── RELEASE_CHECKLIST.md                     # Release gating checklist
+└── setup.py                                 # Package + C-extension build setup
 ```
 
 ## Core Runtime Flow

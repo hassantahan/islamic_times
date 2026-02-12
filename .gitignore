@@ -18,6 +18,7 @@ dist/
 *.tar.gz
 *.pyd
 *.so
+.coverage
 
 # setuptools_scm version file
 src/islamic_times/_version.py
@@ -27,7 +28,7 @@ misc/
 maps/
 mapper_logs/
 
-# Virtualenvs
+# Virtual envs
 .env/
 .venv/
 env/
@@ -47,7 +48,6 @@ test_maps/
 .codex/
 .cursor/
 .github/agents/
-
 
 .clinerules
 .cursorrules
