@@ -1,5 +1,5 @@
-#ifndef SUN_EQUATIONS_H
-#define SUN_EQUATIONS_H
+#ifndef ISLAMIC_TIMES_NATIVE_SUN_EQUATIONS_H
+#define ISLAMIC_TIMES_NATIVE_SUN_EQUATIONS_H
 
 // Includes
 #include "c_time_equations.h"
@@ -50,4 +50,4 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
 PyObject* py_find_sun_transit(PyObject* self, PyObject* args);
 PyObject* py_find_proper_suntime(PyObject* self, PyObject* args);
 
-#endif // SUN_EQUATIONS_H
+#endif  // ISLAMIC_TIMES_NATIVE_SUN_EQUATIONS_H

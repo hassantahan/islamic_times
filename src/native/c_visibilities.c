@@ -1,7 +1,11 @@
 #define PY_SSIZE_T_CLEAN
 #include <stdio.h>
+#include <limits.h>
+#include <stdint.h>
 #include <numpy/arrayobject.h>
 #include "c_visibilities.h"
+
+#define MAX_VISIBILITY_DAYS 366
 
 /* Different Visibility Criteria */
 
@@ -72,13 +76,13 @@ const char* classify_visibility(double q, int criterion) {
 
 void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, double lon, double elev, double temp, double press,
     VisibilityResult* results, int days, int criterion) {
+    if (days <= 0) {
+        return;
+    }
 
     // Get the JD and ΔT for the new moon
     new_moon_dt = add_days(new_moon_dt, utc_offset / 24.0);
     double jd_new_moon = gregorian_to_jd(new_moon_dt, utc_offset);
-
-    // Initialize best_jds array
-    double* best_jds = malloc(sizeof(double) * days);
     
     // Find the local moonset on that day
     double temp1[3] = {CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME}; 
@@ -91,7 +95,6 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         // Moonset doesn't exist, for extreme latitudes
         results[0].q_value = -995.0;
         results[0].classification = classify_visibility(results[0].q_value, criterion);
-        best_jds[0] = jd_new_moon;
         results[0].best_dt = new_moon_dt;
         start++; // Skip day 0
     }
@@ -159,7 +162,6 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
 
         double lag_days = fabs(test_nm_sunset_jd - test_nm_moonset_jd);
         double best_time_jd = test_nm_sunset_jd + 4.0 / 9.0 * lag_days;
-        best_jds[i] = best_time_jd;
         
         // Compute sun and moon position and parameters
         double best_time_jde = best_time_jd + test_deltaT_new_moon / SECONDS_IN_DAY;
@@ -192,17 +194,14 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
                 results[i].q_value = shaukat();
                 break;
             default:
+                // This is pre-validated by wrappers.
+                results[i].q_value = shaukat();
                 break;
         }
 
-        jd_to_gregorian(best_jds[i], utc_offset, &results[i].best_dt);
+        jd_to_gregorian(best_time_jd, utc_offset, &results[i].best_dt);
         results[i].classification = classify_visibility(results[i].q_value, criterion);
     }
-
-    // for (int i = 0; i < days; i++)
-
-    
-    free(best_jds);
 }
 
 /* Python wrapper */
@@ -215,6 +214,15 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "O!ddddddii", PyDateTimeAPI->DateTimeType, &input_datetime, &utc_offset, &lat, &lon,
                                                                         &elev, &temp, &press, &days, &criterion))
         return NULL;
+
+    if (days <= 0 || days > MAX_VISIBILITY_DAYS) {
+        PyErr_Format(PyExc_ValueError, "'days' must be in the range [1, %d].", MAX_VISIBILITY_DAYS);
+        return NULL;
+    }
+    if (criterion < 0 || criterion > 2) {
+        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh), 1 (Yallop), or 2 (Shaukat).");
+        return NULL;
+    }
 
     // Parse observe datetime
     datetime date;
@@ -229,7 +237,10 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     
 
     // Allocate array and compute
-    VisibilityResult* c_results = malloc(sizeof(VisibilityResult) * days);
+    VisibilityResult* c_results = malloc(sizeof(VisibilityResult) * (size_t)days);
+    if (!c_results) {
+        return PyErr_NoMemory();
+    }
     compute_visibilities(new_moon_dt, utc_offset, lat, lon, elev, temp, press, 
                         c_results, days, criterion);
 
@@ -321,14 +332,26 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     int days, criterion, type_code;
     double utc_offset, elev, temp, press;
     if (!PyArg_ParseTuple(args,
-            "OOOiiddddC",
-            &lats_obj, &lons_obj, &new_moon_obj,
+            "OOO!iiddddC",
+            &lats_obj, &lons_obj, PyDateTimeAPI->DateTimeType, &new_moon_obj,
             &days, &criterion,
             &utc_offset, &elev, &temp, &press,
             &type_code)) {
         return NULL;
     }
     char type = (char)type_code;
+    if (days <= 0 || days > MAX_VISIBILITY_DAYS) {
+        PyErr_Format(PyExc_ValueError, "'days' must be in the range [1, %d].", MAX_VISIBILITY_DAYS);
+        return NULL;
+    }
+    if (criterion < 0 || criterion > 2) {
+        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh), 1 (Yallop), or 2 (Shaukat).");
+        return NULL;
+    }
+    if (type != 'r' && type != 'c') {
+        PyErr_SetString(PyExc_ValueError, "Unknown type flag (expected 'r' or 'c')");
+        return NULL;
+    }
 
 
     // New moon datetime parsing
@@ -374,25 +397,58 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     
     // Total coordinate count
     npy_intp count = PyArray_SIZE(lats_arr);
+    if (count > INT_MAX) {
+        PyErr_SetString(PyExc_ValueError, "Too many coordinates for native batch processing.");
+        Py_DECREF(lats_arr);
+        Py_DECREF(lons_arr);
+        return NULL;
+    }
     
     // Total computations
-    int total = days * (int)count;
+    if ((size_t)count > SIZE_MAX / (size_t)days) {
+        PyErr_SetString(PyExc_OverflowError, "Requested batch size overflows addressable memory.");
+        Py_DECREF(lats_arr);
+        Py_DECREF(lons_arr);
+        return NULL;
+    }
+    size_t total_size = (size_t)days * (size_t)count;
+    if (total_size > (size_t)NPY_MAX_INTP) {
+        PyErr_SetString(PyExc_OverflowError, "Requested batch size exceeds NumPy indexing limits.");
+        Py_DECREF(lats_arr);
+        Py_DECREF(lons_arr);
+        return NULL;
+    }
+    if (total_size > (size_t)INT_MAX) {
+        PyErr_SetString(PyExc_OverflowError, "Requested batch size exceeds native loop limits.");
+        Py_DECREF(lats_arr);
+        Py_DECREF(lons_arr);
+        return NULL;
+    }
+    int total = (int)total_size;
     
     // Create visibility result
-    VisibilityResult* results = malloc(sizeof(VisibilityResult) * total);
-    if (!results) return PyErr_NoMemory();
+    VisibilityResult* results = malloc(sizeof(VisibilityResult) * total_size);
+    if (!results) {
+        Py_DECREF(lats_arr);
+        Py_DECREF(lons_arr);
+        return PyErr_NoMemory();
+    }
     
     // Batch compute visibilities
+    Py_BEGIN_ALLOW_THREADS
     compute_visibilities_batch(new_moon_dt, utc_offset, lats, lons, (int)count, elev, temp, press, results, days, criterion);
+    Py_END_ALLOW_THREADS
     
     // Parse results back to python
-    npy_intp dims[1] = { total };
+    npy_intp dims[1] = { (npy_intp)total_size };
     PyArrayObject* arr = NULL;
     // RAW
     if (type == 'r') {
         // Create NumPy array
         arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
         if (!arr) {
+            Py_DECREF(lats_arr);
+            Py_DECREF(lons_arr);
             free(results);
             return NULL;
         }
@@ -404,14 +460,27 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
     // CATEGORY
     } else if (type == 'c') {
         // Create dtype 'U100' (100 unicode characters)
+        PyObject* dtype_spec = PyUnicode_FromString("U100");
         PyArray_Descr* dtype = NULL;
-        if (!PyArray_DescrConverter(PyUnicode_FromString("U100"), &dtype)) {
+        if (!dtype_spec) {
+            Py_DECREF(lats_arr);
+            Py_DECREF(lons_arr);
             free(results);
             return NULL;
         }
+        if (!PyArray_DescrConverter(dtype_spec, &dtype)) {
+            Py_DECREF(dtype_spec);
+            Py_DECREF(lats_arr);
+            Py_DECREF(lons_arr);
+            free(results);
+            return NULL;
+        }
+        Py_DECREF(dtype_spec);
 
         arr = (PyArrayObject*) PyArray_NewFromDescr(&PyArray_Type, dtype, 1, dims, NULL, NULL, 0, NULL);
         if (!arr) {
+            Py_DECREF(lats_arr);
+            Py_DECREF(lons_arr);
             free(results);
             return NULL;
         }
@@ -420,20 +489,22 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
             PyObject* py_str = PyUnicode_FromString(results[i].classification);
             if (!py_str) {
                 Py_DECREF(arr);
+                Py_DECREF(lats_arr);
+                Py_DECREF(lons_arr);
                 free(results);
                 return NULL;
             }
 
-            PyArray_SETITEM(arr, PyArray_GETPTR1(arr, i), py_str);
+            if (PyArray_SETITEM(arr, PyArray_GETPTR1(arr, i), py_str) < 0) {
+                Py_DECREF(py_str);
+                Py_DECREF(arr);
+                Py_DECREF(lats_arr);
+                Py_DECREF(lons_arr);
+                free(results);
+                return NULL;
+            }
             Py_DECREF(py_str);
         }
-    // INVALID
-    } else {
-        PyErr_SetString(PyExc_ValueError, "Unknown type flag (expected 'r' or 'c')");
-        Py_DECREF(lats_arr);
-        Py_DECREF(lons_arr);
-        free(results);
-        return NULL;
     }
         
     Py_DECREF(lats_arr);

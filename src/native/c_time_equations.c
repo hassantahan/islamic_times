@@ -145,6 +145,7 @@ PyObject* py_jd_to_gregorian(PyObject *self, PyObject *args) {
         return datetime_to_pydatetime(date);
     }
     else {
+        PyErr_SetString(PyExc_ValueError, "'jd' must be a positive Julian Day value.");
         return NULL;
     }
 }

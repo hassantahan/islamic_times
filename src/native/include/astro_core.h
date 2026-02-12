@@ -1,6 +1,6 @@
-// astro_types.h
-#ifndef ASTRO_TYPES_H
-#define ASTRO_TYPES_H
+// Shared native extension types/constants for islamic_times.astro_core.
+#ifndef ISLAMIC_TIMES_NATIVE_ASTRO_CORE_H
+#define ISLAMIC_TIMES_NATIVE_ASTRO_CORE_H
 
 #include <Python.h>
 #include <datetime.h>
@@ -24,18 +24,14 @@
 #define RADIANS(value) ((value) * (M_PI) / 180.0)
 #define DEGREES(value) ((value) * (180.0) / M_PI)
 
-#define ANGLE(value) PyObject_CallFunctionObjArgs(AngleType, PyFloat_FromDouble(value), NULL)
-#define DIST(value, unit) PyObject_CallFunctionObjArgs(DistanceType, PyFloat_FromDouble(value), unit, NULL)
-#define RA(value) PyObject_CallFunctionObjArgs(RightAscensionType, PyFloat_FromDouble(value / 15.0), NULL)
 #define FLOAT(value) PyFloat_FromDouble(value)
-#define UNIT(name) PyObject_GetAttrString(DistanceUnitsType, (name))
 
-// Macro for safe type import + incref
+// Safely import a type/class object from a Python module.
+// PyObject_GetAttrString already returns a new reference.
 #define IMPORT_TYPE(var, mod, name)                                       \
     do {                                                                  \
         var = PyObject_GetAttrString((mod), (name));                      \
         if (!var) return NULL;                                            \
-        Py_INCREF(var);                                                   \
     } while (0)
 
 #define ENSURE_PYDATETIME() if (!PyDateTimeAPI) { PyDateTime_IMPORT; }
@@ -55,9 +51,4 @@ extern PyObject *DistanceType;
 extern PyObject *DistanceUnitsType;
 extern PyObject *RightAscensionType;
 
-
-/* ================================
-   
-   ================================ */
-
-#endif
+#endif  // ISLAMIC_TIMES_NATIVE_ASTRO_CORE_H

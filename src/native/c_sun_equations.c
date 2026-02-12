@@ -343,7 +343,63 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
 
 
 /* Python wrapper*/
+static PyObject* create_angle_obj(double value) {
+    PyObject* py_value = PyFloat_FromDouble(value);
+    PyObject* angle_obj;
+    if (!py_value) {
+        return NULL;
+    }
+
+    angle_obj = PyObject_CallFunctionObjArgs(AngleType, py_value, NULL);
+    Py_DECREF(py_value);
+    return angle_obj;
+}
+
+static PyObject* create_ra_obj_from_degrees(double value_deg) {
+    PyObject* py_hours = PyFloat_FromDouble(value_deg / 15.0);
+    PyObject* ra_obj;
+    if (!py_hours) {
+        return NULL;
+    }
+
+    ra_obj = PyObject_CallFunctionObjArgs(RightAscensionType, py_hours, NULL);
+    Py_DECREF(py_hours);
+    return ra_obj;
+}
+
+static PyObject* create_distance_obj(double value, const char* unit_name) {
+    PyObject* py_value = NULL;
+    PyObject* unit_obj = NULL;
+    PyObject* dist_obj = NULL;
+
+    py_value = PyFloat_FromDouble(value);
+    if (!py_value) {
+        goto error;
+    }
+
+    unit_obj = PyObject_GetAttrString(DistanceUnitsType, unit_name);
+    if (!unit_obj) {
+        goto error;
+    }
+
+    dist_obj = PyObject_CallFunctionObjArgs(DistanceType, py_value, unit_obj, NULL);
+
+error:
+    Py_XDECREF(py_value);
+    Py_XDECREF(unit_obj);
+    return dist_obj;
+}
+
 PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs) {
+    #define SET_TUPLE_ITEM_OR_FAIL(tuple_obj, index, value_expr)                 \
+        do {                                                                      \
+            PyObject* _tmp = (value_expr);                                        \
+            if (!_tmp) {                                                          \
+                goto error;                                                       \
+            }                                                                     \
+            PyTuple_SET_ITEM((tuple_obj), (index), _tmp);                        \
+        } while (0)
+
     if (nargs != 7) {
         PyErr_SetString(PyExc_TypeError, "Expected 7 arguments");
         return NULL;
@@ -362,37 +418,64 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
     SunResult result;
     compute_sun_result(jde, deltaT, latitude, longitude, elevation, temperature, pressure, &result);
 
-    PyObject* sun = PyObject_CallFunctionObjArgs((PyObject *)SunType,
-        ANGLE(result.mean_longitude),
-        ANGLE(result.mean_anomaly),
-        FLOAT(result.earth_orbit_eccentricity),
-        ANGLE(result.sun_centre),
-        ANGLE(result.true_longitude),
-        ANGLE(result.true_anomaly),
-        DIST(result.geocentric_distance, UNIT("AU")),
-        ANGLE(result.omega),
-        ANGLE(result.apparent_longitude),
-        Py_BuildValue("(OO)", ANGLE(result.nutation_longitude), ANGLE(result.nutation_obliquity)),
-        ANGLE(result.nutation_obliquity),
-        ANGLE(result.mean_obliquity),
-        ANGLE(result.true_obliquity),
-        RA(result.true_right_ascension),
-        ANGLE(result.true_declination),
-        RA(result.apparent_right_ascension),
-        ANGLE(result.apparent_declination),
-        ANGLE(result.greenwich_hour_angle),
-        ANGLE(result.local_hour_angle),
-        ANGLE(result.eh_parallax),
-        RA(result.topocentric_ascension),
-        ANGLE(result.topocentric_declination),
-        ANGLE(result.topocentric_local_hour_angle),
-        ANGLE(result.true_altitude),
-        ANGLE(result.true_azimuth),
-        ANGLE(result.apparent_altitude),
-        NULL
-    );
+    if (!SunType || !PyType_Check(SunType)) {
+        PyErr_SetString(PyExc_RuntimeError, "SunType is not a valid Python type");
+        return NULL;
+    }
 
+    PyObject* args_tuple = PyTuple_New(26);
+    PyObject* nutation_tuple = NULL;
+    PyObject* sun = NULL;
+    if (!args_tuple) {
+        return NULL;
+    }
+
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 0, create_angle_obj(result.mean_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 1, create_angle_obj(result.mean_anomaly));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 2, PyFloat_FromDouble(result.earth_orbit_eccentricity));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 3, create_angle_obj(result.sun_centre));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 4, create_angle_obj(result.true_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 5, create_angle_obj(result.true_anomaly));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 6, create_distance_obj(result.geocentric_distance, "AU"));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 7, create_angle_obj(result.omega));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 8, create_angle_obj(result.apparent_longitude));
+
+    nutation_tuple = PyTuple_New(2);
+    if (!nutation_tuple) {
+        goto error;
+    }
+    SET_TUPLE_ITEM_OR_FAIL(nutation_tuple, 0, create_angle_obj(result.nutation_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(nutation_tuple, 1, create_angle_obj(result.nutation_obliquity));
+    PyTuple_SET_ITEM(args_tuple, 9, nutation_tuple);
+    nutation_tuple = NULL;
+
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 10, create_angle_obj(result.nutation_obliquity));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 11, create_angle_obj(result.mean_obliquity));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 12, create_angle_obj(result.true_obliquity));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 13, create_ra_obj_from_degrees(result.true_right_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 14, create_angle_obj(result.true_declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 15, create_ra_obj_from_degrees(result.apparent_right_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 16, create_angle_obj(result.apparent_declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 17, create_angle_obj(result.greenwich_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 18, create_angle_obj(result.local_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 19, create_angle_obj(result.eh_parallax));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 20, create_ra_obj_from_degrees(result.topocentric_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 21, create_angle_obj(result.topocentric_declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 22, create_angle_obj(result.topocentric_local_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 23, create_angle_obj(result.true_altitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 24, create_angle_obj(result.true_azimuth));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 25, create_angle_obj(result.apparent_altitude));
+
+    sun = PyObject_CallObject(SunType, args_tuple);
+    Py_DECREF(args_tuple);
+    #undef SET_TUPLE_ITEM_OR_FAIL
     return sun;
+
+error:
+    Py_XDECREF(nutation_tuple);
+    Py_DECREF(args_tuple);
+    #undef SET_TUPLE_ITEM_OR_FAIL
+    return NULL;
 }
 
 
@@ -433,8 +516,11 @@ int find_sun_transit(datetime date, double utc_offset, double local_latitude, do
         m0 -= lha_event_deg / 360;
     }
 
-    // Clip to [0, 1]
-    m0 = fmod(m0, 1) + 1;
+    // Canonical modulo into [0, 1)
+    m0 = fmod(m0, 1.0);
+    if (m0 < 0.0) {
+        m0 += 1.0;
+    }
 
     // Construct transit datetime
     sun_event->year = date.year;
@@ -448,9 +534,10 @@ int find_sun_transit(datetime date, double utc_offset, double local_latitude, do
 
 /* Python wrapper */
 PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
-    double jd, deltaT, latitude, longitude, elevation, temperature, pressure, utc_offset;
-    if (!PyArg_ParseTuple(args, "dddddddd", &jd, &deltaT, &latitude, &longitude, &elevation, &temperature, &pressure, &utc_offset))
+    double jd, unused_deltaT, latitude, longitude, elevation, temperature, pressure, utc_offset;
+    if (!PyArg_ParseTuple(args, "dddddddd", &jd, &unused_deltaT, &latitude, &longitude, &elevation, &temperature, &pressure, &utc_offset))
         return NULL;
+    (void)unused_deltaT;
     
     datetime reference_dt;
     jd_to_gregorian(jd, utc_offset, &reference_dt);

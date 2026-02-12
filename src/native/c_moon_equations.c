@@ -544,10 +544,66 @@ void compute_moon_result(double jde, double deltaT, double local_latitude, doubl
 }
 
 /* Python wrapper */
+static PyObject* create_angle_obj_moon(double value) {
+    PyObject* py_value = PyFloat_FromDouble(value);
+    PyObject* angle_obj;
+    if (!py_value) {
+        return NULL;
+    }
+
+    angle_obj = PyObject_CallFunctionObjArgs(AngleType, py_value, NULL);
+    Py_DECREF(py_value);
+    return angle_obj;
+}
+
+static PyObject* create_ra_obj_from_degrees_moon(double value_deg) {
+    PyObject* py_hours = PyFloat_FromDouble(value_deg / 15.0);
+    PyObject* ra_obj;
+    if (!py_hours) {
+        return NULL;
+    }
+
+    ra_obj = PyObject_CallFunctionObjArgs(RightAscensionType, py_hours, NULL);
+    Py_DECREF(py_hours);
+    return ra_obj;
+}
+
+static PyObject* create_distance_obj_moon(double value, const char* unit_name) {
+    PyObject* py_value = NULL;
+    PyObject* unit_obj = NULL;
+    PyObject* dist_obj = NULL;
+
+    py_value = PyFloat_FromDouble(value);
+    if (!py_value) {
+        goto error;
+    }
+
+    unit_obj = PyObject_GetAttrString(DistanceUnitsType, unit_name);
+    if (!unit_obj) {
+        goto error;
+    }
+
+    dist_obj = PyObject_CallFunctionObjArgs(DistanceType, py_value, unit_obj, NULL);
+
+error:
+    Py_XDECREF(py_value);
+    Py_XDECREF(unit_obj);
+    return dist_obj;
+}
+
 PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t nargs) {
+    #define SET_TUPLE_ITEM_OR_FAIL(tuple_obj, index, value_expr)                 \
+        do {                                                                      \
+            PyObject* _tmp = (value_expr);                                        \
+            if (!_tmp) {                                                          \
+                goto error;                                                       \
+            }                                                                     \
+            PyTuple_SET_ITEM((tuple_obj), (index), _tmp);                        \
+        } while (0)
+
     if (nargs != 9) {
         char error_message[100];
-        snprintf(error_message, sizeof(error_message), "Expected 9 arguments but received %zu", nargs);
+        snprintf(error_message, sizeof(error_message), "Expected 9 arguments but received %zd", nargs);
         PyErr_SetString(PyExc_TypeError, error_message);
         return NULL;
     }
@@ -575,47 +631,76 @@ PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t narg
         return NULL;
     }
 
-    PyObject *arg_list = PyList_New(5);
-    for (int i = 0; i < 5; ++i) {
-        PyList_SET_ITEM(arg_list, i, PyFloat_FromDouble(result.lunar_nutation.fundamental_arguments[i]));
+    PyObject* arg_list = PyList_New(5);
+    PyObject* lunar_nutation = NULL;
+    PyObject* args_tuple = NULL;
+    PyObject* moon = NULL;
+    if (!arg_list) {
+        return NULL;
     }
 
-    PyObject *lunar_nutation = PyTuple_Pack(4,
+    for (int i = 0; i < 5; ++i) {
+        PyObject* fundamental_argument = PyFloat_FromDouble(result.lunar_nutation.fundamental_arguments[i]);
+        if (!fundamental_argument) {
+            Py_DECREF(arg_list);
+            return NULL;
+        }
+        PyList_SET_ITEM(arg_list, i, fundamental_argument);
+    }
+
+    lunar_nutation = PyTuple_Pack(4,
         arg_list,
         PyFloat_FromDouble(result.lunar_nutation.sum_l),
         PyFloat_FromDouble(result.lunar_nutation.sum_b),
         PyFloat_FromDouble(result.lunar_nutation.sum_r)
     );
+    Py_DECREF(arg_list);
+    arg_list = NULL;
+    if (!lunar_nutation) {
+        return NULL;
+    }
 
-    PyObject* moon = PyObject_CallFunctionObjArgs((PyObject *)MoonType,
-        ANGLE(result.true_longitude),
-        ANGLE(result.true_latitude),
-        DIST(result.geocentric_distance, UNIT("KILOMETRE")),
-        lunar_nutation,
-        ANGLE(result.omega),
-        ANGLE(result.apparent_longitude),
-        ANGLE(result.deltaPsi),
-        ANGLE(result.true_obliquity),
-        RA(result.right_ascension),
-        ANGLE(result.declination),
-        ANGLE(result.greenwich_hour_angle),
-        ANGLE(result.local_hour_angle),
-        ANGLE(result.eh_parallax),
-        RA(result.topocentric_ascension),
-        ANGLE(result.top_declination),
-        ANGLE(result.topocentric_local_hour_angle),
-        ANGLE(result.true_altitude),
-        ANGLE(result.true_azimuth),
-        ANGLE(result.apparent_altitude),
-        NULL
-    );
+    args_tuple = PyTuple_New(19);
+    if (!args_tuple) {
+        goto error;
+    }
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 0, create_angle_obj_moon(result.true_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 1, create_angle_obj_moon(result.true_latitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 2, create_distance_obj_moon(result.geocentric_distance, "KILOMETRE"));
+    PyTuple_SET_ITEM(args_tuple, 3, lunar_nutation);
+    lunar_nutation = NULL;
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 4, create_angle_obj_moon(result.omega));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 5, create_angle_obj_moon(result.apparent_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 6, create_angle_obj_moon(result.deltaPsi));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 7, create_angle_obj_moon(result.true_obliquity));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 8, create_ra_obj_from_degrees_moon(result.right_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 9, create_angle_obj_moon(result.declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 10, create_angle_obj_moon(result.greenwich_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 11, create_angle_obj_moon(result.local_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 12, create_angle_obj_moon(result.eh_parallax));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 13, create_ra_obj_from_degrees_moon(result.topocentric_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 14, create_angle_obj_moon(result.top_declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 15, create_angle_obj_moon(result.topocentric_local_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 16, create_angle_obj_moon(result.true_altitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 17, create_angle_obj_moon(result.true_azimuth));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 18, create_angle_obj_moon(result.apparent_altitude));
+
+    moon = PyObject_CallObject(MoonType, args_tuple);
+    Py_DECREF(args_tuple);
+    #undef SET_TUPLE_ITEM_OR_FAIL
 
     if (!moon) {
-        PyErr_SetString(PyExc_RuntimeError, "Failed to create Moon object");
         return NULL;
     }
 
     return moon;
+
+error:
+    Py_XDECREF(arg_list);
+    Py_XDECREF(lunar_nutation);
+    Py_XDECREF(args_tuple);
+    #undef SET_TUPLE_ITEM_OR_FAIL
+    return NULL;
 }
 
 
@@ -665,8 +750,11 @@ int find_moon_transit(datetime date, double utc_offset, double local_latitude, d
         m0 -= lha_event_deg / 360;
     }
 
-    // Clip to [0, 1]
-    m0 = fmod(m0, 1) + 1;
+    // Canonical modulo into [0, 1)
+    m0 = fmod(m0, 1.0);
+    if (m0 < 0.0) {
+        m0 += 1.0;
+    }
 
     // Construct transit datetime
     moon_event->year = date.year;
@@ -680,14 +768,15 @@ int find_moon_transit(datetime date, double utc_offset, double local_latitude, d
 
 PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
     PyObject *deltaPsi_obj, *true_obliquity_obj;
-    double jd, deltaT, latitude, longitude, 
+    double jd, unused_deltaT, latitude, longitude, 
            elevation, temperature, pressure, 
            utc_offset;
     double deltaPsi[3], true_obliquity[3];
-    if (!PyArg_ParseTuple(args, "ddddddddOO", &jd, &deltaT, &latitude, &longitude, 
+    if (!PyArg_ParseTuple(args, "ddddddddOO", &jd, &unused_deltaT, &latitude, &longitude, 
                                               &elevation, &temperature, &pressure, 
                                               &utc_offset, &deltaPsi_obj, &true_obliquity_obj))
         return NULL;
+    (void)unused_deltaT;
     
     if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 || !PySequence_Check(true_obliquity_obj) || PySequence_Size(true_obliquity_obj) != 3) {
         PyErr_SetString(PyExc_TypeError, "Expected two sequences of 3 floats.");
@@ -858,17 +947,18 @@ datetime find_proper_moontime(double jd, double utc_offset, double latitude, dou
 /* Python Wrapper */
 PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
     PyObject *deltaPsi_obj, *true_obliquity_obj;
-    double jd, deltaT, latitude, longitude, 
+    double jd, unused_deltaT, latitude, longitude, 
            elevation, temperature, pressure, 
            utc_offset;
     double deltaPsi[3], true_obliquity[3];
     int event_code;
     char event;
-    if (!PyArg_ParseTuple(args, "ddddddddOOC", &jd, &deltaT, &latitude, &longitude, 
+    if (!PyArg_ParseTuple(args, "ddddddddOOC", &jd, &unused_deltaT, &latitude, &longitude, 
                                                &elevation, &temperature, &pressure, 
                                                &utc_offset, &deltaPsi_obj, &true_obliquity_obj, 
                                                &event_code))
         return NULL;
+    (void)unused_deltaT;
 
     if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 ||
         !PySequence_Check(true_obliquity_obj) || PySequence_Size(true_obliquity_obj) != 3) {

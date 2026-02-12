@@ -1,5 +1,5 @@
-#ifndef C_DATETIME_H
-#define C_DATETIME_H
+#ifndef ISLAMIC_TIMES_NATIVE_DATETIME_H
+#define ISLAMIC_TIMES_NATIVE_DATETIME_H
 
 #include "astro_core.h"
 
@@ -25,4 +25,4 @@ void fill_in_datetime_values(datetime* date, PyObject* input_datetime);
 PyObject* datetime_to_pydatetime(datetime dt);
 int compare_datetime(const datetime* a, const datetime* b);
 
-#endif
+#endif  // ISLAMIC_TIMES_NATIVE_DATETIME_H

@@ -22,12 +22,19 @@ PyObject *RightAscensionType = NULL;
 static void cleanup_types(void) {
     // Optional cleanup at exit
     Py_XDECREF(SunType);
+    SunType = NULL;
     Py_XDECREF(MoonType);
+    MoonType = NULL;
     Py_XDECREF(VisibilitiesType);
+    VisibilitiesType = NULL;
     Py_XDECREF(AngleType);
+    AngleType = NULL;
     Py_XDECREF(DistanceType);
+    DistanceType = NULL;
     Py_XDECREF(DistanceUnitsType);
+    DistanceUnitsType = NULL;
     Py_XDECREF(RightAscensionType);
+    RightAscensionType = NULL;
 }
 
 /* ============================
@@ -69,29 +76,46 @@ static struct PyModuleDef astro_core_module = {
 
 PyMODINIT_FUNC PyInit_astro_core(void) {
     PyObject *m = PyModule_Create(&astro_core_module);
-    if (m == NULL)
+    PyObject *mod_sun = NULL;
+    PyObject *mod_moon = NULL;
+    PyObject *mod_dc = NULL;
+
+    if (m == NULL) {
         return NULL;
+    }
 
     // Import and initialize datetime C-API
     PyDateTime_IMPORT;
+    if (PyDateTimeAPI == NULL) {
+        Py_DECREF(m);
+        return NULL;
+    }
+
     import_array();
-    // fprintf(stderr, "PyArray_API = %p\n", PyArray_API);
-    
+    if (PyArray_API == NULL) {
+        Py_DECREF(m);
+        return NULL;
+    }
+
     // islamic_times module imports
-    PyObject *mod_sun = PyImport_ImportModule("islamic_times.sun_equations");
-    PyObject *mod_moon = PyImport_ImportModule("islamic_times.moon_equations");
-    PyObject *mod_dc  = PyImport_ImportModule("islamic_times.it_dataclasses");
+    mod_sun = PyImport_ImportModule("islamic_times.sun_equations");
+    mod_moon = PyImport_ImportModule("islamic_times.moon_equations");
+    mod_dc = PyImport_ImportModule("islamic_times.it_dataclasses");
+    if (!mod_sun || !mod_moon || !mod_dc) {
+        goto error;
+    }
 
-    if (!mod_sun || !mod_moon || !mod_dc) return NULL;
-
-    // Clean and safe import
-    IMPORT_TYPE(SunType, mod_sun, "Sun");
-    IMPORT_TYPE(MoonType, mod_moon, "Moon");
-    IMPORT_TYPE(VisibilitiesType, mod_dc, "Visibilities");
-    IMPORT_TYPE(AngleType, mod_dc, "Angle");
-    IMPORT_TYPE(DistanceType, mod_dc, "Distance");
-    IMPORT_TYPE(DistanceUnitsType, mod_dc, "DistanceUnits");
-    IMPORT_TYPE(RightAscensionType, mod_dc, "RightAscension");
+    // Class/type imports
+    SunType = PyObject_GetAttrString(mod_sun, "Sun");
+    MoonType = PyObject_GetAttrString(mod_moon, "Moon");
+    VisibilitiesType = PyObject_GetAttrString(mod_dc, "Visibilities");
+    AngleType = PyObject_GetAttrString(mod_dc, "Angle");
+    DistanceType = PyObject_GetAttrString(mod_dc, "Distance");
+    DistanceUnitsType = PyObject_GetAttrString(mod_dc, "DistanceUnits");
+    RightAscensionType = PyObject_GetAttrString(mod_dc, "RightAscension");
+    if (!SunType || !MoonType || !VisibilitiesType || !AngleType || !DistanceType || !DistanceUnitsType || !RightAscensionType) {
+        goto error;
+    }
 
     Py_DECREF(mod_sun);
     Py_DECREF(mod_moon);
@@ -103,4 +127,12 @@ PyMODINIT_FUNC PyInit_astro_core(void) {
     }
 
     return m;
+
+error:
+    Py_XDECREF(mod_sun);
+    Py_XDECREF(mod_moon);
+    Py_XDECREF(mod_dc);
+    cleanup_types();
+    Py_DECREF(m);
+    return NULL;
 }

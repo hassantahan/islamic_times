@@ -1,5 +1,5 @@
-#ifndef MOON_EQUATIONS_H
-#define MOON_EQUATIONS_H
+#ifndef ISLAMIC_TIMES_NATIVE_MOON_EQUATIONS_H
+#define ISLAMIC_TIMES_NATIVE_MOON_EQUATIONS_H
 
 // Includes
 #include "c_sun_equations.h"
@@ -67,4 +67,4 @@ PyObject* py_find_moon_transit(PyObject* self, PyObject* args);
 PyObject* py_find_proper_moontime(PyObject* self, PyObject* args); 
 PyObject* py_next_phases_of_moon_utc(PyObject* self, PyObject* args);
 
-#endif
+#endif  // ISLAMIC_TIMES_NATIVE_MOON_EQUATIONS_H

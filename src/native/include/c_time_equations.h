@@ -1,5 +1,5 @@
-#ifndef TIME_EQUATIONS_H
-#define TIME_EQUATIONS_H
+#ifndef ISLAMIC_TIMES_NATIVE_TIME_EQUATIONS_H
+#define ISLAMIC_TIMES_NATIVE_TIME_EQUATIONS_H
 
 // Includes
 #include "c_datetime.h"
@@ -18,4 +18,4 @@ PyObject* py_gregorian_to_jd(PyObject *self, PyObject *args);
 PyObject* py_jd_to_gregorian(PyObject *self, PyObject *args);
 PyObject* py_delta_t_approx(PyObject *self, PyObject *args);
 
-#endif // TIME_EQUATIONS_H
+#endif  // ISLAMIC_TIMES_NATIVE_TIME_EQUATIONS_H

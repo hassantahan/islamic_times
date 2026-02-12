@@ -1,5 +1,5 @@
-#ifndef C_VISIBILITIES_H
-#define C_VISIBILITIES_H
+#ifndef ISLAMIC_TIMES_NATIVE_VISIBILITIES_H
+#define ISLAMIC_TIMES_NATIVE_VISIBILITIES_H
 
 // Includes
 #include "c_moon_equations.h"
@@ -13,4 +13,4 @@ typedef struct {
 PyObject* py_compute_visibilities(PyObject* self, PyObject* args);
 PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args);
 
-#endif
+#endif  // ISLAMIC_TIMES_NATIVE_VISIBILITIES_H
