@@ -45,7 +45,7 @@ jobs:
       - name: Run syntax checks
         run: |
           python -m py_compile src/islamic_times/*.py
-          python -m py_compile mapper.py test.py examples/demo.py
+          python -m py_compile mapper.py examples/test.py examples/demo.py
           python -m py_compile tests/*.py
 
       - name: Extension import smoke test
