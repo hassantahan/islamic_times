@@ -525,7 +525,7 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
             angle.decimal,
             event,
         )
-    except Exception as exc:
+    except ValueError as exc:
         raise ArithmeticError("Sun event does not exist for the given location at the given date & time.") from exc
     
     return suntime.replace(tzinfo=observer_date.date.tzinfo)

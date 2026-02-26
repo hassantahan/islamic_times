@@ -650,6 +650,9 @@ PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t narg
     }
 
     PyObject* arg_list = PyList_New(5);
+    PyObject* sum_l_obj = NULL;
+    PyObject* sum_b_obj = NULL;
+    PyObject* sum_r_obj = NULL;
     PyObject* lunar_nutation = NULL;
     PyObject* args_tuple = NULL;
     PyObject* moon = NULL;
@@ -666,17 +669,26 @@ PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t narg
         PyList_SET_ITEM(arg_list, i, fundamental_argument);
     }
 
-    lunar_nutation = PyTuple_Pack(4,
-        arg_list,
-        PyFloat_FromDouble(result.lunar_nutation.sum_l),
-        PyFloat_FromDouble(result.lunar_nutation.sum_b),
-        PyFloat_FromDouble(result.lunar_nutation.sum_r)
-    );
-    Py_DECREF(arg_list);
-    arg_list = NULL;
-    if (!lunar_nutation) {
-        return NULL;
+    sum_l_obj = PyFloat_FromDouble(result.lunar_nutation.sum_l);
+    sum_b_obj = PyFloat_FromDouble(result.lunar_nutation.sum_b);
+    sum_r_obj = PyFloat_FromDouble(result.lunar_nutation.sum_r);
+    if (!sum_l_obj || !sum_b_obj || !sum_r_obj) {
+        goto error;
     }
+
+    lunar_nutation = PyTuple_New(4);
+    if (!lunar_nutation) {
+        goto error;
+    }
+
+    PyTuple_SET_ITEM(lunar_nutation, 0, arg_list);
+    arg_list = NULL;
+    PyTuple_SET_ITEM(lunar_nutation, 1, sum_l_obj);
+    sum_l_obj = NULL;
+    PyTuple_SET_ITEM(lunar_nutation, 2, sum_b_obj);
+    sum_b_obj = NULL;
+    PyTuple_SET_ITEM(lunar_nutation, 3, sum_r_obj);
+    sum_r_obj = NULL;
 
     args_tuple = PyTuple_New(19);
     if (!args_tuple) {
@@ -715,6 +727,9 @@ PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t narg
 
 error:
     Py_XDECREF(arg_list);
+    Py_XDECREF(sum_l_obj);
+    Py_XDECREF(sum_b_obj);
+    Py_XDECREF(sum_r_obj);
     Py_XDECREF(lunar_nutation);
     Py_XDECREF(args_tuple);
     #undef SET_TUPLE_ITEM_OR_FAIL

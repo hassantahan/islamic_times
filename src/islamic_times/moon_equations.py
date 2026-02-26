@@ -639,7 +639,7 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 			true_obliquity,
 			event,
 		)
-	except Exception as exc:
+	except ValueError as exc:
 		raise ArithmeticError("Moon event does not exist for the given location at the given date & time.") from exc
 	
 	return moontime.replace(tzinfo=observer_date.date.tzinfo)

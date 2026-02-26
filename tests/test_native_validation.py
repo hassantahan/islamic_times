@@ -37,6 +37,20 @@ def test_compute_visibilities_rejects_invalid_criterion() -> None:
             99,
         )
 
+def test_compute_visibilities_rejects_unimplemented_criterion_two() -> None:
+    with pytest.raises(ValueError, match="Criterion 2 \\(Shaukat\\) is not implemented"):
+        fast_astro.compute_visibilities(
+            datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc),
+            0.0,
+            43.651070,
+            -79.347015,
+            10.0,
+            15.0,
+            101.325,
+            1,
+            2,
+        )
+
 
 def test_compute_visibilities_batch_requires_datetime_input() -> None:
     lat = np.array([43.651070], dtype=np.float64)
@@ -84,6 +98,23 @@ def test_compute_visibilities_batch_rejects_invalid_days() -> None:
             datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc),
             0,
             1,
+            0.0,
+            10.0,
+            15.0,
+            101.325,
+            "r",
+        )
+
+def test_compute_visibilities_batch_rejects_unimplemented_criterion_two() -> None:
+    lat = np.array([43.651070], dtype=np.float64)
+    lon = np.array([-79.347015], dtype=np.float64)
+    with pytest.raises(ValueError, match="Criterion 2 \\(Shaukat\\) is not implemented"):
+        fast_astro.compute_visibilities_batch(
+            lat,
+            lon,
+            datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc),
+            1,
+            2,
             0.0,
             10.0,
             15.0,

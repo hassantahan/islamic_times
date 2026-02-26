@@ -25,11 +25,6 @@ double yallop_odeh(double sun_az, double sun_alt, double moon_az, double moon_al
     return arcv_deg - (-0.1018 * pow(w_prime, 3) + 0.7319 * pow(w_prime, 2) - 6.3226 * w_prime + 7.1651);
 }
 
-/* Placeholder for a future native Shaukat implementation. */
-double shaukat() {
-    return 0.0;
-}
-
 const char* classify_visibility(double q, int criterion) {
     // Special moon/sun conditions
     if (q == -999.0) 
@@ -190,13 +185,9 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
                     results[i].q_value = yallop_odeh(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, criterion);
                 }
                 break;
-            case 2:
-                // Not yet implemented in native code; placeholder retained for API compatibility.
-                results[i].q_value = shaukat();
-                break;
             default:
                 // This is pre-validated by wrappers.
-                results[i].q_value = shaukat();
+                results[i].q_value = -997.0;
                 break;
         }
 
@@ -220,8 +211,8 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
         PyErr_Format(PyExc_ValueError, "'days' must be in the range [1, %d].", MAX_VISIBILITY_DAYS);
         return NULL;
     }
-    if (criterion < 0 || criterion > 2) {
-        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh), 1 (Yallop), or 2 (Shaukat).");
+    if (criterion < 0 || criterion > 1) {
+        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh) or 1 (Yallop). Criterion 2 (Shaukat) is not implemented.");
         return NULL;
     }
 
@@ -281,9 +272,7 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     free(c_results);
 
     // Build Visibilities dataclass instance.
-    const char* criterion_name = (criterion == 0) ? "Odeh" :
-                                 (criterion == 1) ? "Yallop" :
-                                 (criterion == 2) ? "Shaukat" : "Unknown";
+    const char* criterion_name = (criterion == 0) ? "Odeh" : "Yallop";
     PyObject* py_criterion = PyUnicode_FromString(criterion_name);
     if (!py_criterion) {
         Py_DECREF(py_dates);
@@ -339,8 +328,8 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
         PyErr_Format(PyExc_ValueError, "'days' must be in the range [1, %d].", MAX_VISIBILITY_DAYS);
         return NULL;
     }
-    if (criterion < 0 || criterion > 2) {
-        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh), 1 (Yallop), or 2 (Shaukat).");
+    if (criterion < 0 || criterion > 1) {
+        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh) or 1 (Yallop). Criterion 2 (Shaukat) is not implemented.");
         return NULL;
     }
     if (type != 'r' && type != 'c') {

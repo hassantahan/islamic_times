@@ -364,7 +364,7 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
             # Match original: compare raw delta, not absolute value
             try:
                 delta_h = (prayer.time - base.time).total_seconds() / 3600.0  # type: ignore[attr-defined]
-            except Exception:
+            except (TypeError, AttributeError):
                 delta_h = math.inf
 
             if delta_h == math.inf or delta_h > portion_mod or abs(observer.latitude.decimal) > abs(polar_lat):
@@ -393,7 +393,7 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
         if getattr(method, 'midnight_type', False):
             try:
                 next_fajr = find_tomorrow_time(observer_date, observer, method.fajr_angle)
-            except Exception:
+            except ArithmeticError:
                 next_fajr = math.inf
 
             midnight_float_next = (timedelta(hours=24) + next_sunrise - next_sunset).total_seconds() / 3600.0
@@ -404,7 +404,7 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
 
             try:
                 delta_h_next = (next_fajr - next_sunrise).total_seconds() / 3600.0  # type: ignore[operator]
-            except Exception:
+            except (TypeError, AttributeError):
                 delta_h_next = math.inf
 
             if delta_h_next == math.inf or delta_h_next > portion_next:
@@ -496,7 +496,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
             midnight_dt = te.time_midpoint(sun_info.sunset, find_tomorrow_time(observer_date, observer, method.fajr_angle))
         else:
             midnight_dt = te.time_midpoint(sun_info.sunset, find_tomorrow_time(observer_date, observer))
-    except Exception:
+    except (ArithmeticError, TypeError, ValueError):
         midnight_dt = math.inf
     
 
