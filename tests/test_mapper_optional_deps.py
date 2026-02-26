@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-import mapper
+import islamic_times.mapper as mapper
 
 
 def test_mapper_dependency_guard() -> None:
