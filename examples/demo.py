@@ -18,6 +18,7 @@ def main() -> None:
         find_local_tz=True,
     )
     print(location.prayer_times())
+    print(location.mecca())
     print(location.visibilities(days=3, criterion=1))
 
 

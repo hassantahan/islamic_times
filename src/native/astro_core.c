@@ -37,6 +37,8 @@ static PyMethodDef AstroCoreMethods[] = {
      "compute_visibilities(...) -> Visibilities\nCompute crescent visibility q-values and classes."},
     {"compute_visibilities_batch", compute_visibilities_batch_py, METH_VARARGS,
      "compute_visibilities_batch(...) -> numpy.ndarray\nBatch crescent visibility computation across coordinate arrays."},
+    {"compute_visibilities_batch_codes", compute_visibilities_batch_codes_py, METH_VARARGS,
+     "compute_visibilities_batch_codes(...) -> numpy.ndarray[uint8]\nBatch crescent visibility category-code computation."},
     {NULL, NULL, 0, NULL}
 };
 

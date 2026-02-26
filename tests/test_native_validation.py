@@ -124,6 +124,24 @@ def test_compute_visibilities_batch_rejects_unimplemented_criterion_two() -> Non
         )
 
 
+def test_compute_visibilities_batch_codes_returns_uint8_codes() -> None:
+    lat = np.array([43.651070, 40.7128], dtype=np.float64)
+    lon = np.array([-79.347015, -74.0060], dtype=np.float64)
+    result = fast_astro.compute_visibilities_batch_codes(
+        lat,
+        lon,
+        datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc),
+        2,
+        1,
+        0.0,
+        10.0,
+        15.0,
+        101.325,
+    )
+    assert result.dtype == np.uint8
+    assert result.shape == (4,)
+
+
 def test_jd_to_gregorian_rejects_nonpositive_jd() -> None:
     with pytest.raises(ValueError):
         fast_astro.jd_to_gregorian(-1.0, 0.0)

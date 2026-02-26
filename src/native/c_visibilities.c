@@ -205,6 +205,34 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
     }
 }
 
+/* Compact category-code mapper used by batch code API.
+ * Codes follow the ordered palette used in mapper:
+ *  0:-999, 1:-998, 2:-997, 3:-996, 4:-995,
+ *  criterion 0: 5:D, 6:C, 7:B, 8:A
+ *  criterion 1: 5:F, 6:E, 7:D, 8:C, 9:B, 10:A
+ */
+static uint8_t classify_visibility_code(double q, int criterion) {
+    if (q == -999.0) return 0;
+    if (q == -998.0) return 1;
+    if (q == -997.0) return 2;
+    if (q == -996.0) return 3;
+    if (q == -995.0) return 4;
+
+    if (criterion == 0) {
+        if (q >= 5.65) return 8;
+        if (q >= 2.0) return 7;
+        if (q >= -0.96) return 6;
+        return 5;
+    }
+
+    if (q > 0.216) return 10;
+    if (q > -0.014) return 9;
+    if (q > -0.160) return 8;
+    if (q > -0.232) return 7;
+    if (q > -0.293) return 6;
+    return 5;
+}
+
 /* Python wrapper: returns Visibilities dataclass instance. */
 PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     ENSURE_PYDATETIME();
@@ -326,25 +354,19 @@ void compute_visibilities_batch(datetime date, double utc_offset, double* lats, 
     }
 }
 
-/* Python wrapper: returns either raw q-values or category labels as NumPy array. */
-PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
-    ENSURE_PYDATETIME();
-    ENSURE_NUMPY();
-    
-    // Input parsing.
-    PyObject *lats_obj, *lons_obj, *new_moon_obj;
+static PyObject* compute_visibilities_batch_impl(
+    PyObject* lats_obj,
+    PyObject* lons_obj,
+    PyObject* new_moon_obj,
+    int days,
+    int criterion,
+    double utc_offset,
+    double elev,
+    double temp,
+    double press,
+    char type
+) {
     datetime new_moon_dt;
-    int days, criterion, type_code;
-    double utc_offset, elev, temp, press;
-    if (!PyArg_ParseTuple(args,
-            "OOO!iiddddC",
-            &lats_obj, &lons_obj, PyDateTimeAPI->DateTimeType, &new_moon_obj,
-            &days, &criterion,
-            &utc_offset, &elev, &temp, &press,
-            &type_code)) {
-        return NULL;
-    }
-    char type = (char)type_code;
     if (days <= 0 || days > MAX_VISIBILITY_DAYS) {
         PyErr_Format(PyExc_ValueError, "'days' must be in the range [1, %d].", MAX_VISIBILITY_DAYS);
         return NULL;
@@ -353,8 +375,8 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
         PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh) or 1 (Yallop). Criterion 2 (Shaukat) is not implemented.");
         return NULL;
     }
-    if (type != 'r' && type != 'c') {
-        PyErr_SetString(PyExc_ValueError, "Unknown type flag (expected 'r' or 'c')");
+    if (type != 'r' && type != 'c' && type != 'i') {
+        PyErr_SetString(PyExc_ValueError, "Unknown type flag (expected 'r', 'c', or 'i')");
         return NULL;
     }
 
@@ -510,10 +532,85 @@ PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
             }
             Py_DECREF(py_str);
         }
+    // CATEGORY codes
+    } else if (type == 'i') {
+        arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_UINT8);
+        if (!arr) {
+            Py_DECREF(lats_arr);
+            Py_DECREF(lons_arr);
+            free(results);
+            return NULL;
+        }
+
+        uint8_t* code_ptr = (uint8_t*)PyArray_DATA((PyArrayObject*)arr);
+        for (int i = 0; i < total; ++i) {
+            code_ptr[i] = classify_visibility_code(results[i].q_value, criterion);
+        }
     }
         
     Py_DECREF(lats_arr);
     Py_DECREF(lons_arr);
     free(results);
     return (PyObject*)arr;
+}
+
+/* Python wrapper: returns either raw q-values or category labels as NumPy array. */
+PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args) {
+    ENSURE_PYDATETIME();
+    ENSURE_NUMPY();
+
+    PyObject *lats_obj, *lons_obj, *new_moon_obj;
+    int days, criterion, type_code;
+    double utc_offset, elev, temp, press;
+    if (!PyArg_ParseTuple(args,
+            "OOO!iiddddC",
+            &lats_obj, &lons_obj, PyDateTimeAPI->DateTimeType, &new_moon_obj,
+            &days, &criterion,
+            &utc_offset, &elev, &temp, &press,
+            &type_code)) {
+        return NULL;
+    }
+
+    return compute_visibilities_batch_impl(
+        lats_obj,
+        lons_obj,
+        new_moon_obj,
+        days,
+        criterion,
+        utc_offset,
+        elev,
+        temp,
+        press,
+        (char)type_code
+    );
+}
+
+/* Python wrapper: returns category codes as uint8 NumPy array. */
+PyObject* compute_visibilities_batch_codes_py(PyObject* self, PyObject* args) {
+    ENSURE_PYDATETIME();
+    ENSURE_NUMPY();
+
+    PyObject *lats_obj, *lons_obj, *new_moon_obj;
+    int days, criterion;
+    double utc_offset, elev, temp, press;
+    if (!PyArg_ParseTuple(args,
+            "OOO!iidddd",
+            &lats_obj, &lons_obj, PyDateTimeAPI->DateTimeType, &new_moon_obj,
+            &days, &criterion,
+            &utc_offset, &elev, &temp, &press)) {
+        return NULL;
+    }
+
+    return compute_visibilities_batch_impl(
+        lats_obj,
+        lons_obj,
+        new_moon_obj,
+        days,
+        criterion,
+        utc_offset,
+        elev,
+        temp,
+        press,
+        'i'
+    );
 }

@@ -1,50 +1,37 @@
 # Coding Standards
 
 ## General Principles
-- Keep modifications minimal and task-focused.
-- Match existing naming, module boundaries, and project idioms.
-- Preserve behavior unless a task explicitly asks for a behavior change.
 
-## Type Hints (Required)
-- All new or modified Python functions and methods must include parameter and return type hints.
-- New module-level constants should be explicitly typed when practical.
-- Prefer specific container types over ambiguous untyped containers.
-- Avoid `# type: ignore` where possible.
-- If `# type: ignore` is necessary, keep scope narrow and add a short rationale comment.
+- Keep modifications scoped to the request.
+- Preserve public behavior unless a task explicitly calls for behavior change.
+- Prefer readable, explicit code over compact but opaque logic.
 
-## Docstrings (Required)
-- Required for all public classes, methods, and functions.
-- Required for non-trivial internal helpers.
-- Use NumPy-style sections for new/updated Python docstrings.
-- Include, as applicable:
-  - Short purpose statement
-  - `Parameters` with units/semantics
-  - `Returns` with value meaning and units
-  - `Raises` for invalid input paths
-  - `Notes` for numerical assumptions or algorithm limits
+## Python Requirements
 
-## Comments (Required When Logic Is Non-Obvious)
-- Add comments for algorithmic intent, domain assumptions, and edge-case handling.
-- Do not add comments for obvious line-by-line operations.
-- For astronomy/prayer calculations, explain why a branch/formula is used when not self-evident.
+- New and modified functions must include parameter and return type hints.
+- Public and non-trivial functions require docstrings.
+- Use NumPy-style sections in new/updated docstrings (`Parameters`, `Returns`, `Raises`, `Notes`) where applicable.
+- Avoid broad `except Exception` blocks; translate only expected domain failures.
+- Avoid `# type: ignore`; if required, keep scope narrow and include a short rationale.
 
-## Validation and Error Handling
-- Keep input validation explicit and fail early.
-- Use `TypeError` for wrong types and `ValueError` for invalid ranges/values.
-- Keep error messages specific and actionable.
+## C Extension Requirements
 
-## Python Style Alignment
-- Prefer readable explicit logic over compact clever constructs.
-- Keep function responsibilities narrow and composable.
-- Preserve existing public naming and data-shape conventions unless explicitly changing API.
+- Keep headers and implementations synchronized (`src/native/include/*.h` and `src/native/*.c`).
+- Keep Python wrapper contracts aligned with native contracts (argument order, units, error behavior).
+- Add concise contract comments for non-obvious functions (inputs, units, status/error behavior).
+- Prefer bounded loops and explicit failure paths over open-ended convergence loops.
 
-## C-Extension Style Alignment
-- Keep C and Python interfaces synchronized (names, argument order, expected units).
-- When changing C calculations, update related comments and assumptions in code.
-- Keep header/source contracts (`src/native/include/` and `src/native/`) in sync.
-- Prefer deterministic behavior and explicit boundary checks.
-- For externally consumed native functions/wrappers, add concise contract comments in headers and wrappers (inputs, units, return/failure behavior).
+## Comments and Documentation
 
-## Domain and Terminology Consistency
-- Preserve established Islamic astronomy/prayer terminology used by the project.
-- Maintain unit consistency across APIs, dataclasses, and output formatting.
+- Add comments only for non-obvious intent, assumptions, or edge-case handling.
+- Remove stale TODOs or replace them with clear issue references and scope.
+- Keep public docs in `README.md`, `CONTRIBUTING.md`, and `docs/` user-focused.
+- Do not add internal work-log documents to the repository unless explicitly requested.
+
+## Terminology and Units
+
+- Maintain established Islamic astronomy and prayer-time terminology.
+- Keep units consistent across Python and C boundaries:
+  - Angles: decimal degrees (unless explicitly documented otherwise)
+  - UTC offsets: hours
+  - Distances: kilometers
