@@ -43,8 +43,11 @@ int compute_event_hour_angle(
 ) {
     double declination_rad = RADIANS(declination_deg);
     double horizon_altitude_rad = RADIANS(horizon_altitude_deg);
-    double cos_h0 = (sin(horizon_altitude_rad) - sin(latitude_rad) * sin(declination_rad)) /
-                    (cos(latitude_rad) * cos(declination_rad));
+    double lat_sin = sin(latitude_rad);
+    double lat_cos = cos(latitude_rad);
+    double dec_sin = sin(declination_rad);
+    double dec_cos = cos(declination_rad);
+    double cos_h0 = (sin(horizon_altitude_rad) - lat_sin * dec_sin) / (lat_cos * dec_cos);
 
     if (!(cos_h0 < 1.0 && cos_h0 > -1.0)) {
         return -1;
@@ -65,7 +68,10 @@ double refine_altitude_event_fraction(
     const double right_ascension_deg[3]
 ) {
     double event_fraction = initial_fraction;
-    double horizon_altitude_rad = RADIANS(horizon_altitude_deg);
+    double target_altitude_rad = RADIANS(horizon_altitude_deg);
+    double target_altitude_deg = horizon_altitude_deg;
+    double lat_sin = sin(latitude_rad);
+    double lat_cos = cos(latitude_rad);
 
     for (int i = 0; i < 3; ++i) {
         double theta_event_deg = normalize_angle(sidereal_time_deg + 360.985647 * event_fraction);
@@ -88,15 +94,15 @@ double refine_altitude_event_fraction(
         double lha_event_rad = RADIANS(
             normalize_angle(theta_event_deg - (-local_longitude_deg) - interp_ra_event_deg)
         );
+        double dec_sin = sin(interp_dec_event_rad);
+        double dec_cos = cos(interp_dec_event_rad);
+        double lha_sin = sin(lha_event_rad);
         double event_altitude_deg = DEGREES(
-            asin(
-                sin(latitude_rad) * sin(interp_dec_event_rad) +
-                cos(latitude_rad) * cos(interp_dec_event_rad) * cos(lha_event_rad)
-            )
+            asin(lat_sin * dec_sin + lat_cos * dec_cos * cos(lha_event_rad))
         );
 
-        double delta_m = (event_altitude_deg - DEGREES(horizon_altitude_rad)) /
-                         (360.0 * cos(interp_dec_event_rad) * cos(latitude_rad) * sin(lha_event_rad));
+        double delta_m = (event_altitude_deg - target_altitude_deg) /
+                         (360.0 * dec_cos * lat_cos * lha_sin);
         event_fraction += delta_m;
     }
 
@@ -112,11 +118,15 @@ datetime find_event_on_reference_day(
     void* solver_ctx
 ) {
     double temp_utc_offset = utc_offset;
+    datetime reference_day = reference_dt;
+    reference_day.hour = 0;
+    reference_day.minute = 0;
+    reference_day.second = 0;
+    reference_day.microsecond = 0;
+
     if (utc_offset == 0.0) {
         temp_utc_offset = floor(longitude_deg / 15.0) - 1.0;
     }
-
-    int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
 
     for (int i = 0; i <= max_search_days; ++i) {
         datetime shifted_dt = add_days(reference_dt, i);
@@ -128,14 +138,12 @@ datetime find_event_on_reference_day(
         }
 
         datetime normalized_event_dt = add_days(raw_event_dt, (double)i + temp_utc_offset / 24.0);
-        int normalized_doy = day_of_year(
-            normalized_event_dt.year,
-            normalized_event_dt.month,
-            normalized_event_dt.day
-        );
-
-        if ((normalized_doy < reference_doy && raw_event_dt.year == reference_dt.year) ||
-            (normalized_event_dt.year < reference_dt.year)) {
+        datetime normalized_event_day = normalized_event_dt;
+        normalized_event_day.hour = 0;
+        normalized_event_day.minute = 0;
+        normalized_event_day.second = 0;
+        normalized_event_day.microsecond = 0;
+        if (compare_datetime(&normalized_event_day, &reference_day) < 0) {
             continue;
         }
 

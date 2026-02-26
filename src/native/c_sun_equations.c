@@ -368,6 +368,12 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
 
 
 /* Python wrapper helpers for constructing dataclass-compatible objects. */
+#if PY_VERSION_HEX >= 0x03090000
+#define CALL_ONE_ARG(callable_obj, arg_obj) PyObject_CallOneArg((callable_obj), (arg_obj))
+#else
+#define CALL_ONE_ARG(callable_obj, arg_obj) PyObject_CallFunctionObjArgs((callable_obj), (arg_obj), NULL)
+#endif
+
 static PyObject* create_angle_obj(AstroCoreState* state, double value) {
     PyObject* py_value = PyFloat_FromDouble(value);
     PyObject* angle_obj;
@@ -375,7 +381,7 @@ static PyObject* create_angle_obj(AstroCoreState* state, double value) {
         return NULL;
     }
 
-    angle_obj = PyObject_CallFunctionObjArgs(state->angle_type, py_value, NULL);
+    angle_obj = CALL_ONE_ARG(state->angle_type, py_value);
     Py_DECREF(py_value);
     return angle_obj;
 }
@@ -387,7 +393,7 @@ static PyObject* create_ra_obj_from_degrees(AstroCoreState* state, double value_
         return NULL;
     }
 
-    ra_obj = PyObject_CallFunctionObjArgs(state->right_ascension_type, py_hours, NULL);
+    ra_obj = CALL_ONE_ARG(state->right_ascension_type, py_hours);
     Py_DECREF(py_hours);
     return ra_obj;
 }
@@ -414,6 +420,8 @@ error:
     Py_XDECREF(unit_obj);
     return dist_obj;
 }
+
+#undef CALL_ONE_ARG
 
 PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs) {
     #define SET_TUPLE_ITEM_OR_FAIL(tuple_obj, index, value_expr)                 \

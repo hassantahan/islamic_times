@@ -58,6 +58,8 @@ ISLAMIC_DAYS = {
 _TZ_FINDER: Optional[Any] = None
 _TZ_NAME_CACHE: Dict[Tuple[float, float], str] = {}
 _UTC_OFFSET_CACHE: Dict[Tuple[str, int], float] = {}
+_TZ_OBJECT_CACHE: Dict[str, Any] = {}
+_PYTZ_TIMEZONE_FACTORY: Optional[Any] = None
 _TZ_COORD_ROUND_DIGITS = 4
 
 
@@ -70,11 +72,21 @@ def _get_timezone_finder() -> Any:
     return _TZ_FINDER
 
 
+def _get_pytz_timezone_factory() -> Any:
+    """Return cached `pytz.timezone` callable."""
+    global _PYTZ_TIMEZONE_FACTORY
+    if _PYTZ_TIMEZONE_FACTORY is None:
+        from pytz import timezone as pytz_timezone
+        _PYTZ_TIMEZONE_FACTORY = pytz_timezone
+    return _PYTZ_TIMEZONE_FACTORY
+
+
 def _cleanup_timezone_finder() -> None:
     """Release timezonefinder file resources before interpreter teardown."""
     global _TZ_FINDER
     tf = _TZ_FINDER
     _TZ_FINDER = None
+    _TZ_OBJECT_CACHE.clear()
     if tf is None:
         return
 
@@ -345,8 +357,6 @@ def find_utc_offset(lat: float, long: float, day: datetime) -> Tuple[str, float]
     timezone lookup plus timezone-localization work. Call it sparingly and cache
     results when many calculations reuse the same location/date.
     """
-    from pytz import timezone as pytz_timezone
-
     if not isinstance(day, datetime):
         raise TypeError(f"'day' must be of type `datetime`, but got `{type(day).__name__}`.")
 
@@ -370,7 +380,12 @@ def find_utc_offset(lat: float, long: float, day: datetime) -> Tuple[str, float]
     if cached_offset is not None:
         return timezone_str, cached_offset
 
-    timezone = pytz_timezone(timezone_str)
+    timezone = _TZ_OBJECT_CACHE.get(timezone_str)
+    if timezone is None:
+        timezone_factory = _get_pytz_timezone_factory()
+        timezone = timezone_factory(timezone_str)
+        _TZ_OBJECT_CACHE[timezone_str] = timezone
+
     localized_datetime = timezone.localize(datetime.combine(day_date, datetime.min.time()))
     utc_offset = localized_datetime.utcoffset()
     if utc_offset is None:

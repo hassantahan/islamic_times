@@ -554,9 +554,42 @@ Phase 3 execution status (implemented):
 3. Done: legacy Python implementations are now isolated under `src/islamic_times/_legacy_py_impl/` and loaded lazily by deprecated facades.
 4. Done: native extension type caches now live in per-module state (`m_size` + `traverse`/`clear`/`free`) and no longer depend on process-exit cleanup.
 
+### Phase 4 (Stabilization + optimization)
+
+Phase 4 execution status (implemented):
+
+1. Added targeted native hot-loop optimizations in shared event-solver helpers (`src/native/c_event_solver.c`):
+   - Precompute invariant trigonometric values in altitude refinement loops.
+   - Remove redundant degree-radian reconversion in `delta_m` updates.
+   - Use direct day-level datetime comparisons in day-search helper to reduce repeated `day_of_year` branching.
+2. Reduced Python C-API call overhead in native wrappers:
+   - Use `PyObject_CallOneArg` where available for one-argument dataclass constructors in sun/moon wrappers.
+3. Reduced timezone lookup overhead in Python time helpers (`src/islamic_times/time_equations.py`):
+   - Added cached `pytz.timezone` factory and per-timezone object cache.
+4. Added reproducible performance probe script:
+   - `examples/perf_phase4_probe.py`
+
+Measured probe snapshot (Windows `.venv`, CPython 3.13, same machine/session):
+
+- Baseline probe (pre-change snapshot, same loop structure):
+  - `compute_sun`: `6.4689 µs/call`
+  - `compute_moon`: `5.8760 µs/call`
+  - `find_proper_suntime`: `6.2270 µs/call`
+  - `find_proper_moontime`: `12.0292 µs/call`
+  - `compute_visibilities_batch`: `23.4836 ms/call`
+- Post-change probe (same probe):
+  - `compute_sun`: `6.2658 µs/call` (~3.1% faster)
+  - `compute_moon`: `5.8284 µs/call` (~0.8% faster)
+  - `find_proper_suntime`: `6.2220 µs/call` (flat)
+  - `find_proper_moontime`: `12.0750 µs/call` (within noise)
+  - `compute_visibilities_batch`: `23.1195 ms/call` (~1.5% faster)
+- New phase-4 probe (`examples/perf_phase4_probe.py --json`) additionally reports:
+  - `find_utc_offset_varying_days_per_call_us`: `1291.26`
+  - `find_utc_offset_warm_cache_per_call_us`: `0.617`
+
 ## Assumptions and Defaults
 
-1. The initial audit pass was review/documentation-only; subsequent implementation updates are tracked in the Phase 3 execution status above.
+1. The initial audit pass was review/documentation-only; subsequent implementation updates are tracked in the phase execution status sections above.
 2. Public API stability is preferred unless a correctness defect requires contract change.
 3. Numeric correctness takes precedence over micro-optimizations.
 4. Performance recommendations are prioritized by practical user impact (not purely theoretical gains).
