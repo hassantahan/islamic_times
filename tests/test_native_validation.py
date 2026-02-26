@@ -126,3 +126,73 @@ def test_compute_visibilities_batch_rejects_unimplemented_criterion_two() -> Non
 def test_jd_to_gregorian_rejects_nonpositive_jd() -> None:
     with pytest.raises(ValueError):
         fast_astro.jd_to_gregorian(-1.0, 0.0)
+
+
+def test_moon_wrappers_accept_integer_nutation_sequences() -> None:
+    dt = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+    jd = fast_astro.gregorian_to_jd(dt, 0.0)
+
+    transit = fast_astro.find_moon_transit(
+        jd,
+        73.0,
+        43.651070,
+        -79.347015,
+        10.0,
+        15.0,
+        101.325,
+        0.0,
+        [0, 0, 0],
+        [23, 23, 23],
+    )
+    moontime = fast_astro.find_proper_moontime(
+        jd,
+        73.0,
+        43.651070,
+        -79.347015,
+        10.0,
+        15.0,
+        101.325,
+        0.0,
+        [0, 0, 0],
+        [23, 23, 23],
+        "s",
+    )
+
+    assert isinstance(transit, datetime)
+    assert isinstance(moontime, datetime)
+
+
+def test_find_proper_suntime_rejects_invalid_event_code() -> None:
+    dt = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+    jd = fast_astro.gregorian_to_jd(dt, 0.0)
+    with pytest.raises(ValueError):
+        fast_astro.find_proper_suntime(
+            jd,
+            43.651070,
+            -79.347015,
+            10.0,
+            15.0,
+            101.325,
+            0.0,
+            0.8333333333,
+            "x",
+        )
+
+
+def test_find_proper_moontime_rejects_invalid_event_code() -> None:
+    dt = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+    jd = fast_astro.gregorian_to_jd(dt, 0.0)
+    with pytest.raises(ValueError):
+        fast_astro.find_proper_moontime(
+            jd,
+            73.0,
+            43.651070,
+            -79.347015,
+            10.0,
+            15.0,
+            101.325,
+            0.0,
+            [0.0, 0.0, 0.0],
+            [23.0, 23.0, 23.0],
+            "x",
+        )

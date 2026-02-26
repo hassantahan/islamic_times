@@ -69,6 +69,44 @@ def test_find_utc_offset_returns_timezone_and_offset() -> None:
     assert -12.0 <= offset_hours <= 14.0
 
 
+def test_find_utc_offset_raises_clear_error_when_timezone_unresolved(monkeypatch: pytest.MonkeyPatch) -> None:
+    class DummyFinder:
+        def certain_timezone_at(self, lat: float, lng: float) -> None:
+            return None
+
+        def timezone_at(self, lat: float, lng: float) -> None:
+            return None
+
+    monkeypatch.setattr(te, "_TZ_NAME_CACHE", {})
+    monkeypatch.setattr(te, "_UTC_OFFSET_CACHE", {})
+    monkeypatch.setattr(te, "_get_timezone_finder", lambda: DummyFinder())
+
+    with pytest.raises(ValueError, match="Unable to determine timezone"):
+        te.find_utc_offset(0.0, -160.0, datetime(2025, 1, 15))
+
+
+def test_find_utc_offset_caches_timezone_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    class DummyFinder:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def certain_timezone_at(self, lat: float, lng: float) -> str:
+            self.calls += 1
+            return "UTC"
+
+    finder = DummyFinder()
+
+    monkeypatch.setattr(te, "_TZ_NAME_CACHE", {})
+    monkeypatch.setattr(te, "_UTC_OFFSET_CACHE", {})
+    monkeypatch.setattr(te, "_get_timezone_finder", lambda: finder)
+
+    first = te.find_utc_offset(43.65107, -79.347015, datetime(2025, 1, 15))
+    second = te.find_utc_offset(43.65107, -79.347015, datetime(2025, 1, 15))
+
+    assert first == second
+    assert finder.calls == 1
+
+
 def test_time_midpoint_happy_path() -> None:
     dt1 = datetime(2025, 6, 1, 18, 0, 0, tzinfo=timezone.utc)
     dt2 = datetime(2025, 6, 2, 0, 0, 0, tzinfo=timezone.utc)

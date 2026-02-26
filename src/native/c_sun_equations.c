@@ -8,6 +8,7 @@
 #define OBLIQUITY_TERMS_SIZE 10
 #define SUN_NUTATION_COEFFICIENTS_LOOP 63
 #define SUN_NUTATION_ARGUMENTS_LOOP 5
+#define MAX_EVENT_SEARCH_DAYS 370
 /* Keep loop constants aligned with the tabulated term dimensions above. */
 
 
@@ -683,8 +684,7 @@ datetime find_proper_suntime(double jd, double utc_offset, double latitude, doub
     int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
 
     int status = 0;
-    int i = 0;
-    while(1) {
+    for (int i = 0; i <= MAX_EVENT_SEARCH_DAYS; ++i) {
         // Shift reference datetime
         datetime new_datetime;
         new_datetime = add_days(reference_dt, i);
@@ -706,12 +706,13 @@ datetime find_proper_suntime(double jd, double utc_offset, double latitude, doub
 
         if ((temp_suntime_doy < reference_doy && temp_suntime.year == reference_dt.year) || 
                                 (temp_suntime_with_estimate_offset.year < reference_dt.year)) {
-            i++;
+            continue;
         }
         else {
             return add_days(temp_suntime, utc_offset / 24.0);
         }
     }
+    return INVALID_DATETIME;
 }
 
 /* Python wrapper for find_proper_suntime. */
@@ -827,8 +828,7 @@ datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double lat
     int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
 
     int status = 0;
-    int i = 0;
-    while(1) {
+    for (int i = 0; i <= MAX_EVENT_SEARCH_DAYS; ++i) {
         // Shift reference datetime
         datetime new_datetime;
         new_datetime = add_days(reference_dt, i);
@@ -848,10 +848,11 @@ datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double lat
 
         if ((temp_suntime_doy < reference_doy && temp_suntime.year == reference_dt.year) || 
                                 (temp_suntime_with_estimate_offset.year < reference_dt.year)) {
-            i++;
+            continue;
         }
         else {
             return add_days(temp_suntime, utc_offset / 24.0);
         }
     }
+    return INVALID_DATETIME;
 }

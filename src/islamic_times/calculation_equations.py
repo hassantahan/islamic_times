@@ -19,7 +19,7 @@ def sin(angle: float) -> float:
     Returns:
         float: The tangent of the angle.
     '''
-    return np.sin(np.radians(angle))
+    return math.sin(math.radians(angle))
 
 def cos(angle: float) -> float:
     '''cos(x) function that auto-converts the argument from degrees to radians before evaluating.
@@ -30,7 +30,7 @@ def cos(angle: float) -> float:
     Returns:
         float: The cosine of the angle.
     '''
-    return np.cos(np.radians(angle))
+    return math.cos(math.radians(angle))
 
 def calculate_angle_diff(azimuth1: float, altitude1: float, azimuth2: float, altitude2: float) -> float:
     '''Difference between two angles in a radial coordinate system using the haversine formula. 

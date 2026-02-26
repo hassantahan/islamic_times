@@ -9,6 +9,7 @@
 #define NUM_CORRECTION_TERMS 25
 #define NUM_A_SIN_TERMS 14
 #define NUM_A_COEFFS 14
+#define MAX_EVENT_SEARCH_DAYS 370
 
 /* ================================
    Nutation, Obliquity, and Moon Phases array terms
@@ -819,23 +820,26 @@ PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
     (void)unused_deltaT;
     
     if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 || !PySequence_Check(true_obliquity_obj) || PySequence_Size(true_obliquity_obj) != 3) {
-        PyErr_SetString(PyExc_TypeError, "Expected two sequences of 3 floats.");
+        PyErr_SetString(PyExc_TypeError, "Expected two sequences of 3 numeric values.");
         return NULL;
     }
 
     for (int i = 0; i < 3; ++i) {
         PyObject* item1 = PySequence_GetItem(deltaPsi_obj, i);
         PyObject* item2 = PySequence_GetItem(true_obliquity_obj, i);
-
-        if (!PyFloat_Check(item1) || !PyFloat_Check(item2)) {
+        if (!item1 || !item2) {
             Py_XDECREF(item1);
             Py_XDECREF(item2);
-            PyErr_SetString(PyExc_TypeError, "All elements must be floats.");
             return NULL;
         }
 
         deltaPsi[i] = PyFloat_AsDouble(item1);
         true_obliquity[i] = PyFloat_AsDouble(item2);
+        if (PyErr_Occurred()) {
+            Py_DECREF(item1);
+            Py_DECREF(item2);
+            return NULL;
+        }
 
         Py_DECREF(item1);
         Py_DECREF(item2);
@@ -966,8 +970,7 @@ datetime find_proper_moontime(double jd, double utc_offset, double latitude, dou
     int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
 
     int status = 0;
-    int i = 0;
-    while(1) {
+    for (int i = 0; i <= MAX_EVENT_SEARCH_DAYS; ++i) {
         // Shift reference datetime
         datetime new_datetime;
         new_datetime = add_days(reference_dt, i);
@@ -987,12 +990,13 @@ datetime find_proper_moontime(double jd, double utc_offset, double latitude, dou
 
         if ((temp_moontime_doy < reference_doy && temp_moontime.year == reference_dt.year) || 
                                 (temp_moontime_with_estimate_offset.year < reference_dt.year)) {
-            i++;
+            continue;
         }
         else {
             return add_days(temp_moontime, utc_offset / 24.0);
         }
     }
+    return INVALID_DATETIME;
 }
 
 /* Python wrapper for find_proper_moontime. */
@@ -1014,7 +1018,7 @@ PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
     if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 ||
         !PySequence_Check(true_obliquity_obj) || PySequence_Size(true_obliquity_obj) != 3) {
 
-        PyErr_SetString(PyExc_TypeError, "Expected two sequences of 3 floats.");
+        PyErr_SetString(PyExc_TypeError, "Expected two sequences of 3 numeric values.");
         return NULL;
     }
 
@@ -1023,16 +1027,19 @@ PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
     for (int i = 0; i < 3; ++i) {
         PyObject* item1 = PySequence_GetItem(deltaPsi_obj, i);
         PyObject* item2 = PySequence_GetItem(true_obliquity_obj, i);
-
-        if (!PyFloat_Check(item1) || !PyFloat_Check(item2)) {
+        if (!item1 || !item2) {
             Py_XDECREF(item1);
             Py_XDECREF(item2);
-            PyErr_SetString(PyExc_TypeError, "All elements must be floats.");
             return NULL;
         }
 
         deltaPsi[i] = PyFloat_AsDouble(item1);
         true_obliquity[i] = PyFloat_AsDouble(item2);
+        if (PyErr_Occurred()) {
+            Py_DECREF(item1);
+            Py_DECREF(item2);
+            return NULL;
+        }
 
         Py_DECREF(item1);
         Py_DECREF(item2);

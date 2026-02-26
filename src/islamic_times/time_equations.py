@@ -12,11 +12,10 @@ calculation layers, including:
 """
 
 import math
-import pytz
-from typing import Tuple, Dict
+import atexit
+from typing import Tuple, Dict, Optional, Any
 from warnings import warn
 from datetime import datetime, time
-from timezonefinder import TimezoneFinder
 from islamic_times.it_dataclasses import Angle
 
 # Constants used in astronomical calculations.
@@ -55,6 +54,42 @@ ISLAMIC_DAYS = {
         'Friday': 'al-Jumuʿah',
         'Saturday': 'al-Sabt',
     }
+
+_TZ_FINDER: Optional[Any] = None
+_TZ_NAME_CACHE: Dict[Tuple[float, float], str] = {}
+_UTC_OFFSET_CACHE: Dict[Tuple[str, int], float] = {}
+_TZ_COORD_ROUND_DIGITS = 4
+
+
+def _get_timezone_finder() -> Any:
+    """Return a lazily-initialized TimezoneFinder singleton."""
+    global _TZ_FINDER
+    if _TZ_FINDER is None:
+        from timezonefinder import TimezoneFinder
+        _TZ_FINDER = TimezoneFinder()
+    return _TZ_FINDER
+
+
+def _cleanup_timezone_finder() -> None:
+    """Release timezonefinder file resources before interpreter teardown."""
+    global _TZ_FINDER
+    tf = _TZ_FINDER
+    _TZ_FINDER = None
+    if tf is None:
+        return
+
+    for attr_name in ("boundaries", "holes"):
+        polygon_array = getattr(tf, attr_name, None)
+        coord_accessor = getattr(polygon_array, "coordinates", None)
+        cleanup = getattr(coord_accessor, "cleanup", None)
+        if callable(cleanup):
+            try:
+                cleanup()
+            except Exception:
+                pass
+
+
+atexit.register(_cleanup_timezone_finder)
 
 def fraction_of_day(date: datetime) -> float:
     """Return elapsed fraction of the civil day for a datetime.
@@ -405,23 +440,42 @@ def find_utc_offset(lat: float, long: float, day: datetime) -> Tuple[str, float]
     timezone lookup plus timezone-localization work. Call it sparingly and cache
     results when many calculations reuse the same location/date.
     """
-    # Create a TimezoneFinder object
-    tf = TimezoneFinder()
+    from pytz import timezone as pytz_timezone
 
-    # Get the timezone name for the coordinates
-    timezone_str = tf.certain_timezone_at(lat=lat, lng=long)
+    if not isinstance(day, datetime):
+        raise TypeError(f"'day' must be of type `datetime`, but got `{type(day).__name__}`.")
 
-    # Get the timezone object for the given name
-    timezone = pytz.timezone(timezone_str) # type: ignore
+    day_date = day.date()
+    coord_key = (round(lat, _TZ_COORD_ROUND_DIGITS), round(long, _TZ_COORD_ROUND_DIGITS))
+    timezone_str = _TZ_NAME_CACHE.get(coord_key)
 
-    # Localize the given date with the timezone
-    localized_datetime = timezone.localize(datetime.combine(day, datetime.min.time()))
+    if timezone_str is None:
+        tf = _get_timezone_finder()
+        timezone_str = tf.certain_timezone_at(lat=lat, lng=long)
+        if timezone_str is None:
+            timezone_str = tf.timezone_at(lat=lat, lng=long)
+        if not timezone_str:
+            raise ValueError(
+                f"Unable to determine timezone for latitude={lat}, longitude={long}, date={day_date.isoformat()}."
+            )
+        _TZ_NAME_CACHE[coord_key] = timezone_str
 
-    # Get the UTC offset for the given timezone and date
+    offset_key = (timezone_str, day_date.toordinal())
+    cached_offset = _UTC_OFFSET_CACHE.get(offset_key)
+    if cached_offset is not None:
+        return timezone_str, cached_offset
+
+    timezone = pytz_timezone(timezone_str)
+    localized_datetime = timezone.localize(datetime.combine(day_date, datetime.min.time()))
     utc_offset = localized_datetime.utcoffset()
+    if utc_offset is None:
+        raise ValueError(
+            f"Unable to resolve UTC offset for timezone='{timezone_str}' on date={day_date.isoformat()}."
+        )
 
-    # Calculate the UTC offset in hours
-    return (timezone_str, utc_offset.total_seconds() / 3600) # type: ignore
+    offset_hours = utc_offset.total_seconds() / 3600.0
+    _UTC_OFFSET_CACHE[offset_key] = offset_hours
+    return timezone_str, offset_hours
 
 # Finds the middle time between two datetimes. Used to find islamic midnight (usually either between sunset & sunrise, or sunrise & fajr).
 def time_midpoint(datetime1: datetime, datetime2: datetime) -> datetime:
