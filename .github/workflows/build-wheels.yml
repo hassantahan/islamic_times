@@ -40,8 +40,15 @@ jobs:
 
       - name: Move wheels to dist folder
         run: |
-          mkdir -p dist
-          cp wheelhouse/*.whl dist/ || true
+          python - <<'PY'
+          import glob
+          import os
+          import shutil
+
+          os.makedirs("dist", exist_ok=True)
+          for wheel in glob.glob("wheelhouse/*.whl"):
+              shutil.copy2(wheel, "dist")
+          PY
 
       - name: Upload built distributions
         uses: actions/upload-artifact@v4

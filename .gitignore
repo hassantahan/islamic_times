@@ -1,6 +1,8 @@
 # Python artifacts
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.py[cod]
 *.log
 *.tmp
@@ -16,23 +18,45 @@ dist/
 *.tar.gz
 *.pyd
 *.so
+.coverage
 
 # setuptools_scm version file
-islamic_times/_version.py
+src/islamic_times/_version.py
 
 # Local junk
 misc/
-shp_files/
 maps/
+mapper_logs/
 
-# Virtualenvs
+# Virtual envs
 .env/
 .venv/
+env/
+venv/
 
 # Editor/IDE
 .vscode/
 .idea/
 *.swp
 
-# Editing out maps
-*map*/
+# Generated map outputs
+test_maps/
+
+# AI Agent Directories and Rule sets not in .agents/ or AGENTS.md
+.claude/
+.clinerules
+.codex/
+.cursor/
+.github/agents/
+
+.clinerules
+.cursorrules
+.roorules
+
+CLAUDE.md
+CODEX.md
+copilot-instructions.md
+
+mcp/
+.mcp/
+.mcp
