@@ -587,6 +587,34 @@ Measured probe snapshot (Windows `.venv`, CPython 3.13, same machine/session):
   - `find_utc_offset_varying_days_per_call_us`: `1291.26`
   - `find_utc_offset_warm_cache_per_call_us`: `0.617`
 
+### Phase 5 (Pre-mapper cleanup: low-severity and contract consistency)
+
+Phase 5 execution status (implemented):
+
+1. Addressed method-selection lookup overhead and duplication (`CR-015`):
+   - Added module-level prayer-method alias map in `src/islamic_times/islamic_times.py`.
+   - `set_prayer_method` now uses constant-time alias lookup instead of linear scans.
+2. Consolidated stale-state guard logic (`CR-016`):
+   - Added `_ensure_state_ready(...)` in `ITLocation`.
+   - Replaced repeated stale-state checks across `calculate_prayer_times`, `dates_times`, `prayer_times`, `sun`, and `moon`.
+3. Clarified solar weather-parameter contract (`CR-017`):
+   - Added explicit comments in `src/native/c_sun_equations.c` and `src/native/include/c_sun_equations.h` that temperature/pressure are currently reserved for future solar refraction modeling.
+   - Added matching notes in `src/islamic_times/sun_equations.py` docstrings.
+4. Removed moon magic sentinel for nutation reuse (`CR-018`):
+   - Replaced sentinel-based `-123456.0` flow with explicit optional-buffer semantics in native moon solvers (`src/native/c_moon_equations.c`, `src/native/include/c_moon_equations.h`).
+   - Python wrappers now accept either:
+     - `None, None` (auto-resolve solar terms), or
+     - two numeric length-3 sequences (caller-provided reuse path).
+   - Updated `src/native/c_visibilities.c` to pass `NULL` for auto mode.
+   - Updated Python integration API in `src/islamic_times/moon_equations.py` to use `None` default and retained backward compatibility for legacy `np.inf` usage.
+
+Validation snapshot for Phase 5:
+
+- `cmd.exe /c ".venv\Scripts\python.exe setup.py build_ext --inplace"` passed.
+- `cmd.exe /c ".venv\Scripts\python.exe -m pytest -q tests\test_native_validation.py tests\test_transit_day_normalization.py tests\test_itlocation_methods.py tests\test_itlocation_state_transitions.py tests\test_error_translation.py"` passed.
+- `cmd.exe /c ".venv\Scripts\python.exe -m pytest -q"` passed (full test suite).
+- `cmd.exe /c ".venv\Scripts\python.exe -m py_compile src\islamic_times\islamic_times.py src\islamic_times\moon_equations.py src\islamic_times\sun_equations.py"` passed.
+
 ## Assumptions and Defaults
 
 1. The initial audit pass was review/documentation-only; subsequent implementation updates are tracked in the phase execution status sections above.
@@ -596,8 +624,8 @@ Measured probe snapshot (Windows `.venv`, CPython 3.13, same machine/session):
 
 ## Completion Status
 
-Status: **Complete for requested scope**
+Status: **Complete for non-mapper scope**
 
 - Core Python and native C code paths were reviewed comprehensively.
-- Findings are prioritized and implementation-ready.
-- A staged roadmap is provided to execute changes with controlled regression risk.
+- Audit findings through Phase 5 are implemented and validated.
+- Deferred mapper-pipeline restructuring remains intentionally out of scope for this pass.

@@ -14,7 +14,7 @@ References:
 
 import islamic_times.astro_core as fast_astro
 from numbers import Number
-from typing import List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone, tzinfo
 from islamic_times.it_dataclasses import (
@@ -26,6 +26,7 @@ from islamic_times.it_dataclasses import (
     MeccaInfo,
     MoonInfo,
     ObserverInfo,
+    PrayerMethod,
     PrayerTimes,
     SunInfo,
     Visibilities,
@@ -35,6 +36,27 @@ from islamic_times import moon_equations as me
 from islamic_times import prayer_times as pt
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
+
+
+def _build_prayer_method_alias_map() -> tuple[Dict[str, PrayerMethod], tuple[str, ...]]:
+    """Build constant-time prayer-method alias lookup tables."""
+    alias_map: Dict[str, PrayerMethod] = {}
+    primary_keys: List[str] = []
+
+    for method in pt.DEFAULT_PRAYER_METHODS:
+        method_keys = method.keys or ()
+        if method_keys:
+            primary_keys.append(method_keys[0])
+        for key in method_keys:
+            normalized_key = key.upper()
+            if normalized_key not in alias_map:
+                alias_map[normalized_key] = method
+
+    return alias_map, tuple(primary_keys)
+
+
+_PRAYER_METHOD_ALIAS_MAP, _PRAYER_METHOD_PRIMARY_KEYS = _build_prayer_method_alias_map()
+
 
 class ITLocation:
     """Primary public facade for astronomical and prayer-time calculations.
@@ -208,6 +230,13 @@ class ITLocation:
         else:
             self._mark_prayers_dirty(True)
 
+    def _ensure_state_ready(self, target: Literal["astro", "prayers"], error_message: str) -> None:
+        """Validate cache freshness for accessor/read operations in manual mode."""
+        is_dirty = self.datetime_modified if target == "astro" else self.prayers_modified
+        if self.auto_calculate or not is_dirty:
+            return
+        raise ValueError(error_message)
+
     def _build_observer_dateinfo(self, date: datetime) -> DateTimeInfo:
         """Build DateTimeInfo from a timezone-aware datetime."""
         utc_offset = date.utcoffset()
@@ -349,12 +378,11 @@ class ITLocation:
         ValueError
             Raised when astronomy is stale while ``auto_calculate`` is disabled.
         """
-        can_calculate = self.auto_calculate or not self.datetime_modified
-        if not can_calculate:
-            raise ValueError(
-                "Since `auto_calculate` is False, prayer times cannot be calculated until astronomical parameters are updated. "
-                "Call `calculate_astro()` first."
-            )
+        self._ensure_state_ready(
+            "astro",
+            "Since `auto_calculate` is False, prayer times cannot be calculated until astronomical parameters are updated. "
+            "Call `calculate_astro()` first.",
+        )
 
         self.times_of_prayer: PrayerTimes = pt.calculate_prayer_times(self.observer_dateinfo, self.observer_info, self.sun_info, self.method)
 
@@ -380,25 +408,21 @@ class ITLocation:
         """
 
         method_key = method_key.strip().upper()
-    
-        for method in pt.DEFAULT_PRAYER_METHODS:
-            method_keys = method.keys or ()
-            if method_key in (key.upper() for key in method_keys):
-                if asr_type not in (0, 1):
-                    raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
+        method = _PRAYER_METHOD_ALIAS_MAP.get(method_key)
+        if method is None:
+            valid_options = list(_PRAYER_METHOD_PRIMARY_KEYS)
+            raise ValueError(
+                f"Invalid prayer method '{method_key}'. Valid options are: {', '.join(valid_options)}")
 
-                if asr_type == 0:
-                    self.method = method
-                else:
-                    self.method = replace(method, asr_type=asr_type)
+        if asr_type not in (0, 1):
+            raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
 
-                self._refresh_prayers()
-                
-                return
+        if asr_type == 0:
+            self.method = method
+        else:
+            self.method = replace(method, asr_type=asr_type)
 
-        valid_options = [method.keys[0] for method in pt.DEFAULT_PRAYER_METHODS if method.keys]
-        raise ValueError(
-            f"Invalid prayer method '{method_key}'. Valid options are: {', '.join(valid_options)}")
+        self._refresh_prayers()
     
     # Helper function to validate and set angle
     def __validate_and_set(self, attribute_name: str, value: Optional[float]) -> None:
@@ -542,10 +566,11 @@ class ITLocation:
             Raised when astronomy context is stale and ``auto_calculate`` is off.
         """
 
-        can_print = self.auto_calculate or not self.datetime_modified
-
-        if not can_print:
-            raise ValueError("Cannot print dates and times without calculating the astronomical parameters. Set `auto_calculate` to `True` or call `calculate_astro()`.")
+        self._ensure_state_ready(
+            "astro",
+            "Cannot print dates and times without calculating the astronomical parameters. "
+            "Set `auto_calculate` to `True` or call `calculate_astro()`.",
+        )
 
         return self.observer_dateinfo
 
@@ -559,10 +584,11 @@ class ITLocation:
             Raised when prayer results are stale and ``auto_calculate`` is off.
         """
 
-        can_print: bool = self.auto_calculate or not self.prayers_modified
-
-        if not can_print:
-            raise ValueError("`auto_calculate` has been set to False and a change to the prayer methods and/or the date & time may have been made. `calculate_prayer_times()` must be called first.")
+        self._ensure_state_ready(
+            "prayers",
+            "`auto_calculate` has been set to False and a change to the prayer methods and/or the date & time may have been made. "
+            "`calculate_prayer_times()` must be called first.",
+        )
         
         return self.times_of_prayer
     
@@ -589,10 +615,10 @@ class ITLocation:
             Raised when astronomy context is stale and ``auto_calculate`` is off.
         """
 
-        can_print = self.auto_calculate or not self.datetime_modified
-
-        if not can_print:
-            raise ValueError("Cannot print dates and times without calculating the astronomical parameters. First call `calculate_astro()`.")
+        self._ensure_state_ready(
+            "astro",
+            "Cannot print dates and times without calculating the astronomical parameters. First call `calculate_astro()`.",
+        )
         
         return self.sun_info
     
@@ -606,10 +632,10 @@ class ITLocation:
             Raised when astronomy context is stale and ``auto_calculate`` is off.
         """
 
-        can_print = self.auto_calculate or not self.datetime_modified
-
-        if not can_print:
-            raise ValueError("Cannot print dates and times without calculating the astronomical parameters. First call `calculate_astro()`.")
+        self._ensure_state_ready(
+            "astro",
+            "Cannot print dates and times without calculating the astronomical parameters. First call `calculate_astro()`.",
+        )
 
         return self.moon_info
     

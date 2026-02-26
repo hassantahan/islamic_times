@@ -756,35 +756,78 @@ error:
    Moon transit / culmination solver
    ================================ */
 
+static void resolve_solar_terms_for_moon_iteration(
+    double t_jde,
+    double t_deltaT,
+    double local_latitude,
+    double local_longitude,
+    double elevation,
+    double temperature,
+    double pressure,
+    const double* deltaPsi,
+    const double* true_obliquity,
+    int index,
+    double* out_deltaPsi,
+    double* out_true_obliquity
+) {
+    if (deltaPsi && true_obliquity) {
+        *out_deltaPsi = deltaPsi[index];
+        *out_true_obliquity = true_obliquity[index];
+        return;
+    }
+
+    SunResult sun_params;
+    compute_sun_result(
+        t_jde,
+        t_deltaT,
+        local_latitude,
+        local_longitude,
+        elevation,
+        temperature,
+        pressure,
+        &sun_params
+    );
+    *out_deltaPsi = sun_params.nutation_longitude;
+    *out_true_obliquity = sun_params.true_obliquity;
+}
+
 /*
  * Solve moon transit time for the reference civil date.
  * Returns 0 on success; non-zero values indicate failure.
  */
 int find_moon_transit(datetime date, double utc_offset, double local_latitude, double local_longitude,
                     double elevation, double temperature, double pressure, 
-                    double deltaPsi[3], double true_obliquity[3],
+                    const double* deltaPsi, const double* true_obliquity,
                     datetime* moon_event) {
 
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
     double new_deltaT = delta_t_approx(date.year, date.month);
 
-    SunResult temp_sun_param;
     MoonResult moon_params[3];
     for (int i = 0; i < 3; i++) {
         datetime temp_date;
         jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
         double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
         double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
-        if (deltaPsi[i] == CALCULATE_SUN_PARAMS_FOR_MOON_TIME) {   
-            compute_sun_result(t_jde, t_deltaT, 
-                local_latitude, local_longitude, elevation, temperature, pressure, 
-                &temp_sun_param);
-            deltaPsi[i] = temp_sun_param.nutation_longitude;
-            true_obliquity[i] = temp_sun_param.true_obliquity;
-        }
+        double resolved_deltaPsi;
+        double resolved_true_obliquity;
+        resolve_solar_terms_for_moon_iteration(
+            t_jde,
+            t_deltaT,
+            local_latitude,
+            local_longitude,
+            elevation,
+            temperature,
+            pressure,
+            deltaPsi,
+            true_obliquity,
+            i,
+            &resolved_deltaPsi,
+            &resolved_true_obliquity
+        );
         compute_moon_result(t_jde, t_deltaT, 
             local_latitude, local_longitude, elevation, temperature, pressure,
-            deltaPsi[i], true_obliquity[i], &moon_params[i]);
+            resolved_deltaPsi, resolved_true_obliquity, &moon_params[i]);
     }
     
     double sidereal_time = greenwich_mean_sidereal_time(new_jd);
@@ -808,22 +851,35 @@ int find_moon_transit(datetime date, double utc_offset, double local_latitude, d
 
 /* Python wrapper for find_moon_transit.
  * The deltaT argument is accepted for API compatibility but recomputed natively.
+ * deltaPsi/true_obliquity may both be None (auto-resolve) or both be
+ * 3-value numeric sequences (caller-provided reuse path).
  */
-PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
-    PyObject *deltaPsi_obj, *true_obliquity_obj;
-    double jd, unused_deltaT, latitude, longitude, 
-           elevation, temperature, pressure, 
-           utc_offset;
-    double deltaPsi[3], true_obliquity[3];
-    if (!PyArg_ParseTuple(args, "ddddddddOO", &jd, &unused_deltaT, &latitude, &longitude, 
-                                              &elevation, &temperature, &pressure, 
-                                              &utc_offset, &deltaPsi_obj, &true_obliquity_obj))
-        return NULL;
-    (void)unused_deltaT;
-    
-    if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 || !PySequence_Check(true_obliquity_obj) || PySequence_Size(true_obliquity_obj) != 3) {
+static int parse_optional_solar_triplets(
+    PyObject* deltaPsi_obj,
+    PyObject* true_obliquity_obj,
+    double deltaPsi[3],
+    double true_obliquity[3],
+    const double** deltaPsi_ptr,
+    const double** true_obliquity_ptr
+) {
+    if (deltaPsi_obj == Py_None && true_obliquity_obj == Py_None) {
+        *deltaPsi_ptr = NULL;
+        *true_obliquity_ptr = NULL;
+        return 0;
+    }
+
+    if (deltaPsi_obj == Py_None || true_obliquity_obj == Py_None) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "deltaPsi and true_obliquity must both be None or both be sequences of 3 numeric values."
+        );
+        return -1;
+    }
+
+    if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 ||
+        !PySequence_Check(true_obliquity_obj) || PySequence_Size(true_obliquity_obj) != 3) {
         PyErr_SetString(PyExc_TypeError, "Expected two sequences of 3 numeric values.");
-        return NULL;
+        return -1;
     }
 
     for (int i = 0; i < 3; ++i) {
@@ -832,19 +888,45 @@ PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
         if (!item1 || !item2) {
             Py_XDECREF(item1);
             Py_XDECREF(item2);
-            return NULL;
+            return -1;
         }
 
         deltaPsi[i] = PyFloat_AsDouble(item1);
         true_obliquity[i] = PyFloat_AsDouble(item2);
-        if (PyErr_Occurred()) {
-            Py_DECREF(item1);
-            Py_DECREF(item2);
-            return NULL;
-        }
-
         Py_DECREF(item1);
         Py_DECREF(item2);
+        if (PyErr_Occurred()) {
+            return -1;
+        }
+    }
+
+    *deltaPsi_ptr = deltaPsi;
+    *true_obliquity_ptr = true_obliquity;
+    return 0;
+}
+
+PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
+    PyObject *deltaPsi_obj, *true_obliquity_obj;
+    double jd, unused_deltaT, latitude, longitude, 
+           elevation, temperature, pressure, 
+           utc_offset;
+    double deltaPsi[3], true_obliquity[3];
+    const double* deltaPsi_ptr = NULL;
+    const double* true_obliquity_ptr = NULL;
+    if (!PyArg_ParseTuple(args, "ddddddddOO", &jd, &unused_deltaT, &latitude, &longitude, 
+                                              &elevation, &temperature, &pressure, 
+                                              &utc_offset, &deltaPsi_obj, &true_obliquity_obj))
+        return NULL;
+    (void)unused_deltaT;
+
+    if (parse_optional_solar_triplets(
+            deltaPsi_obj,
+            true_obliquity_obj,
+            deltaPsi,
+            true_obliquity,
+            &deltaPsi_ptr,
+            &true_obliquity_ptr) != 0) {
+        return NULL;
     }
 
     datetime reference_dt;
@@ -852,7 +934,7 @@ PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
     datetime transit_dt;
     int status = find_moon_transit(reference_dt, utc_offset, latitude, longitude,
                                     elevation, temperature, pressure, 
-                                    deltaPsi, true_obliquity,
+                                    deltaPsi_ptr, true_obliquity_ptr,
                                     &transit_dt);
 
     if (status == 0)
@@ -875,30 +957,38 @@ PyObject* py_find_moon_transit(PyObject* self, PyObject* args) {
  */
 int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure, char event_type,
-                        double deltaPsi[3], double true_obliquity[3], 
+                        const double* deltaPsi, const double* true_obliquity, 
                         datetime* moon_event) {
     
     double lat_rad = RADIANS(local_latitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
     double new_deltaT = delta_t_approx(date.year, date.month);
 
-    SunResult temp_sun_param;
     MoonResult moon_params[3];
     for (int i = 0; i < 3; i++) {
         datetime temp_date;
         jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
         double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
         double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
-        if (deltaPsi[i] == CALCULATE_SUN_PARAMS_FOR_MOON_TIME) {   
-            compute_sun_result(t_jde, t_deltaT, 
-                local_latitude, local_longitude, elevation, temperature, pressure, 
-                &temp_sun_param);
-            deltaPsi[i] = temp_sun_param.nutation_longitude;
-            true_obliquity[i] = temp_sun_param.true_obliquity;
-        }
+        double resolved_deltaPsi;
+        double resolved_true_obliquity;
+        resolve_solar_terms_for_moon_iteration(
+            t_jde,
+            t_deltaT,
+            local_latitude,
+            local_longitude,
+            elevation,
+            temperature,
+            pressure,
+            deltaPsi,
+            true_obliquity,
+            i,
+            &resolved_deltaPsi,
+            &resolved_true_obliquity
+        );
         compute_moon_result(t_jde, t_deltaT, 
             local_latitude, local_longitude, elevation, temperature, pressure,
-            deltaPsi[i], true_obliquity[i], &moon_params[i]);
+            resolved_deltaPsi, resolved_true_obliquity, &moon_params[i]);
     }
 
     double declination_deg[3] = {
@@ -956,8 +1046,8 @@ typedef struct {
     double temperature;
     double pressure;
     char event;
-    double* deltaPsi;
-    double* true_obliquity;
+    const double* deltaPsi;
+    const double* true_obliquity;
 } MoonEventSearchContext;
 
 static int solve_moon_event_for_day(datetime date, double utc_offset, void* ctx, datetime* out_event) {
@@ -982,7 +1072,7 @@ static int solve_moon_event_for_day(datetime date, double utc_offset, void* ctx,
  * Returns INVALID_DATETIME when no valid event is found.
  */
 datetime find_proper_moontime(double jd, double utc_offset, double latitude, double longitude, double elevation,
-    double temperature, double pressure, char event, double deltaPsi[3], double true_obliquity[3]) {
+    double temperature, double pressure, char event, const double* deltaPsi, const double* true_obliquity) {
     datetime reference_dt;
     jd_to_gregorian(jd, utc_offset, &reference_dt);
 
@@ -1007,13 +1097,18 @@ datetime find_proper_moontime(double jd, double utc_offset, double latitude, dou
     );
 }
 
-/* Python wrapper for find_proper_moontime. */
+/* Python wrapper for find_proper_moontime.
+ * deltaPsi/true_obliquity may both be None (auto-resolve) or both be
+ * 3-value numeric sequences (caller-provided reuse path).
+ */
 PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
     PyObject *deltaPsi_obj, *true_obliquity_obj;
     double jd, unused_deltaT, latitude, longitude, 
            elevation, temperature, pressure, 
            utc_offset;
     double deltaPsi[3], true_obliquity[3];
+    const double* deltaPsi_ptr = NULL;
+    const double* true_obliquity_ptr = NULL;
     int event_code;
     char event;
     if (!PyArg_ParseTuple(args, "ddddddddOOC", &jd, &unused_deltaT, &latitude, &longitude, 
@@ -1023,38 +1118,20 @@ PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
         return NULL;
     (void)unused_deltaT;
 
-    if (!PySequence_Check(deltaPsi_obj) || PySequence_Size(deltaPsi_obj) != 3 ||
-        !PySequence_Check(true_obliquity_obj) || PySequence_Size(true_obliquity_obj) != 3) {
-
-        PyErr_SetString(PyExc_TypeError, "Expected two sequences of 3 numeric values.");
-        return NULL;
-    }
-
     event = (char)event_code;
 
-    for (int i = 0; i < 3; ++i) {
-        PyObject* item1 = PySequence_GetItem(deltaPsi_obj, i);
-        PyObject* item2 = PySequence_GetItem(true_obliquity_obj, i);
-        if (!item1 || !item2) {
-            Py_XDECREF(item1);
-            Py_XDECREF(item2);
-            return NULL;
-        }
-
-        deltaPsi[i] = PyFloat_AsDouble(item1);
-        true_obliquity[i] = PyFloat_AsDouble(item2);
-        if (PyErr_Occurred()) {
-            Py_DECREF(item1);
-            Py_DECREF(item2);
-            return NULL;
-        }
-
-        Py_DECREF(item1);
-        Py_DECREF(item2);
+    if (parse_optional_solar_triplets(
+            deltaPsi_obj,
+            true_obliquity_obj,
+            deltaPsi,
+            true_obliquity,
+            &deltaPsi_ptr,
+            &true_obliquity_ptr) != 0) {
+        return NULL;
     }
     
     return datetime_to_pydatetime(
-        find_proper_moontime(jd, utc_offset, latitude, longitude, elevation, temperature, pressure, event, deltaPsi, true_obliquity));
+        find_proper_moontime(jd, utc_offset, latitude, longitude, elevation, temperature, pressure, event, deltaPsi_ptr, true_obliquity_ptr));
 }
 
 

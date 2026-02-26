@@ -163,6 +163,59 @@ def test_moon_wrappers_accept_integer_nutation_sequences() -> None:
     assert isinstance(moontime, datetime)
 
 
+def test_moon_wrappers_accept_none_for_auto_solar_terms() -> None:
+    dt = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+    jd = fast_astro.gregorian_to_jd(dt, 0.0)
+
+    transit = fast_astro.find_moon_transit(
+        jd,
+        73.0,
+        43.651070,
+        -79.347015,
+        10.0,
+        15.0,
+        101.325,
+        0.0,
+        None,
+        None,
+    )
+    moontime = fast_astro.find_proper_moontime(
+        jd,
+        73.0,
+        43.651070,
+        -79.347015,
+        10.0,
+        15.0,
+        101.325,
+        0.0,
+        None,
+        None,
+        "s",
+    )
+
+    assert isinstance(transit, datetime)
+    assert isinstance(moontime, datetime)
+
+
+def test_moon_wrappers_reject_mixed_none_and_sequence_nutation_inputs() -> None:
+    dt = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+    jd = fast_astro.gregorian_to_jd(dt, 0.0)
+
+    with pytest.raises(TypeError, match="must both be None or both be sequences"):
+        fast_astro.find_moon_transit(
+            jd,
+            73.0,
+            43.651070,
+            -79.347015,
+            10.0,
+            15.0,
+            101.325,
+            0.0,
+            None,
+            [23.0, 23.0, 23.0],
+        )
+
+
 def test_find_proper_suntime_rejects_invalid_event_code() -> None:
     dt = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
     jd = fast_astro.gregorian_to_jd(dt, 0.0)

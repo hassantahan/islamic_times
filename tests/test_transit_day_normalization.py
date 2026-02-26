@@ -71,7 +71,6 @@ def test_native_moon_transit_not_next_day_for_dateline_case() -> None:
     input_dt = datetime(2024, 1, 8, 12, 0, tzinfo=timezone.utc)
     jd = fast_astro.gregorian_to_jd(input_dt, 0.0)
     delta_t = fast_astro.delta_t_approx(input_dt.year, input_dt.month)
-    sentinel = [-123456.0, -123456.0, -123456.0]
 
     transit = fast_astro.find_moon_transit(
         jd,
@@ -82,8 +81,8 @@ def test_native_moon_transit_not_next_day_for_dateline_case() -> None:
         15.0,
         101.325,
         0.0,
-        sentinel,
-        sentinel,
+        None,
+        None,
     )
 
     assert transit.date() == input_dt.date()

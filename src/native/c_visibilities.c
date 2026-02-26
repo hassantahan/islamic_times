@@ -81,9 +81,18 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
     double jd_new_moon = gregorian_to_jd(new_moon_dt, utc_offset);
     
     // Solve moonset on day 0 to determine whether the first day is valid.
-    double temp1[3] = {CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME}; 
-    double temp2[3] = {CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME, CALCULATE_SUN_PARAMS_FOR_MOON_TIME}; 
-    datetime nm_moonset = find_proper_moontime(jd_new_moon, utc_offset, lat, lon, elev, temp, press, 's', temp1, temp2);
+    datetime nm_moonset = find_proper_moontime(
+        jd_new_moon,
+        utc_offset,
+        lat,
+        lon,
+        elev,
+        temp,
+        press,
+        's',
+        NULL,
+        NULL
+    );
     
     // Handle day-0 invalid cases before entering the main loop.
     int start = 0; // To skip the first day if invalid

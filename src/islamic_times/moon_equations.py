@@ -22,7 +22,7 @@ from islamic_times import calculation_equations as ce
 from islamic_times.it_dataclasses import Angle, DateTimeInfo, Distance, DistanceUnits, ObserverInfo, RightAscension
 from datetime import datetime, timedelta
 from dataclasses import dataclass, replace
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 from warnings import warn
 import numpy as np
 import math
@@ -402,26 +402,46 @@ def moon_illumination(sun_dec: Angle, sun_ra: RightAscension, moon_dec: Angle, m
 	fraction_illuminated = (1 + math.cos(phase_angle.radians)) / 2
 	return fraction_illuminated
 
-def find_moon_transit(observer_date: DateTimeInfo, observer: ObserverInfo, sun_nutation: List[float] = np.inf) -> datetime: # type: ignore
+def _split_solar_nutation_triplets(
+    sun_nutation: Sequence[float] | float | None,
+) -> tuple[List[float] | None, List[float] | None]:
+	"""Split optional sun nutation buffers into two 3-value lists.
+
+	Passing ``None`` (or legacy ``np.inf``) requests native auto-resolution.
+	"""
+	if sun_nutation is None:
+		return None, None
+
+	if isinstance(sun_nutation, (int, float)) and math.isinf(float(sun_nutation)):
+		return None, None
+
+	values = list(sun_nutation)
+	if len(values) < 6:
+		raise ValueError("`sun_nutation` must contain at least 6 values: first 3 deltaPsi and last 3 true_obliquity.")
+
+	return values[:3], values[-3:]
+
+
+def find_moon_transit(
+	observer_date: DateTimeInfo,
+	observer: ObserverInfo,
+	sun_nutation: Sequence[float] | float | None = None,
+) -> datetime:
 	"""
 	Calculate transit of the moon (specifically culmination) for a given date and observer coordinates. See Chapter 15 of *Astronomical Algorithms* for more information.
 
 	Parameters:
 		observer_date (DateTimeInfo): The date and time of the observer.
 		observer (ObserverInfo): The observer's coordinates and elevation.
+		sun_nutation (Sequence[float] | float | None): Optional precomputed
+			solar nutation buffers. Pass ``None`` (default) to auto-resolve in C.
 
 	Returns:
 		datetime: The time of moonset.
 	"""
 	import islamic_times.astro_core as fast_astro
 
-	# Sentinel values request internal nutation reuse/auto-computation in C.
-	if (sun_nutation == np.inf):
-		delPsi = [-123456.0, -123456.0, -123456.0]
-		true_obliquity = [-123456.0, -123456.0, -123456.0]
-	else:
-		delPsi = list(sun_nutation[:3])
-		true_obliquity = list(sun_nutation[-3:])
+	delPsi, true_obliquity = _split_solar_nutation_triplets(sun_nutation)
 
 	moon_transit: datetime = fast_astro.find_moon_transit(observer_date.jd, observer_date.deltaT, 
 									observer.latitude.decimal, observer.longitude.decimal, 
@@ -448,7 +468,12 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 	return legacy_me.moonrise_or_moonset(observer_date, observer, rise_or_set)
 
 # Normalize moonrise/moonset output so it matches the observer-local calendar day.
-def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str = 'set', sun_nutation: List[float] = np.inf) -> datetime: # type: ignore
+def find_proper_moontime(
+	observer_date: DateTimeInfo,
+	observer: ObserverInfo,
+	rise_or_set: str = 'set',
+	sun_nutation: Sequence[float] | float | None = None,
+) -> datetime:
 	"""
 	Determines the proper local time for a setting or rising moon. It finds the time that corresponds to the reference date given.
 
@@ -456,7 +481,8 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 		observer_date (DateTimeInfo): The date and time of the observer.
 		observer (ObserverInfo): The observer's coordinates and elevation.
 		rise_or_set (str): Find either the setting or rising option. Default is set to 'set'.
-		sun_nutation (List[float]): The nutation in longitude and obliquity (in degrees). Default is `np.inf`. This should only be used if user understands the C code.
+		sun_nutation (Sequence[float] | float | None): Optional precomputed
+			nutation/obliquity buffers. Pass ``None`` (default) to auto-resolve in C.
 
 	Returns:
 		datetime: The date and time of the moon event.
@@ -475,13 +501,7 @@ def find_proper_moontime(observer_date: DateTimeInfo, observer: ObserverInfo, ri
 	else:
 		event = 'r'
 
-	# Sentinel values request internal nutation reuse/auto-computation in C.
-	if (sun_nutation == np.inf):
-		delPsi = [-123456.0, -123456.0, -123456.0]
-		true_obliquity = [-123456.0, -123456.0, -123456.0]
-	else:
-		delPsi = list(sun_nutation[:3])
-		true_obliquity = list(sun_nutation[-3:])
+	delPsi, true_obliquity = _split_solar_nutation_triplets(sun_nutation)
 
 	try:
 		moontime: datetime = fast_astro.find_proper_moontime(

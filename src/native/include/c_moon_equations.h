@@ -4,8 +4,6 @@
 // Includes
 #include "c_sun_equations.h"
 
-#define CALCULATE_SUN_PARAMS_FOR_MOON_TIME -123456.0
-
 /* ================================
    Helper structs for calculation
    ================================ */
@@ -59,9 +57,13 @@ void compute_moon_result(double jde, double deltaT, double local_latitude, doubl
     double elevation, double temperature, double pressure, 
     double deltaPsi, double ecliptic, 
     MoonResult* result);
-/* Solve local moonrise/moonset for JD reference day and event selector. */
+/* Solve local moonrise/moonset for JD reference day and event selector.
+ * Optional per-day solar nutation buffers may be provided for reuse:
+ * - If both pointers are non-NULL, they must reference 3 values each.
+ * - If both pointers are NULL, solar terms are computed internally.
+ */
 datetime find_proper_moontime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
-			double temperature, double pressure, char event, double deltaPsi[3], double true_obliquity[3]);
+			double temperature, double pressure, char event, const double* deltaPsi, const double* true_obliquity);
 /* Return next New/First/Full/Last quarter phases in UTC. */
 void next_phases_of_moon_utc(datetime date, datetime phases[4]);
 

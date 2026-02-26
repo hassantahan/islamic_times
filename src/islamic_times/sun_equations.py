@@ -277,6 +277,9 @@ def sunpos(observer_date: DateTimeInfo, observer: ObserverInfo) -> Sun:
     -----
     The implementation delegates to the native extension
     ``islamic_times.astro_core.compute_sun``.
+    Temperature and pressure are currently forwarded for API compatibility;
+    the active solar apparent-altitude path does not apply weather-based
+    refraction correction.
     """
     import islamic_times.astro_core as fast_astro
     the_sun: Sun = fast_astro.compute_sun(observer_date.jde, observer_date.deltaT, observer.latitude.decimal, observer.longitude.decimal, observer.elevation.value, observer.temperature, observer.pressure)
@@ -327,6 +330,11 @@ def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> dat
     -------
     datetime
         Local datetime of solar transit on the reference civil date.
+
+    Notes
+    -----
+    Weather fields are accepted for cross-body API parity but are not currently
+    used by the active solar apparent-altitude correction path.
     """
     import islamic_times.astro_core as fast_astro
     sun_transit_dt: datetime = fast_astro.find_sun_transit(observer_date.jd, observer_date.deltaT, 
@@ -396,6 +404,11 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
         If ``rise_or_set`` is not recognized.
     ArithmeticError
         If the event does not exist for the given location/date.
+
+    Notes
+    -----
+    Weather fields are currently accepted for API consistency; solar event
+    solving does not yet apply weather-based apparent-altitude correction.
     """
     import islamic_times.astro_core as fast_astro
 

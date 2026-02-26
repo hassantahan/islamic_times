@@ -249,8 +249,8 @@ double oblique_eq(double t) {
  *   - deltaT: seconds
  *   - latitude/longitude: degrees
  *   - elevation: metres
- *   - temperature: Celsius
- *   - pressure: kPa
+ *   - temperature: Celsius (currently reserved for future solar refraction model)
+ *   - pressure: kPa (currently reserved for future solar refraction model)
  */
 void compute_sun_result(double jde, double deltaT, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure,
@@ -361,9 +361,11 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
     result->true_altitude = true_alt;
     result->true_azimuth = true_az;
 
-    // Apparent (disabled)
-    // double refraction_factor = 1.02 / tan((result->true_altitude + 10.3 / (result->true_altitude + 5.11)) * M_PI / 180) * pressure / 101.325 *  283 / (273 + temperature);
-    result->apparent_altitude = result->true_altitude;//+ refraction_factor / 60;
+    // Apparent altitude currently aliases true altitude. Weather inputs are
+    // retained in the signature for API compatibility and future modeling.
+    (void)temperature;
+    (void)pressure;
+    result->apparent_altitude = result->true_altitude;
 }
 
 

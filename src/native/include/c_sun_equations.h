@@ -38,7 +38,10 @@ typedef struct {
     double apparent_altitude;
 } SunResult;
 
-/* Populate solar state for a given JDE and observer configuration. */
+/* Populate solar state for a given JDE and observer configuration.
+ * NOTE: temperature/pressure are currently reserved for future solar
+ * refraction modeling and are not applied to apparent solar altitude.
+ */
 void compute_sun_result(double jde, double deltaT, double local_latitude, double local_longitude,
     double elevation, double temperature, double pressure,
     SunResult* result);
