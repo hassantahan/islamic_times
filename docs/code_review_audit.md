@@ -547,9 +547,16 @@ Each of these should ship behind a compatibility plan with explicit versioned de
 3. Separate legacy Python algorithms from active runtime modules (`CR-005`).
 4. Consider module-state migration in native extension (`CR-012`).
 
+Phase 3 execution status (implemented):
+
+1. Done: `extreme_latitudes` was split into strategy-oriented helpers with typed intermediate structures.
+2. Done: shared native event-solver helpers now back solar/lunar transit and rise/set search flows to remove duplicated iteration logic.
+3. Done: legacy Python implementations are now isolated under `src/islamic_times/_legacy_py_impl/` and loaded lazily by deprecated facades.
+4. Done: native extension type caches now live in per-module state (`m_size` + `traverse`/`clear`/`free`) and no longer depend on process-exit cleanup.
+
 ## Assumptions and Defaults
 
-1. This audit pass is review/documentation-only; no algorithm behavior changes are included here.
+1. The initial audit pass was review/documentation-only; subsequent implementation updates are tracked in the Phase 3 execution status above.
 2. Public API stability is preferred unless a correctness defect requires contract change.
 3. Numeric correctness takes precedence over micro-optimizations.
 4. Performance recommendations are prioritized by practical user impact (not purely theoretical gains).

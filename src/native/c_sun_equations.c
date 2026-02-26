@@ -1,5 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include "c_sun_equations.h"
+#include "c_event_solver.h"
 
 /* ================================
    Definitions & Helper Constants
@@ -367,31 +368,31 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
 
 
 /* Python wrapper helpers for constructing dataclass-compatible objects. */
-static PyObject* create_angle_obj(double value) {
+static PyObject* create_angle_obj(AstroCoreState* state, double value) {
     PyObject* py_value = PyFloat_FromDouble(value);
     PyObject* angle_obj;
     if (!py_value) {
         return NULL;
     }
 
-    angle_obj = PyObject_CallFunctionObjArgs(AngleType, py_value, NULL);
+    angle_obj = PyObject_CallFunctionObjArgs(state->angle_type, py_value, NULL);
     Py_DECREF(py_value);
     return angle_obj;
 }
 
-static PyObject* create_ra_obj_from_degrees(double value_deg) {
+static PyObject* create_ra_obj_from_degrees(AstroCoreState* state, double value_deg) {
     PyObject* py_hours = PyFloat_FromDouble(value_deg / 15.0);
     PyObject* ra_obj;
     if (!py_hours) {
         return NULL;
     }
 
-    ra_obj = PyObject_CallFunctionObjArgs(RightAscensionType, py_hours, NULL);
+    ra_obj = PyObject_CallFunctionObjArgs(state->right_ascension_type, py_hours, NULL);
     Py_DECREF(py_hours);
     return ra_obj;
 }
 
-static PyObject* create_distance_obj(double value, const char* unit_name) {
+static PyObject* create_distance_obj(AstroCoreState* state, double value, const char* unit_name) {
     PyObject* py_value = NULL;
     PyObject* unit_obj = NULL;
     PyObject* dist_obj = NULL;
@@ -401,12 +402,12 @@ static PyObject* create_distance_obj(double value, const char* unit_name) {
         goto error;
     }
 
-    unit_obj = PyObject_GetAttrString(DistanceUnitsType, unit_name);
+    unit_obj = PyObject_GetAttrString(state->distance_units_type, unit_name);
     if (!unit_obj) {
         goto error;
     }
 
-    dist_obj = PyObject_CallFunctionObjArgs(DistanceType, py_value, unit_obj, NULL);
+    dist_obj = PyObject_CallFunctionObjArgs(state->distance_type, py_value, unit_obj, NULL);
 
 error:
     Py_XDECREF(py_value);
@@ -442,7 +443,12 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
     SunResult result;
     compute_sun_result(jde, deltaT, latitude, longitude, elevation, temperature, pressure, &result);
 
-    if (!SunType || !PyType_Check(SunType)) {
+    AstroCoreState* state = (AstroCoreState*)PyModule_GetState(self);
+    if (!state) {
+        PyErr_SetString(PyExc_RuntimeError, "Failed to access astro_core module state.");
+        return NULL;
+    }
+    if (!state->sun_type || !PyType_Check(state->sun_type)) {
         PyErr_SetString(PyExc_RuntimeError, "SunType is not a valid Python type");
         return NULL;
     }
@@ -454,43 +460,43 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
         return NULL;
     }
 
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 0, create_angle_obj(result.mean_longitude));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 1, create_angle_obj(result.mean_anomaly));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 0, create_angle_obj(state, result.mean_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 1, create_angle_obj(state, result.mean_anomaly));
     SET_TUPLE_ITEM_OR_FAIL(args_tuple, 2, PyFloat_FromDouble(result.earth_orbit_eccentricity));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 3, create_angle_obj(result.sun_centre));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 4, create_angle_obj(result.true_longitude));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 5, create_angle_obj(result.true_anomaly));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 6, create_distance_obj(result.geocentric_distance, "AU"));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 7, create_angle_obj(result.omega));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 8, create_angle_obj(result.apparent_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 3, create_angle_obj(state, result.sun_centre));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 4, create_angle_obj(state, result.true_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 5, create_angle_obj(state, result.true_anomaly));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 6, create_distance_obj(state, result.geocentric_distance, "AU"));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 7, create_angle_obj(state, result.omega));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 8, create_angle_obj(state, result.apparent_longitude));
 
     nutation_tuple = PyTuple_New(2);
     if (!nutation_tuple) {
         goto error;
     }
-    SET_TUPLE_ITEM_OR_FAIL(nutation_tuple, 0, create_angle_obj(result.nutation_longitude));
-    SET_TUPLE_ITEM_OR_FAIL(nutation_tuple, 1, create_angle_obj(result.nutation_obliquity));
+    SET_TUPLE_ITEM_OR_FAIL(nutation_tuple, 0, create_angle_obj(state, result.nutation_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(nutation_tuple, 1, create_angle_obj(state, result.nutation_obliquity));
     PyTuple_SET_ITEM(args_tuple, 9, nutation_tuple);
     nutation_tuple = NULL;
 
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 10, create_angle_obj(result.nutation_obliquity));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 11, create_angle_obj(result.mean_obliquity));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 12, create_angle_obj(result.true_obliquity));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 13, create_ra_obj_from_degrees(result.true_right_ascension));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 14, create_angle_obj(result.true_declination));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 15, create_ra_obj_from_degrees(result.apparent_right_ascension));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 16, create_angle_obj(result.apparent_declination));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 17, create_angle_obj(result.greenwich_hour_angle));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 18, create_angle_obj(result.local_hour_angle));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 19, create_angle_obj(result.eh_parallax));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 20, create_ra_obj_from_degrees(result.topocentric_ascension));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 21, create_angle_obj(result.topocentric_declination));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 22, create_angle_obj(result.topocentric_local_hour_angle));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 23, create_angle_obj(result.true_altitude));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 24, create_angle_obj(result.true_azimuth));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 25, create_angle_obj(result.apparent_altitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 10, create_angle_obj(state, result.nutation_obliquity));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 11, create_angle_obj(state, result.mean_obliquity));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 12, create_angle_obj(state, result.true_obliquity));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 13, create_ra_obj_from_degrees(state, result.true_right_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 14, create_angle_obj(state, result.true_declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 15, create_ra_obj_from_degrees(state, result.apparent_right_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 16, create_angle_obj(state, result.apparent_declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 17, create_angle_obj(state, result.greenwich_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 18, create_angle_obj(state, result.local_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 19, create_angle_obj(state, result.eh_parallax));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 20, create_ra_obj_from_degrees(state, result.topocentric_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 21, create_angle_obj(state, result.topocentric_declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 22, create_angle_obj(state, result.topocentric_local_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 23, create_angle_obj(state, result.true_altitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 24, create_angle_obj(state, result.true_azimuth));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 25, create_angle_obj(state, result.apparent_altitude));
 
-    sun = PyObject_CallObject(SunType, args_tuple);
+    sun = PyObject_CallObject(state->sun_type, args_tuple);
     Py_DECREF(args_tuple);
     #undef SET_TUPLE_ITEM_OR_FAIL
     return sun;
@@ -530,25 +536,13 @@ int find_sun_transit(datetime date, double utc_offset, double local_latitude, do
     }
     
     double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double right_ascension_deg[3] = {
+        sun_params[0].apparent_right_ascension,
+        sun_params[1].apparent_right_ascension,
+        sun_params[2].apparent_right_ascension
+    };
     double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
-    
-    for (int i = 0; i < 3; i++) {
-        double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m0);
-        double n_event = m0 + new_deltaT / SECONDS_IN_DAY;
-        double interp_ra_event_deg = angle_interpolation(n_event,
-                                    sun_params[0].apparent_right_ascension,
-                                    sun_params[1].apparent_right_ascension,
-                                    sun_params[2].apparent_right_ascension);
-
-        double lha_event_deg = normalize_angle(theta_event_deg - (-local_longitude) - interp_ra_event_deg);
-        m0 -= lha_event_deg / 360;
-    }
-
-    // Canonical modulo into [0, 1)
-    m0 = fmod(m0, 1.0);
-    if (m0 < 0.0) {
-        m0 += 1.0;
-    }
+    m0 = refine_transit_fraction(m0, sidereal_time, local_longitude, new_deltaT, right_ascension_deg);
 
     // Construct transit datetime
     sun_event->year = date.year;
@@ -613,17 +607,22 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
         );
     }
 
-    double h_zero_rad = RADIANS(-angle_deg);
-    double cosH_zero = (sin(h_zero_rad) - sin(lat_rad) * sin(RADIANS(sun_params[1].apparent_declination))) / \
-                        (cos(lat_rad) * cos(RADIANS(sun_params[1].apparent_declination)));
+    double declination_deg[3] = {
+        sun_params[0].apparent_declination,
+        sun_params[1].apparent_declination,
+        sun_params[2].apparent_declination
+    };
+    double right_ascension_deg[3] = {
+        sun_params[0].apparent_right_ascension,
+        sun_params[1].apparent_right_ascension,
+        sun_params[2].apparent_right_ascension
+    };
 
-    double H_zero_rad, H_zero_deg;
-    if (cosH_zero < 1.0 && cosH_zero > -1.0) {
-        H_zero_rad = acos(cosH_zero);
-        H_zero_deg = H_zero_rad * 180 / M_PI;
-    }
-    else
+    double horizon_altitude_deg = -angle_deg;
+    double H_zero_deg;
+    if (compute_event_hour_angle(lat_rad, declination_deg[1], horizon_altitude_deg, &H_zero_deg) != 0) {
         return -1;
+    }
     
     double sidereal_time = greenwich_mean_sidereal_time(new_jd);
     double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
@@ -636,25 +635,16 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
     else
         return -2;
     
-    for (int i = 0; i < 3; i++) {
-        double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m_event);
-        double n_event = m_event + new_deltaT / SECONDS_IN_DAY;
-        double interp_dec_event_rad = angle_interpolation(n_event,
-                                    sun_params[0].apparent_declination,
-                                    sun_params[1].apparent_declination,
-                                    sun_params[2].apparent_declination) * M_PI / 180;
-        double interp_ra_event_deg = angle_interpolation(n_event,
-                                    sun_params[0].apparent_right_ascension,
-                                    sun_params[1].apparent_right_ascension,
-                                    sun_params[2].apparent_right_ascension);
-
-        double lha_event_rad = normalize_angle(theta_event_deg - (-local_longitude) - interp_ra_event_deg) * M_PI / 180;
-        double sun_alt_deg = asin(sin(lat_rad) * sin(interp_dec_event_rad) + 
-                                cos(lat_rad) * cos(interp_dec_event_rad) * cos(lha_event_rad)) * 180 / M_PI;
-
-        double deltaM = (sun_alt_deg - h_zero_rad * 180 / M_PI) / (360 * cos(interp_dec_event_rad) * cos(lat_rad) * sin(lha_event_rad));
-        m_event += deltaM;
-    }
+    m_event = refine_altitude_event_fraction(
+        m_event,
+        sidereal_time,
+        local_longitude,
+        new_deltaT,
+        lat_rad,
+        horizon_altitude_deg,
+        declination_deg,
+        right_ascension_deg
+    );
 
     sun_event->year = date.year;
     sun_event->month = date.month;
@@ -665,54 +655,59 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
     return 0;
 }
 
+typedef struct {
+    double latitude;
+    double longitude;
+    double elevation;
+    double temperature;
+    double pressure;
+    double angle_deg;
+    char event;
+} SunEventSearchContext;
+
+static int solve_sun_event_for_day(datetime date, double utc_offset, void* ctx, datetime* out_event) {
+    SunEventSearchContext* context = (SunEventSearchContext*)ctx;
+    return sunrise_or_sunset(
+        date,
+        utc_offset,
+        context->latitude,
+        context->longitude,
+        context->elevation,
+        context->temperature,
+        context->pressure,
+        context->event,
+        context->angle_deg,
+        out_event
+    );
+}
+
 /*
  * Find the first sunrise/sunset event that belongs to the reference civil day.
  * Returns INVALID_DATETIME when no valid event is found.
  */
-datetime find_proper_suntime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
+datetime find_proper_suntime(double jd, double utc_offset, double latitude, double longitude, double elevation,
     double temperature, double pressure, double angle_deg, char event) {
-    // Get gregorian datetime from JD
     datetime reference_dt;
     jd_to_gregorian(jd, utc_offset, &reference_dt);
 
-    // Calculate UTC Offset estimate if not given
-    double temp_utc_offset = utc_offset;
-    if (utc_offset == 0)
-        temp_utc_offset = floor(longitude / 15) - 1;
-    
-    // Set the reference day of year
-    int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
+    SunEventSearchContext context = {
+        .latitude = latitude,
+        .longitude = longitude,
+        .elevation = elevation,
+        .temperature = temperature,
+        .pressure = pressure,
+        .angle_deg = angle_deg,
+        .event = event
+    };
 
-    int status = 0;
-    for (int i = 0; i <= MAX_EVENT_SEARCH_DAYS; ++i) {
-        // Shift reference datetime
-        datetime new_datetime;
-        new_datetime = add_days(reference_dt, i);
-
-        // Set temp_suntime by sending in the shifted reference datetime
-        datetime temp_suntime;
-        status = sunrise_or_sunset(new_datetime, temp_utc_offset, latitude, longitude, elevation, 
-                                temperature, pressure, 
-                                event, angle_deg, &temp_suntime
-        );
-
-        if (status != 0)
-            return INVALID_DATETIME;
-
-        datetime temp_suntime_with_estimate_offset = add_days(temp_suntime, (double)i + temp_utc_offset / 24.0);
-
-        int temp_suntime_doy = day_of_year(temp_suntime_with_estimate_offset.year, 
-                                temp_suntime_with_estimate_offset.month, temp_suntime_with_estimate_offset.day);
-
-        if ((temp_suntime_doy < reference_doy && temp_suntime.year == reference_dt.year) || 
-                                (temp_suntime_with_estimate_offset.year < reference_dt.year)) {
-            continue;
-        }
-        else {
-            return add_days(temp_suntime, utc_offset / 24.0);
-        }
-    }
-    return INVALID_DATETIME;
+    return find_event_on_reference_day(
+        reference_dt,
+        utc_offset,
+        longitude,
+        MAX_EVENT_SEARCH_DAYS,
+        solve_sun_event_for_day,
+        &context
+    );
 }
 
 /* Python wrapper for find_proper_suntime. */
@@ -757,17 +752,22 @@ int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_
         true_obliquity[i] = sun_params[i].true_obliquity;
     }
 
-    double h_zero_rad = RADIANS(-angle_deg);
-    double cosH_zero = (sin(h_zero_rad) - sin(lat_rad) * sin(RADIANS(sun_params[1].apparent_declination))) / \
-                        (cos(lat_rad) * cos(RADIANS(sun_params[1].apparent_declination)));
+    double declination_deg[3] = {
+        sun_params[0].apparent_declination,
+        sun_params[1].apparent_declination,
+        sun_params[2].apparent_declination
+    };
+    double right_ascension_deg[3] = {
+        sun_params[0].apparent_right_ascension,
+        sun_params[1].apparent_right_ascension,
+        sun_params[2].apparent_right_ascension
+    };
 
-    double H_zero_rad, H_zero_deg;
-    if (cosH_zero < 1.0 && cosH_zero > -1.0) {
-        H_zero_rad = acos(cosH_zero);
-        H_zero_deg = H_zero_rad * 180 / M_PI;
-    }
-    else
+    double horizon_altitude_deg = -angle_deg;
+    double H_zero_deg;
+    if (compute_event_hour_angle(lat_rad, declination_deg[1], horizon_altitude_deg, &H_zero_deg) != 0) {
         return -1;
+    }
     
     double sidereal_time = greenwich_mean_sidereal_time(new_jd);
     double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
@@ -780,25 +780,16 @@ int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_
     else
         return -2;
     
-    for (int i = 0; i < 3; i++) {
-        double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m_event);
-        double n_event = m_event + new_deltaT / SECONDS_IN_DAY;
-        double interp_dec_event_rad = angle_interpolation(n_event,
-                                    sun_params[0].apparent_declination,
-                                    sun_params[1].apparent_declination,
-                                    sun_params[2].apparent_declination) * M_PI / 180;
-        double interp_ra_event_deg = angle_interpolation(n_event,
-                                    sun_params[0].apparent_right_ascension,
-                                    sun_params[1].apparent_right_ascension,
-                                    sun_params[2].apparent_right_ascension);
-
-        double lha_event_rad = normalize_angle(theta_event_deg - (-local_longitude) - interp_ra_event_deg) * M_PI / 180;
-        double sun_alt_deg = asin(sin(lat_rad) * sin(interp_dec_event_rad) + 
-                                cos(lat_rad) * cos(interp_dec_event_rad) * cos(lha_event_rad)) * 180 / M_PI;
-
-        double deltaM = (sun_alt_deg - h_zero_rad * 180 / M_PI) / (360 * cos(interp_dec_event_rad) * cos(lat_rad) * sin(lha_event_rad));
-        m_event += deltaM;
-    }
+    m_event = refine_altitude_event_fraction(
+        m_event,
+        sidereal_time,
+        local_longitude,
+        new_deltaT,
+        lat_rad,
+        horizon_altitude_deg,
+        declination_deg,
+        right_ascension_deg
+    );
 
     sun_event->year = date.year;
     sun_event->month = date.month;
@@ -809,50 +800,63 @@ int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_
     return 0;
 }
 
+typedef struct {
+    double latitude;
+    double longitude;
+    double elevation;
+    double temperature;
+    double pressure;
+    double angle_deg;
+    char event;
+    double* deltaPsi;
+    double* true_obliquity;
+} SunEventSearchWithNutationContext;
+
+static int solve_sun_event_for_day_w_nutation(datetime date, double utc_offset, void* ctx, datetime* out_event) {
+    SunEventSearchWithNutationContext* context = (SunEventSearchWithNutationContext*)ctx;
+    return sunrise_or_sunset_w_nutation(
+        date,
+        utc_offset,
+        context->latitude,
+        context->longitude,
+        context->elevation,
+        context->temperature,
+        context->pressure,
+        context->event,
+        context->angle_deg,
+        context->deltaPsi,
+        context->true_obliquity,
+        out_event
+    );
+}
+
 /*
  * Companion helper for visibility workflows that also exposes nutation terms.
  * Returns INVALID_DATETIME when no valid event is found.
  */
-datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double latitude, double longitude, double elevation, 
+datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double latitude, double longitude, double elevation,
     double temperature, double pressure, double angle_deg, char event, double* deltaPsi, double* true_obliquity) {
-    // Get gregorian datetime from JD
     datetime reference_dt;
     jd_to_gregorian(jd, utc_offset, &reference_dt);
 
-    // Calculate UTC Offset estimate if not given
-    double temp_utc_offset = utc_offset;
-    if (utc_offset == 0)
-        temp_utc_offset = floor(longitude / 15) - 1;
-    
-    // Set the reference day of year
-    int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
+    SunEventSearchWithNutationContext context = {
+        .latitude = latitude,
+        .longitude = longitude,
+        .elevation = elevation,
+        .temperature = temperature,
+        .pressure = pressure,
+        .angle_deg = angle_deg,
+        .event = event,
+        .deltaPsi = deltaPsi,
+        .true_obliquity = true_obliquity
+    };
 
-    int status = 0;
-    for (int i = 0; i <= MAX_EVENT_SEARCH_DAYS; ++i) {
-        // Shift reference datetime
-        datetime new_datetime;
-        new_datetime = add_days(reference_dt, i);
-
-        // Set temp_suntime by sending in the shifted reference datetime
-        datetime temp_suntime;
-        status = sunrise_or_sunset_w_nutation(new_datetime, temp_utc_offset, latitude, longitude, elevation, 
-                                temperature, pressure, event, angle_deg, deltaPsi, true_obliquity, &temp_suntime);
-
-        if (status != 0)
-            return INVALID_DATETIME;
-
-        datetime temp_suntime_with_estimate_offset = add_days(temp_suntime, (double)i + temp_utc_offset / 24.0);
-
-        int temp_suntime_doy = day_of_year(temp_suntime_with_estimate_offset.year, 
-                                temp_suntime_with_estimate_offset.month, temp_suntime_with_estimate_offset.day);
-
-        if ((temp_suntime_doy < reference_doy && temp_suntime.year == reference_dt.year) || 
-                                (temp_suntime_with_estimate_offset.year < reference_dt.year)) {
-            continue;
-        }
-        else {
-            return add_days(temp_suntime, utc_offset / 24.0);
-        }
-    }
-    return INVALID_DATETIME;
+    return find_event_on_reference_day(
+        reference_dt,
+        utc_offset,
+        longitude,
+        MAX_EVENT_SEARCH_DAYS,
+        solve_sun_event_for_day_w_nutation,
+        &context
+    );
 }

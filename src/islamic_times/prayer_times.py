@@ -9,13 +9,14 @@ sun-angle events may be unavailable.
 
 import warnings
 import math
-from typing import List
+from enum import Enum
+from typing import List, Optional
 import islamic_times.astro_core as fast_astro
 from islamic_times.it_dataclasses import Angle, DateTimeInfo, ObserverInfo, Prayer, PrayerMethod, PrayerTimes, SunInfo
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from datetime import datetime, timedelta
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 # Prayer method profiles based on:
 # https://praytimes.org/docs/calculation
@@ -55,6 +56,60 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
         fajr_angle=Angle(16), isha_angle=Angle(14), maghrib_angle=Angle(4), midnight_type=1
     )
 ]
+
+
+class PrayerStatus(Enum):
+    """Internal normalized state for prayer-time computations."""
+
+    VALID = "valid"
+    MISSING_EVENT = "missing_event"
+    MESSAGE = "message"
+
+
+@dataclass(frozen=True, slots=True)
+class PrayerValue:
+    """Internal prayer value wrapper used during strategy computation."""
+
+    dt: Optional[datetime]
+    status: PrayerStatus
+    message: Optional[str] = None
+
+
+@dataclass(frozen=True, slots=True)
+class ExtremeLatitudeContext:
+    """Shared context passed to extreme-latitude strategy functions."""
+
+    observer_date: DateTimeInfo
+    observer: ObserverInfo
+    method: PrayerMethod
+    sun_dec: Angle
+    standard_sun_angle: Angle
+    idx_sunrise: int
+    idx_sunset: int
+    idx_maghrib: int
+    idx_midnight: int
+    polar_lat: float
+    adjusted_obs: ObserverInfo
+    polar_obs: ObserverInfo
+    lat_sign: int
+
+
+def _to_prayer_value(value: datetime | str | float) -> PrayerValue:
+    if isinstance(value, datetime):
+        return PrayerValue(value, PrayerStatus.VALID)
+    if value == math.inf:
+        return PrayerValue(None, PrayerStatus.MISSING_EVENT)
+    if isinstance(value, str):
+        return PrayerValue(None, PrayerStatus.MESSAGE, value)
+    return PrayerValue(None, PrayerStatus.MESSAGE, str(value))
+
+
+def _to_legacy_time(value: PrayerValue) -> datetime | str | float:
+    if value.status == PrayerStatus.VALID and value.dt is not None:
+        return value.dt
+    if value.status == PrayerStatus.MISSING_EVENT:
+        return math.inf
+    return value.message if value.message is not None else "Does not exist."
 def safe_sun_time(observer_date: DateTimeInfo, observer: ObserverInfo, event: str, angle: Angle) -> datetime:
     """Return a solar event datetime or re-raise an astronomical failure.
 
@@ -167,6 +222,132 @@ def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 0) -> datetime:
     
     return noon + timedelta(hours=asr_hours)
 
+
+def _angle_for(name: str, method: PrayerMethod) -> Angle:
+    if name == 'Fajr':
+        return method.fajr_angle
+    if name == 'Maghrib':
+        return method.maghrib_angle
+    return method.isha_angle
+
+
+def _strategy_nearest_lat(ctx: ExtremeLatitudeContext, out: List[Prayer]) -> List[Prayer]:
+    for i, prayer in enumerate(out):
+        if prayer.name in ['Maghrib', 'ʿIshāʾ']:
+            ang = _angle_for(prayer.name, ctx.method)
+            out[i] = replace(prayer, time=safe_sun_time(ctx.observer_date, ctx.adjusted_obs, 'set', ang))  # type: ignore[arg-type]
+
+            if prayer.name == 'Maghrib':
+                if out[ctx.idx_sunrise].time < out[0].time:  # type: ignore[arg-type]
+                    out[ctx.idx_sunrise] = replace(out[ctx.idx_sunset], time=safe_sun_time(ctx.observer_date, ctx.adjusted_obs, 'rise', ctx.standard_sun_angle))
+                if out[ctx.idx_sunset].time > out[ctx.idx_maghrib].time:  # type: ignore[arg-type]
+                    out[ctx.idx_sunset] = replace(out[ctx.idx_sunset], time=safe_sun_time(ctx.observer_date, ctx.adjusted_obs, 'set', ctx.standard_sun_angle))
+
+        elif prayer.name == 'Fajr':
+            out[i] = replace(prayer, time=safe_sun_time(ctx.observer_date, ctx.adjusted_obs, 'rise', ctx.method.fajr_angle))  # type: ignore[arg-type]
+            if out[i].time.day != out[ctx.idx_sunrise].time.day:  # type: ignore[arg-type]
+                out[i] = replace(prayer, time=find_tomorrow_time(ctx.observer_date, ctx.adjusted_obs, ctx.method.fajr_angle, num_days=-1))
+
+        elif prayer.name == 'Midnight':
+            if ctx.method.midnight_type:
+                next_target = find_tomorrow_time(ctx.observer_date, ctx.adjusted_obs, ctx.method.fajr_angle)  # type: ignore[arg-type]
+            else:
+                next_target = find_tomorrow_time(ctx.observer_date, ctx.adjusted_obs)  # type: ignore[arg-type]
+
+            if ctx.observer_date.date.day + 1 != next_target.day:
+                diff = ctx.observer_date.date.day + 2 - next_target.day
+                if ctx.method.midnight_type:
+                    next_target = find_tomorrow_time(ctx.observer_date, ctx.adjusted_obs, ctx.method.fajr_angle, num_days=diff)  # type: ignore[arg-type]
+                else:
+                    next_target = find_tomorrow_time(ctx.observer_date, ctx.adjusted_obs, num_days=diff)  # type: ignore[arg-type]
+
+            out[i] = replace(prayer, time=te.time_midpoint(out[ctx.idx_sunset].time, next_target))  # type: ignore[arg-type]
+
+            if out[i].time < out[6].time:  # type: ignore[arg-type]
+                next_target = find_tomorrow_time(ctx.observer_date, ctx.adjusted_obs)
+                out[i] = replace(prayer, time=te.time_midpoint(out[ctx.idx_sunset].time, next_target))  # type: ignore[arg-type]
+
+    return out
+
+
+def _strategy_portion_of_night(ctx: ExtremeLatitudeContext, out: List[Prayer]) -> List[Prayer]:
+    factor = {
+        'MIDDLENIGHT': 1 / 2,
+        'ONESEVENTH': 1 / 7,
+        'ANGLEBASED': 1 / 60,
+    }
+    midnight_float = (timedelta(hours=24) + out[ctx.idx_sunrise].time - out[ctx.idx_sunset].time).total_seconds() / 3600.0  # type: ignore[arg-type]
+    base_portion = factor[ctx.method.extreme_lats] * midnight_float
+
+    for i, prayer in enumerate(out):
+        if prayer.name not in ['Fajr', 'Maghrib', 'ʿIshāʾ']:
+            continue
+
+        if prayer.name == 'Fajr':
+            sign = -1
+            base = out[ctx.idx_sunrise]
+        else:
+            sign = 1
+            base = out[ctx.idx_sunset]
+
+        if ctx.method.extreme_lats == 'ANGLEBASED':
+            ang = _angle_for(prayer.name, ctx.method)
+            portion_mod = base_portion * ang.decimal
+        else:
+            portion_mod = base_portion
+
+        try:
+            delta_h = (prayer.time - base.time).total_seconds() / 3600.0  # type: ignore[attr-defined]
+        except (TypeError, AttributeError):
+            delta_h = math.inf
+
+        if delta_h == math.inf or delta_h > portion_mod or abs(ctx.observer.latitude.decimal) > abs(ctx.polar_lat):
+            out[i] = replace(prayer, time=base.time + timedelta(hours=sign * portion_mod))  # type: ignore[attr-defined]
+
+    if abs(ctx.observer.latitude.decimal) > abs(ctx.polar_lat):
+        next_sunrise: datetime = find_tomorrow_time(ctx.observer_date, ctx.polar_obs)
+        next_sunset: datetime = find_tomorrow_time(ctx.observer_date, ctx.polar_obs, rise_or_set='set')
+    else:
+        next_sunrise = find_tomorrow_time(ctx.observer_date, ctx.adjusted_obs)
+        next_sunset = find_tomorrow_time(ctx.observer_date, ctx.adjusted_obs, rise_or_set='set')
+
+    if next_sunset < next_sunrise:
+        if ctx.observer_date.date.day + 1 == next_sunrise.day:
+            if abs(ctx.observer.latitude.decimal) > abs(ctx.polar_lat):
+                next_sunset = find_tomorrow_time(ctx.observer_date, ctx.polar_obs, rise_or_set='set', num_days=2)
+            else:
+                next_sunset = find_tomorrow_time(ctx.observer_date, ctx.adjusted_obs, rise_or_set='set', num_days=2)
+        if ctx.observer_date.date.day + 1 == next_sunset.day:
+            if abs(ctx.observer.latitude.decimal) > abs(ctx.polar_lat):
+                next_sunrise = safe_sun_time(ctx.observer_date, ctx.polar_obs, 'rise', ctx.standard_sun_angle)
+            else:
+                next_sunrise = safe_sun_time(ctx.observer_date, ctx.polar_obs, 'rise', ctx.standard_sun_angle)
+
+    if getattr(ctx.method, 'midnight_type', False):
+        try:
+            next_fajr = find_tomorrow_time(ctx.observer_date, ctx.observer, ctx.method.fajr_angle)
+        except ArithmeticError:
+            next_fajr = math.inf
+
+        midnight_float_next = (timedelta(hours=24) + next_sunrise - next_sunset).total_seconds() / 3600.0
+        portion_next = factor[ctx.method.extreme_lats] * midnight_float_next
+        if ctx.method.extreme_lats == 'ANGLEBASED':
+            portion_next *= ctx.method.fajr_angle.decimal
+
+        try:
+            delta_h_next = (next_fajr - next_sunrise).total_seconds() / 3600.0  # type: ignore[operator]
+        except (TypeError, AttributeError):
+            delta_h_next = math.inf
+
+        if delta_h_next == math.inf or delta_h_next > portion_next:
+            next_fajr = next_sunrise - timedelta(hours=portion_next)
+
+        out[ctx.idx_midnight] = replace(out[ctx.idx_midnight], time=te.time_midpoint(out[ctx.idx_sunset].time, next_fajr))  # type: ignore[arg-type]
+    else:
+        out[ctx.idx_midnight] = replace(out[ctx.idx_midnight], time=te.time_midpoint(out[ctx.idx_sunset].time, next_sunrise))  # type: ignore[arg-type]
+
+    return out
+
 def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, prayer_list: List[Prayer], sun_dec: Angle) -> List[Prayer]:
     """Adjust prayer outputs for locations with extreme-latitude constraints.
 
@@ -198,19 +379,6 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
 
     STANDARD_SUN_ANGLE = Angle(5/6)
 
-    FACTOR = {
-        'MIDDLENIGHT': 1 / 2,
-        'ONESEVENTH': 1 / 7,
-        'ANGLEBASED': 1 / 60,
-    }
-
-    def _angle_for(name: str, method: PrayerMethod) -> Angle:
-        if name == 'Fajr':
-            return method.fajr_angle
-        if name == 'Maghrib':
-            return method.maghrib_angle
-        return method.isha_angle  # for ʿIshāʾ
-    
     method: PrayerMethod = prayer_list[0].method
     out = list(prayer_list)
     lat_sign: int = 1 if observer.latitude.decimal > 0 else -1
@@ -225,9 +393,10 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
     polar_lat_ex = 90.0 - eps.decimal - 0.01
 
     try: 
+        prayer_values = [_to_prayer_value(p.time) for p in prayer_list]
         only_sunrise_sunset_undef = (
-            all((prayer_list[i].time == math.inf or 'does not exist' in prayer_list[i].time) for i in [IDX_SUNRISE, IDX_SUNSET, IDX_MAGHRIB, IDX_MIDNIGHT]) # type: ignore[arg-type]
-            and all((prayer_list[j].time != math.inf or not ('does not exist' in prayer_list[j].time)) for j in range(3) if j not in [IDX_SUNRISE, IDX_SUNSET, IDX_MAGHRIB, IDX_MIDNIGHT]) # type: ignore[arg-type]
+            all(prayer_values[i].status != PrayerStatus.VALID for i in [IDX_SUNRISE, IDX_SUNSET, IDX_MAGHRIB, IDX_MIDNIGHT])
+            and all(prayer_values[j].status == PrayerStatus.VALID for j in [0, 2])
         )
 
         if only_sunrise_sunset_undef:
@@ -296,125 +465,27 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
             elif method.extreme_lats == 'NEARESTLAT':
                 out[IDX_SUNRISE] = replace(out[IDX_SUNRISE], time=find_tomorrow_time(observer_date, adjusted_obs, STANDARD_SUN_ANGLE, 'rise', -1))
 
-    # Nearest latitude method
+    ctx = ExtremeLatitudeContext(
+        observer_date=observer_date,
+        observer=observer,
+        method=method,
+        sun_dec=sun_dec,
+        standard_sun_angle=STANDARD_SUN_ANGLE,
+        idx_sunrise=IDX_SUNRISE,
+        idx_sunset=IDX_SUNSET,
+        idx_maghrib=IDX_MAGHRIB,
+        idx_midnight=IDX_MIDNIGHT,
+        polar_lat=polar_lat,
+        adjusted_obs=adjusted_obs,
+        polar_obs=polar_obs,
+        lat_sign=lat_sign,
+    )
+
     if method.extreme_lats == 'NEARESTLAT':
-        for i, prayer in enumerate(out):
-            if prayer.name in ['Maghrib', 'ʿIshāʾ']:
-                ang = _angle_for(prayer.name, method)
-                out[i] = replace(prayer, time=safe_sun_time(observer_date, adjusted_obs, 'set', ang)) # type: ignore[arg-type]
+        return _strategy_nearest_lat(ctx, out)
 
-                # Change sunset and sunrise times so they make more sense.
-                if prayer.name == 'Maghrib':
-                    if out[IDX_SUNRISE].time < out[0].time: # type: ignore[arg-type]
-                        out[IDX_SUNRISE] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, adjusted_obs, 'rise', STANDARD_SUN_ANGLE))
-                    
-                    if out[IDX_SUNSET].time > out[IDX_MAGHRIB].time: # type: ignore[arg-type]
-                        out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, adjusted_obs, 'set', STANDARD_SUN_ANGLE))
-
-            elif prayer.name == 'Fajr':
-                out[i] = replace(prayer, time=safe_sun_time(observer_date, adjusted_obs, 'rise', method.fajr_angle)) # type: ignore[arg-type]
-                if out[i].time.day != out[IDX_SUNRISE].time.day: # type: ignore[arg-type]
-                    out[i] = replace(prayer, time=find_tomorrow_time(observer_date, adjusted_obs, method.fajr_angle, num_days=-1))
-            
-            elif prayer.name == 'Midnight':
-                if method.midnight_type:
-                    next_target = find_tomorrow_time(observer_date, adjusted_obs, method.fajr_angle) # type: ignore[arg-type]
-                else:
-                    next_target = find_tomorrow_time(observer_date, adjusted_obs) # type: ignore[arg-type]
-                
-                diff = -999
-                if observer_date.date.day + 1 != next_target.day:
-                    diff = observer_date.date.day + 2 - next_target.day
-                    if method.midnight_type:
-                        next_target = find_tomorrow_time(observer_date, adjusted_obs, method.fajr_angle, num_days=diff) # type: ignore[arg-type]
-                    else:
-                        next_target = find_tomorrow_time(observer_date, adjusted_obs, num_days=diff) # type: ignore[arg-type]
-
-                out[i] = replace(prayer, time=te.time_midpoint(out[IDX_SUNSET].time, next_target))  # type: ignore[arg-type]
-
-                if out[i].time < out[6].time: # type: ignore[arg-type]
-                    next_target = find_tomorrow_time(observer_date, adjusted_obs)
-                    out[i] = replace(prayer, time=te.time_midpoint(out[IDX_SUNSET].time, next_target)) # type: ignore[arg-type]
-
-        return out
-
-    # Portion-of-night clamping methods
     if method.extreme_lats in ['MIDDLENIGHT', 'ONESEVENTH', 'ANGLEBASED']:
-        # Use sunrise and sunset already present in prayer_list like the original
-        midnight_float = (timedelta(hours=24) + out[IDX_SUNRISE].time - out[IDX_SUNSET].time).total_seconds() / 3600.0 # type: ignore[arg-type]
-        base_portion = FACTOR[method.extreme_lats] * midnight_float
-
-        for i, prayer in enumerate(out):
-            if prayer.name not in ['Fajr', 'Maghrib', 'ʿIshāʾ']:
-                continue
-
-            if prayer.name == 'Fajr':
-                sign = -1
-                base = out[IDX_SUNRISE]  # sunrise
-            else:
-                sign = 1
-                base = out[IDX_SUNSET]   # sunset
-
-            if method.extreme_lats == 'ANGLEBASED':
-                ang = _angle_for(prayer.name, method)
-                portion_mod = base_portion * ang.decimal
-            else:
-                portion_mod = base_portion
-
-            # Match original: compare raw delta, not absolute value
-            try:
-                delta_h = (prayer.time - base.time).total_seconds() / 3600.0  # type: ignore[attr-defined]
-            except (TypeError, AttributeError):
-                delta_h = math.inf
-
-            if delta_h == math.inf or delta_h > portion_mod or abs(observer.latitude.decimal) > abs(polar_lat):
-                out[i] = replace(prayer, time=base.time + timedelta(hours=sign * portion_mod))  # type: ignore[attr-defined]
-
-        # Midnight recompute exactly like original
-        if abs(observer.latitude.decimal) > abs(polar_lat):
-            next_sunrise: datetime = find_tomorrow_time(observer_date, polar_obs)
-            next_sunset: datetime = find_tomorrow_time(observer_date, polar_obs, rise_or_set='set')
-        else:
-            next_sunrise: datetime = find_tomorrow_time(observer_date, adjusted_obs)
-            next_sunset: datetime = find_tomorrow_time(observer_date, adjusted_obs, rise_or_set='set')
-        
-        if next_sunset < next_sunrise:
-            if observer_date.date.day + 1 == next_sunrise.day:
-                if abs(observer.latitude.decimal) > abs(polar_lat):
-                    next_sunset = find_tomorrow_time(observer_date, polar_obs, rise_or_set='set', num_days=2)
-                else:
-                    next_sunset = find_tomorrow_time(observer_date, adjusted_obs, rise_or_set='set', num_days=2)
-            if observer_date.date.day + 1 == next_sunset.day:
-                if abs(observer.latitude.decimal) > abs(polar_lat):
-                    next_sunrise = safe_sun_time(observer_date, polar_obs, 'rise', STANDARD_SUN_ANGLE)
-                else:
-                    next_sunrise = safe_sun_time(observer_date, polar_obs, 'rise', STANDARD_SUN_ANGLE)
-
-        if getattr(method, 'midnight_type', False):
-            try:
-                next_fajr = find_tomorrow_time(observer_date, observer, method.fajr_angle)
-            except ArithmeticError:
-                next_fajr = math.inf
-
-            midnight_float_next = (timedelta(hours=24) + next_sunrise - next_sunset).total_seconds() / 3600.0
-
-            portion_next = FACTOR[method.extreme_lats] * midnight_float_next
-            if method.extreme_lats == 'ANGLEBASED':
-                portion_next *= method.fajr_angle.decimal
-
-            try:
-                delta_h_next = (next_fajr - next_sunrise).total_seconds() / 3600.0  # type: ignore[operator]
-            except (TypeError, AttributeError):
-                delta_h_next = math.inf
-
-            if delta_h_next == math.inf or delta_h_next > portion_next:
-                next_fajr = next_sunrise - timedelta(hours=portion_next)
-
-            out[IDX_MIDNIGHT] = replace(out[IDX_MIDNIGHT], time=te.time_midpoint(out[IDX_SUNSET].time, next_fajr)) # type: ignore[arg-type]
-        else:
-            out[IDX_MIDNIGHT] = replace(out[IDX_MIDNIGHT], time=te.time_midpoint(out[IDX_SUNSET].time, next_sunrise)) # type: ignore[arg-type]
-
-        return out
+        return _strategy_portion_of_night(ctx, out)
 
     # Fallback message
     msg = "The observer is at a latitude such that the sun does not reach the given angle for the prayer."
@@ -500,20 +571,21 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
         midnight_dt = math.inf
     
 
-    prayer_list: List[Prayer] = [
-        Prayer("Fajr", fajr_dt, method),
-        Prayer("Sunrise", sun_info.sunrise, method),
-        Prayer("Ẓuhr", sun_info.sun_transit, method),
-        Prayer("ʿAṣr", asr_dt, method),
-        Prayer("Sunset", sun_info.sunset, method),
-        Prayer("Maghrib", maghrib_dt, method),
-        Prayer("ʿIshāʾ", isha_dt, method),
-        Prayer("Midnight", midnight_dt, method)
+    prayer_values: List[tuple[str, PrayerValue]] = [
+        ("Fajr", _to_prayer_value(fajr_dt)),
+        ("Sunrise", _to_prayer_value(sun_info.sunrise)),
+        ("Ẓuhr", _to_prayer_value(sun_info.sun_transit)),
+        ("ʿAṣr", _to_prayer_value(asr_dt)),
+        ("Sunset", _to_prayer_value(sun_info.sunset)),
+        ("Maghrib", _to_prayer_value(maghrib_dt)),
+        ("ʿIshāʾ", _to_prayer_value(isha_dt)),
+        ("Midnight", _to_prayer_value(midnight_dt)),
     ]
+    prayer_list: List[Prayer] = [Prayer(name, _to_legacy_time(value), method) for name, value in prayer_values]
 
     # Deal with locations at extreme latitudes
     if abs(observer.latitude.decimal) > 46.5: # 90 - obliquity (23.5) - max fajr angle (20)
-        if any(p.time == math.inf for p in prayer_list):
+        if any(value.status == PrayerStatus.MISSING_EVENT for _, value in prayer_values):
             warnings.warn("Extreme latitude warning. Prayer times at this latitude are not well established.")
             prayer_list = extreme_latitudes(observer_date, observer, prayer_list, sun_info.apparent_declination)
 

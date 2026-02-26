@@ -41,14 +41,14 @@
     } \
 } while(0)
 
-
-extern PyObject *datetime_datetime;
-extern PyObject *SunType;
-extern PyObject *MoonType;
-extern PyObject *VisibilitiesType;
-extern PyObject *AngleType;
-extern PyObject *DistanceType;
-extern PyObject *DistanceUnitsType;
-extern PyObject *RightAscensionType;
+typedef struct {
+    PyObject* sun_type;
+    PyObject* moon_type;
+    PyObject* visibilities_type;
+    PyObject* angle_type;
+    PyObject* distance_type;
+    PyObject* distance_units_type;
+    PyObject* right_ascension_type;
+} AstroCoreState;
 
 #endif  // ISLAMIC_TIMES_NATIVE_ASTRO_CORE_H

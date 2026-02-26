@@ -6,37 +6,6 @@
 #include "c_moon_equations.h"
 #include "c_visibilities.h"
 
-PyObject *SunType = NULL;
-PyObject *MoonType = NULL;
-PyObject *VisibilitiesType = NULL;
-PyObject *AngleType = NULL;
-PyObject *DistanceType = NULL;
-PyObject *DistanceUnitsType = NULL;
-PyObject *RightAscensionType = NULL;
-
-
-/* ============================
-   Cleaning up types
-   ============================ */
-
-static void cleanup_types(void) {
-    // Optional cleanup at exit
-    Py_XDECREF(SunType);
-    SunType = NULL;
-    Py_XDECREF(MoonType);
-    MoonType = NULL;
-    Py_XDECREF(VisibilitiesType);
-    VisibilitiesType = NULL;
-    Py_XDECREF(AngleType);
-    AngleType = NULL;
-    Py_XDECREF(DistanceType);
-    DistanceType = NULL;
-    Py_XDECREF(DistanceUnitsType);
-    DistanceUnitsType = NULL;
-    Py_XDECREF(RightAscensionType);
-    RightAscensionType = NULL;
-}
-
 /* ============================
    Python-exposed Methods Table
    ============================ */
@@ -68,49 +37,65 @@ static PyMethodDef AstroCoreMethods[] = {
      "compute_visibilities(...) -> Visibilities\nCompute crescent visibility q-values and classes."},
     {"compute_visibilities_batch", compute_visibilities_batch_py, METH_VARARGS,
      "compute_visibilities_batch(...) -> numpy.ndarray\nBatch crescent visibility computation across coordinate arrays."},
-    {NULL, NULL, 0, NULL}  /* Sentinel */
+    {NULL, NULL, 0, NULL}
 };
 
-/* ============================
-   Module Definition
-   ============================ */
-
-static struct PyModuleDef astro_core_module = {
-    PyModuleDef_HEAD_INIT,
-    "astro_core",                              // Module name
-    "Core astronomical calculations module.",  // Module docstring
-    -1,                                        // Size of per-interpreter state or -1
-    AstroCoreMethods
-};
-
-/* ============================
-   Module Initialization
-   ============================ */
-
-PyMODINIT_FUNC PyInit_astro_core(void) {
-    PyObject *m = PyModule_Create(&astro_core_module);
-    PyObject *mod_sun = NULL;
-    PyObject *mod_moon = NULL;
-    PyObject *mod_dc = NULL;
-
-    if (m == NULL) {
-        return NULL;
+static int astro_core_traverse(PyObject* module, visitproc visit, void* arg) {
+    AstroCoreState* state = (AstroCoreState*)PyModule_GetState(module);
+    if (!state) {
+        return 0;
     }
 
-    // Import and initialize datetime C-API
-    PyDateTime_IMPORT;
-    if (PyDateTimeAPI == NULL) {
-        Py_DECREF(m);
-        return NULL;
+    Py_VISIT(state->sun_type);
+    Py_VISIT(state->moon_type);
+    Py_VISIT(state->visibilities_type);
+    Py_VISIT(state->angle_type);
+    Py_VISIT(state->distance_type);
+    Py_VISIT(state->distance_units_type);
+    Py_VISIT(state->right_ascension_type);
+    return 0;
+}
+
+static int astro_core_clear(PyObject* module) {
+    AstroCoreState* state = (AstroCoreState*)PyModule_GetState(module);
+    if (!state) {
+        return 0;
     }
 
-    import_array();
-    if (PyArray_API == NULL) {
-        Py_DECREF(m);
-        return NULL;
+    Py_CLEAR(state->sun_type);
+    Py_CLEAR(state->moon_type);
+    Py_CLEAR(state->visibilities_type);
+    Py_CLEAR(state->angle_type);
+    Py_CLEAR(state->distance_type);
+    Py_CLEAR(state->distance_units_type);
+    Py_CLEAR(state->right_ascension_type);
+    return 0;
+}
+
+static void astro_core_free(void* module) {
+    astro_core_clear((PyObject*)module);
+}
+
+static int import_cached_type(PyObject* source_module, const char* type_name, PyObject** out_type) {
+    PyObject* type_obj = PyObject_GetAttrString(source_module, type_name);
+    if (!type_obj) {
+        return -1;
+    }
+    *out_type = type_obj;
+    return 0;
+}
+
+static int astro_core_load_runtime_types(PyObject* module) {
+    PyObject* mod_sun = NULL;
+    PyObject* mod_moon = NULL;
+    PyObject* mod_dc = NULL;
+    AstroCoreState* state = (AstroCoreState*)PyModule_GetState(module);
+
+    if (!state) {
+        PyErr_SetString(PyExc_RuntimeError, "Failed to allocate astro_core module state.");
+        return -1;
     }
 
-    // islamic_times module imports
     mod_sun = PyImport_ImportModule("islamic_times.sun_equations");
     mod_moon = PyImport_ImportModule("islamic_times.moon_equations");
     mod_dc = PyImport_ImportModule("islamic_times.it_dataclasses");
@@ -118,34 +103,71 @@ PyMODINIT_FUNC PyInit_astro_core(void) {
         goto error;
     }
 
-    // Class/type imports
-    SunType = PyObject_GetAttrString(mod_sun, "Sun");
-    MoonType = PyObject_GetAttrString(mod_moon, "Moon");
-    VisibilitiesType = PyObject_GetAttrString(mod_dc, "Visibilities");
-    AngleType = PyObject_GetAttrString(mod_dc, "Angle");
-    DistanceType = PyObject_GetAttrString(mod_dc, "Distance");
-    DistanceUnitsType = PyObject_GetAttrString(mod_dc, "DistanceUnits");
-    RightAscensionType = PyObject_GetAttrString(mod_dc, "RightAscension");
-    if (!SunType || !MoonType || !VisibilitiesType || !AngleType || !DistanceType || !DistanceUnitsType || !RightAscensionType) {
+    if (import_cached_type(mod_sun, "Sun", &state->sun_type) < 0 ||
+        import_cached_type(mod_moon, "Moon", &state->moon_type) < 0 ||
+        import_cached_type(mod_dc, "Visibilities", &state->visibilities_type) < 0 ||
+        import_cached_type(mod_dc, "Angle", &state->angle_type) < 0 ||
+        import_cached_type(mod_dc, "Distance", &state->distance_type) < 0 ||
+        import_cached_type(mod_dc, "DistanceUnits", &state->distance_units_type) < 0 ||
+        import_cached_type(mod_dc, "RightAscension", &state->right_ascension_type) < 0) {
         goto error;
     }
 
     Py_DECREF(mod_sun);
     Py_DECREF(mod_moon);
     Py_DECREF(mod_dc);
-
-    // Register cleanup when interpreter shuts down
-    if (Py_AtExit(cleanup_types) != 0) {
-        PyErr_WarnEx(PyExc_RuntimeWarning, "Failed to register cleanup", 1);
-    }
-
-    return m;
+    return 0;
 
 error:
     Py_XDECREF(mod_sun);
     Py_XDECREF(mod_moon);
     Py_XDECREF(mod_dc);
-    cleanup_types();
-    Py_DECREF(m);
-    return NULL;
+    astro_core_clear(module);
+    return -1;
+}
+
+/* ============================
+   Module Definition
+   ============================ */
+
+static struct PyModuleDef astro_core_module = {
+    PyModuleDef_HEAD_INIT,
+    "astro_core",
+    "Core astronomical calculations module.",
+    sizeof(AstroCoreState),
+    AstroCoreMethods,
+    NULL,
+    astro_core_traverse,
+    astro_core_clear,
+    astro_core_free
+};
+
+/* ============================
+   Module Initialization
+   ============================ */
+
+PyMODINIT_FUNC PyInit_astro_core(void) {
+    PyObject* module = PyModule_Create(&astro_core_module);
+    if (module == NULL) {
+        return NULL;
+    }
+
+    PyDateTime_IMPORT;
+    if (PyDateTimeAPI == NULL) {
+        Py_DECREF(module);
+        return NULL;
+    }
+
+    import_array();
+    if (PyArray_API == NULL) {
+        Py_DECREF(module);
+        return NULL;
+    }
+
+    if (astro_core_load_runtime_types(module) < 0) {
+        Py_DECREF(module);
+        return NULL;
+    }
+
+    return module;
 }

@@ -288,7 +288,19 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     Py_DECREF(py_classifications);
     if (!args_tuple) return NULL;
 
-    PyObject* result = PyObject_CallObject(VisibilitiesType, args_tuple); //PyObject_CallObject(VisibilitiesType, args_tuple);
+    AstroCoreState* state = (AstroCoreState*)PyModule_GetState(self);
+    if (!state) {
+        PyErr_SetString(PyExc_RuntimeError, "Failed to access astro_core module state.");
+        Py_DECREF(args_tuple);
+        return NULL;
+    }
+    if (!state->visibilities_type || !PyType_Check(state->visibilities_type)) {
+        Py_DECREF(args_tuple);
+        PyErr_SetString(PyExc_RuntimeError, "VisibilitiesType is not a valid Python type");
+        return NULL;
+    }
+
+    PyObject* result = PyObject_CallObject(state->visibilities_type, args_tuple);
     Py_DECREF(args_tuple);
 
     return result;

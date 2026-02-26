@@ -1,5 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include "c_moon_equations.h"
+#include "c_event_solver.h"
 
 /* ================================
    Definitions & Helper Constants
@@ -563,31 +564,31 @@ void compute_moon_result(double jde, double deltaT, double local_latitude, doubl
 }
 
 /* Python wrapper helpers for constructing dataclass-compatible objects. */
-static PyObject* create_angle_obj_moon(double value) {
+static PyObject* create_angle_obj_moon(AstroCoreState* state, double value) {
     PyObject* py_value = PyFloat_FromDouble(value);
     PyObject* angle_obj;
     if (!py_value) {
         return NULL;
     }
 
-    angle_obj = PyObject_CallFunctionObjArgs(AngleType, py_value, NULL);
+    angle_obj = PyObject_CallFunctionObjArgs(state->angle_type, py_value, NULL);
     Py_DECREF(py_value);
     return angle_obj;
 }
 
-static PyObject* create_ra_obj_from_degrees_moon(double value_deg) {
+static PyObject* create_ra_obj_from_degrees_moon(AstroCoreState* state, double value_deg) {
     PyObject* py_hours = PyFloat_FromDouble(value_deg / 15.0);
     PyObject* ra_obj;
     if (!py_hours) {
         return NULL;
     }
 
-    ra_obj = PyObject_CallFunctionObjArgs(RightAscensionType, py_hours, NULL);
+    ra_obj = PyObject_CallFunctionObjArgs(state->right_ascension_type, py_hours, NULL);
     Py_DECREF(py_hours);
     return ra_obj;
 }
 
-static PyObject* create_distance_obj_moon(double value, const char* unit_name) {
+static PyObject* create_distance_obj_moon(AstroCoreState* state, double value, const char* unit_name) {
     PyObject* py_value = NULL;
     PyObject* unit_obj = NULL;
     PyObject* dist_obj = NULL;
@@ -597,12 +598,12 @@ static PyObject* create_distance_obj_moon(double value, const char* unit_name) {
         goto error;
     }
 
-    unit_obj = PyObject_GetAttrString(DistanceUnitsType, unit_name);
+    unit_obj = PyObject_GetAttrString(state->distance_units_type, unit_name);
     if (!unit_obj) {
         goto error;
     }
 
-    dist_obj = PyObject_CallFunctionObjArgs(DistanceType, py_value, unit_obj, NULL);
+    dist_obj = PyObject_CallFunctionObjArgs(state->distance_type, py_value, unit_obj, NULL);
 
 error:
     Py_XDECREF(py_value);
@@ -645,7 +646,12 @@ PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t narg
                         deltaPsi, ecliptic,
                         &result);
 
-    if (!MoonType || !PyType_Check(MoonType)) {
+    AstroCoreState* state = (AstroCoreState*)PyModule_GetState(self);
+    if (!state) {
+        PyErr_SetString(PyExc_RuntimeError, "Failed to access astro_core module state.");
+        return NULL;
+    }
+    if (!state->moon_type || !PyType_Check(state->moon_type)) {
         PyErr_SetString(PyExc_RuntimeError, "MoonType is not a valid Python type");
         return NULL;
     }
@@ -695,28 +701,28 @@ PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t narg
     if (!args_tuple) {
         goto error;
     }
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 0, create_angle_obj_moon(result.true_longitude));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 1, create_angle_obj_moon(result.true_latitude));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 2, create_distance_obj_moon(result.geocentric_distance, "KILOMETRE"));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 0, create_angle_obj_moon(state, result.true_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 1, create_angle_obj_moon(state, result.true_latitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 2, create_distance_obj_moon(state, result.geocentric_distance, "KILOMETRE"));
     PyTuple_SET_ITEM(args_tuple, 3, lunar_nutation);
     lunar_nutation = NULL;
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 4, create_angle_obj_moon(result.omega));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 5, create_angle_obj_moon(result.apparent_longitude));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 6, create_angle_obj_moon(result.deltaPsi));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 7, create_angle_obj_moon(result.true_obliquity));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 8, create_ra_obj_from_degrees_moon(result.right_ascension));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 9, create_angle_obj_moon(result.declination));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 10, create_angle_obj_moon(result.greenwich_hour_angle));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 11, create_angle_obj_moon(result.local_hour_angle));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 12, create_angle_obj_moon(result.eh_parallax));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 13, create_ra_obj_from_degrees_moon(result.topocentric_ascension));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 14, create_angle_obj_moon(result.top_declination));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 15, create_angle_obj_moon(result.topocentric_local_hour_angle));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 16, create_angle_obj_moon(result.true_altitude));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 17, create_angle_obj_moon(result.true_azimuth));
-    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 18, create_angle_obj_moon(result.apparent_altitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 4, create_angle_obj_moon(state, result.omega));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 5, create_angle_obj_moon(state, result.apparent_longitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 6, create_angle_obj_moon(state, result.deltaPsi));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 7, create_angle_obj_moon(state, result.true_obliquity));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 8, create_ra_obj_from_degrees_moon(state, result.right_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 9, create_angle_obj_moon(state, result.declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 10, create_angle_obj_moon(state, result.greenwich_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 11, create_angle_obj_moon(state, result.local_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 12, create_angle_obj_moon(state, result.eh_parallax));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 13, create_ra_obj_from_degrees_moon(state, result.topocentric_ascension));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 14, create_angle_obj_moon(state, result.top_declination));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 15, create_angle_obj_moon(state, result.topocentric_local_hour_angle));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 16, create_angle_obj_moon(state, result.true_altitude));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 17, create_angle_obj_moon(state, result.true_azimuth));
+    SET_TUPLE_ITEM_OR_FAIL(args_tuple, 18, create_angle_obj_moon(state, result.apparent_altitude));
 
-    moon = PyObject_CallObject(MoonType, args_tuple);
+    moon = PyObject_CallObject(state->moon_type, args_tuple);
     Py_DECREF(args_tuple);
     #undef SET_TUPLE_ITEM_OR_FAIL
 
@@ -774,25 +780,13 @@ int find_moon_transit(datetime date, double utc_offset, double local_latitude, d
     }
     
     double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double right_ascension_deg[3] = {
+        moon_params[0].right_ascension,
+        moon_params[1].right_ascension,
+        moon_params[2].right_ascension
+    };
     double m0 = (moon_params[1].right_ascension - local_longitude - sidereal_time) / 360.0;
-    
-    for (int i = 0; i < 3; i++) {
-        double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m0);
-        double n_event = m0 + new_deltaT / SECONDS_IN_DAY;
-        double interp_ra_event_deg = angle_interpolation(n_event,
-                                    moon_params[0].right_ascension,
-                                    moon_params[1].right_ascension,
-                                    moon_params[2].right_ascension);
-
-        double lha_event_deg = normalize_angle(theta_event_deg - (-local_longitude) - interp_ra_event_deg);
-        m0 -= lha_event_deg / 360;
-    }
-
-    // Canonical modulo into [0, 1)
-    m0 = fmod(m0, 1.0);
-    if (m0 < 0.0) {
-        m0 += 1.0;
-    }
+    m0 = refine_transit_fraction(m0, sidereal_time, local_longitude, new_deltaT, right_ascension_deg);
 
     // Construct transit datetime
     moon_event->year = date.year;
@@ -899,17 +893,22 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
             deltaPsi[i], true_obliquity[i], &moon_params[i]);
     }
 
-    double h_zero_rad = RADIANS(0.7275 * moon_params[1].eh_parallax - 0.566667);
-    double cosH_zero = (sin(h_zero_rad) - sin(lat_rad) * sin(RADIANS(moon_params[1].declination))) / \
-                        (cos(lat_rad) * cos(RADIANS(moon_params[1].declination)));
+    double declination_deg[3] = {
+        moon_params[0].declination,
+        moon_params[1].declination,
+        moon_params[2].declination
+    };
+    double right_ascension_deg[3] = {
+        moon_params[0].right_ascension,
+        moon_params[1].right_ascension,
+        moon_params[2].right_ascension
+    };
 
-    double H_zero_rad, H_zero_deg;
-    if (cosH_zero < 1.0 && cosH_zero > -1.0) {
-        H_zero_rad = acos(cosH_zero);
-        H_zero_deg = H_zero_rad * 180 / M_PI;
-    }
-    else
+    double horizon_altitude_deg = 0.7275 * moon_params[1].eh_parallax - 0.566667;
+    double H_zero_deg;
+    if (compute_event_hour_angle(lat_rad, declination_deg[1], horizon_altitude_deg, &H_zero_deg) != 0) {
         return -1;
+    }
     
     double sidereal_time = greenwich_mean_sidereal_time(new_jd);
     double m0 = (moon_params[1].right_ascension - local_longitude - sidereal_time) / 360.0;
@@ -922,25 +921,16 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
     else
         return -2;
     
-    for (int i = 0; i < 3; i++) {
-        double theta_event_deg = normalize_angle(sidereal_time + 360.985647 * m_event);
-        double n_event = m_event + new_deltaT / SECONDS_IN_DAY;
-        double interp_dec_event_rad = angle_interpolation(n_event,
-                                    moon_params[0].declination,
-                                    moon_params[1].declination,
-                                    moon_params[2].declination) * M_PI / 180;
-        double interp_ra_event_deg = angle_interpolation(n_event,
-                                    moon_params[0].right_ascension,
-                                    moon_params[1].right_ascension,
-                                    moon_params[2].right_ascension);
-
-        double lha_event_rad = normalize_angle(theta_event_deg - (-local_longitude) - interp_ra_event_deg) * M_PI / 180;
-        double moon_alt_deg = asin(sin(lat_rad) * sin(interp_dec_event_rad) + 
-                                cos(lat_rad) * cos(interp_dec_event_rad) * cos(lha_event_rad)) * 180 / M_PI;
-
-        double deltaM = (moon_alt_deg - h_zero_rad * 180 / M_PI) / (360 * cos(interp_dec_event_rad) * cos(lat_rad) * sin(lha_event_rad));
-        m_event += deltaM;
-    }
+    m_event = refine_altitude_event_fraction(
+        m_event,
+        sidereal_time,
+        local_longitude,
+        new_deltaT,
+        lat_rad,
+        horizon_altitude_deg,
+        declination_deg,
+        right_ascension_deg
+    );
 
     moon_event->year = date.year;
     moon_event->month = date.month;
@@ -951,52 +941,62 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
     return 0;
 }
 
+typedef struct {
+    double latitude;
+    double longitude;
+    double elevation;
+    double temperature;
+    double pressure;
+    char event;
+    double* deltaPsi;
+    double* true_obliquity;
+} MoonEventSearchContext;
+
+static int solve_moon_event_for_day(datetime date, double utc_offset, void* ctx, datetime* out_event) {
+    MoonEventSearchContext* context = (MoonEventSearchContext*)ctx;
+    return moonrise_or_moonset(
+        date,
+        utc_offset,
+        context->latitude,
+        context->longitude,
+        context->elevation,
+        context->temperature,
+        context->pressure,
+        context->event,
+        context->deltaPsi,
+        context->true_obliquity,
+        out_event
+    );
+}
+
 /*
  * Find the first moonrise/moonset event that belongs to the reference civil day.
  * Returns INVALID_DATETIME when no valid event is found.
  */
-datetime find_proper_moontime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
-                                double temperature, double pressure, char event, double deltaPsi[3], double true_obliquity[3]) {
-    // Get gregorian datetime from JD
+datetime find_proper_moontime(double jd, double utc_offset, double latitude, double longitude, double elevation,
+    double temperature, double pressure, char event, double deltaPsi[3], double true_obliquity[3]) {
     datetime reference_dt;
     jd_to_gregorian(jd, utc_offset, &reference_dt);
 
-    // Calculate UTC Offset estimate if not given
-    double temp_utc_offset = utc_offset;
-    if (utc_offset == 0)
-        temp_utc_offset = floor(longitude / 15) - 1;
+    MoonEventSearchContext context = {
+        .latitude = latitude,
+        .longitude = longitude,
+        .elevation = elevation,
+        .temperature = temperature,
+        .pressure = pressure,
+        .event = event,
+        .deltaPsi = deltaPsi,
+        .true_obliquity = true_obliquity
+    };
 
-    // Set the reference day of year
-    int reference_doy = day_of_year(reference_dt.year, reference_dt.month, reference_dt.day);
-
-    int status = 0;
-    for (int i = 0; i <= MAX_EVENT_SEARCH_DAYS; ++i) {
-        // Shift reference datetime
-        datetime new_datetime;
-        new_datetime = add_days(reference_dt, i);
-
-        // Set temp_moontime by sending in the shifted reference datetime
-        datetime temp_moontime;
-        status = moonrise_or_moonset(new_datetime, temp_utc_offset, latitude, longitude, elevation, 
-                                temperature, pressure, event, deltaPsi, true_obliquity, &temp_moontime);
-
-        if (status != 0)
-            return INVALID_DATETIME;
-
-        datetime temp_moontime_with_estimate_offset = add_days(temp_moontime, (double)i + temp_utc_offset / 24.0);
- 
-        int temp_moontime_doy = day_of_year(temp_moontime_with_estimate_offset.year, 
-                                temp_moontime_with_estimate_offset.month, temp_moontime_with_estimate_offset.day);
-
-        if ((temp_moontime_doy < reference_doy && temp_moontime.year == reference_dt.year) || 
-                                (temp_moontime_with_estimate_offset.year < reference_dt.year)) {
-            continue;
-        }
-        else {
-            return add_days(temp_moontime, utc_offset / 24.0);
-        }
-    }
-    return INVALID_DATETIME;
+    return find_event_on_reference_day(
+        reference_dt,
+        utc_offset,
+        longitude,
+        MAX_EVENT_SEARCH_DAYS,
+        solve_moon_event_for_day,
+        &context
+    );
 }
 
 /* Python wrapper for find_proper_moontime. */

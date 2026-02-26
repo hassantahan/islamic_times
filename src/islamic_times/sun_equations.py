@@ -230,15 +230,8 @@ def oblique_eq(jde: float) -> Angle:
     implementation exposed via ``islamic_times.astro_core``.
     """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_sun()" or "islamic_times.sun_equations.sunpos()" instead.', DeprecationWarning)
-
-    u = ((jde - te.J2000) / te.JULIAN_CENTURY) / 100
-
-    eps = 23 + 26 / 60 + (21.448 / 3600)
-
-    powers = np.power(u, np.arange(1, len(__OBLIQUITY_TERMS) + 1))
-    eps += np.dot(__OBLIQUITY_TERMS, powers) / 3600
-
-    return Angle(eps)
+    from islamic_times._legacy_py_impl import sun_equations as legacy_se
+    return legacy_se.oblique_eq(jde)
 
 # Chapter 22
 def sun_nutation(jde: float) -> Tuple[Angle, Angle]:
@@ -260,34 +253,8 @@ def sun_nutation(jde: float) -> Tuple[Angle, Angle]:
     implementation exposed via ``islamic_times.astro_core``.
     """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.compute_sun()" or "islamic_times.sun_equations.sunpos()" instead.', DeprecationWarning)
-
-    # Precompute time variables
-    t = (jde - te.J2000) / te.JULIAN_CENTURY
-    t2 = t * t
-    t3 = t * t2
-
-    ta = np.array([
-        297.850363 + 445267.11148 * t - 0.0019142 * t2 + t3 / 189474.0,
-        357.52772 + 35999.05034 * t - 0.0001603 * t2 - t3 / 300000.0,
-        134.96298 + 477198.867398 * t + 0.0086972 * t2 + t3 / 56250.0,
-        93.27191 + 483202.017538 * t - 0.0036825 * t2 + t3 / 327270,
-        125.04452 - 1934.136261 * t + 0.0020708 * t2 + t3 / 450000.0
-    ]) % 360  
-
-    ta = np.radians(ta)
-
-    sun_args = np.array(__SUN_NUTATION_ARGUMENTS).reshape(-1, 5)
-    sun_coeff = np.array(__SUN_NUTATION_COEFFICIENTS).reshape(-1, 4)
-
-    ang = np.dot(sun_args, ta)
-
-    dp = np.sum((sun_coeff[:, 0] + sun_coeff[:, 1] * t) * np.sin(ang))
-    de = np.sum((sun_coeff[:, 2] + sun_coeff[:, 3] * t) * np.cos(ang))
-
-    deltaPsi = dp / (3600.0 * 10000.0)
-    deltaEpsilon = de / (3600.0 * 10000.0)
-
-    return (Angle(deltaPsi), Angle(deltaEpsilon))
+    from islamic_times._legacy_py_impl import sun_equations as legacy_se
+    return legacy_se.sun_nutation(jde)
 
 # Chapter 25
 def sunpos(observer_date: DateTimeInfo, observer: ObserverInfo) -> Sun:
@@ -401,81 +368,8 @@ def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_
     favor of native extension solvers.
     """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension but cannot be called from python. Use "islamic_times.astro_core.find_proper_suntime()" or "islamic_times.sun_equations.find_proper_suntime()" instead.', DeprecationWarning)
-
-    if rise_or_set not in ['rise', 'set', 'sunrise', 'sunset']:
-        raise ValueError("Invalid value for rise_or_set. Please use 'rise' or 'set'.")
-
-    # First find the Year Month Day at UT 0h from JDE
-    ymd = datetime(observer_date.date.year, observer_date.date.month, observer_date.date.day)
-    new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
-    new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
-
-    # Calculate new sun params with the new_jd
-    sun_params: List[Sun] = []
-    for i in range(3):
-        ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
-        delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-        sun_params.append(
-                        sunpos(
-                            replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), 
-                            observer
-                        )
-                    )
-
-    # Compute H0: the hour angle corresponding to the desired altitude.
-    h_zero: Angle = Angle(-angle.decimal)
-    cosH_zero: float = (math.sin(h_zero.radians) - math.sin(observer.latitude.radians) * math.sin(sun_params[1].apparent_declination.radians)) / \
-                (math.cos(observer.latitude.radians) * math.cos(sun_params[1].apparent_declination.radians))
-    
-    if abs(cosH_zero) < 1:
-        H_zero = Angle(math.degrees(math.acos(cosH_zero)))
-    else:
-        return math.inf
-
-    # Compute Greenwich Mean Sidereal Time (GMST) at new_jd.
-    sidereal_time: Angle = te.greenwich_mean_sidereal_time(new_jd)
-
-    # Compute the transit estimate m0.
-    m0: float = (sun_params[1].apparent_right_ascension.decimal_degrees.decimal - observer.longitude.decimal - sidereal_time.decimal) / 360
-
-    # Choose which event to compute.
-    event = rise_or_set.lower()
-    if event in ['rise', 'sunrise']:
-        # Initial estimate for sunrise.
-        m_event: float = m0 - H_zero.decimal / 360
-    else:
-        # Initial estimate for sunset.
-        m_event: float = m0 + H_zero.decimal / 360
-
-    # Iteratively refine m0 (transit) and m_event (rise or set).
-    # We use three iterations which are typically sufficient.
-    for _ in range(3):
-        # --- Update the event (sunrise or sunset) estimate ---
-        theta_event: Angle = Angle((sidereal_time.decimal + 360.985647 * m_event) % 360)
-        n_event: float = m_event + new_deltaT / 86400
-        interp_dec_event = Angle(ce.interpolation(n_event,
-                                            sun_params[0].apparent_declination.decimal,
-                                            sun_params[1].apparent_declination.decimal,
-                                            sun_params[2].apparent_declination.decimal))
-        
-        interp_ra_event = RightAscension(ce.interpolation(n_event,
-                                            sun_params[0].apparent_right_ascension.decimal_degrees.decimal,
-                                            sun_params[1].apparent_right_ascension.decimal_degrees.decimal,
-                                            sun_params[2].apparent_right_ascension.decimal_degrees.decimal) / 15
-                                        )
-        
-        local_hour_angle_event = Angle((theta_event.decimal - (-observer.longitude.decimal) - interp_ra_event.decimal_degrees.decimal) % 360)
-        sun_alt = Angle(math.degrees(math.asin(math.sin(observer.latitude.radians) * math.sin(interp_dec_event.radians) +
-                                        math.cos(observer.latitude.radians) * math.cos(interp_dec_event.radians) *
-                                       math.cos(local_hour_angle_event.radians))))
-        
-        # Correct m_event using the difference between computed altitude and desired h_zero.
-        deltaM = (sun_alt.decimal - h_zero.decimal) / (360 * math.cos(interp_dec_event.radians) * math.cos(observer.latitude.radians) * math.sin(local_hour_angle_event.radians))
-        m_event += deltaM
-
-    # Convert the fractional day to a datetime object, adjusting for the UTC offset.
-    event_dt = datetime(ymd.year, ymd.month, ymd.day) + timedelta(days=m_event) - timedelta(hours=observer_date.utc_offset)
-    return event_dt
+    from islamic_times._legacy_py_impl import sun_equations as legacy_se
+    return legacy_se.sunrise_or_sunset(observer_date, observer, rise_or_set, angle)
 
 def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime:
     """Return the local sunrise/sunset aligned to the reference civil day.

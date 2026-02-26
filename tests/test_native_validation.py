@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from datetime import datetime, timezone
 
 import numpy as np
@@ -196,3 +197,50 @@ def test_find_proper_moontime_rejects_invalid_event_code() -> None:
             [23.0, 23.0, 23.0],
             "x",
         )
+
+
+def test_astro_core_reload_keeps_type_backed_wrappers_operational() -> None:
+    module = fast_astro
+    observer_dt = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+
+    for _ in range(3):
+        module = importlib.reload(module)
+
+        jd = module.gregorian_to_jd(observer_dt, 0.0)
+        delta_t = module.delta_t_approx(observer_dt.year, observer_dt.month)
+
+        sun = module.compute_sun(
+            jd + delta_t / 86400.0,
+            delta_t,
+            43.651070,
+            -79.347015,
+            10.0,
+            15.0,
+            101.325,
+        )
+        moon = module.compute_moon(
+            jd + delta_t / 86400.0,
+            delta_t,
+            43.651070,
+            -79.347015,
+            10.0,
+            15.0,
+            101.325,
+            0.0,
+            23.4,
+        )
+        vis = module.compute_visibilities(
+            observer_dt,
+            0.0,
+            43.651070,
+            -79.347015,
+            10.0,
+            15.0,
+            101.325,
+            1,
+            1,
+        )
+
+        assert sun is not None
+        assert moon is not None
+        assert len(vis.q_values) == 1
