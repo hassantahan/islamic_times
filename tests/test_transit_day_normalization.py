@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import islamic_times.astro_core as fast_astro
 import pytest
 
-import islamic_times.astro_core as fast_astro
 from islamic_times.islamic_times import ITLocation
 
 

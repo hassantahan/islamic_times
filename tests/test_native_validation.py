@@ -3,10 +3,9 @@ from __future__ import annotations
 import importlib
 from datetime import datetime, timezone
 
+import islamic_times.astro_core as fast_astro
 import numpy as np
 import pytest
-
-import islamic_times.astro_core as fast_astro
 
 
 def test_compute_visibilities_rejects_invalid_days() -> None:

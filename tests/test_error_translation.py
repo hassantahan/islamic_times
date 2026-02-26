@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import islamic_times.astro_core as fast_astro
 import pytest
 
-import islamic_times.astro_core as fast_astro
 from islamic_times import moon_equations as me
 from islamic_times import prayer_times as pt
 from islamic_times import sun_equations as se
