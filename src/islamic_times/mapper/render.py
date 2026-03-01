@@ -105,8 +105,13 @@ def _create_scale(fig: Any, mesh: Any, norm: Any, epsilon: float) -> None:
 
 
 def _name_figure(start_date: datetime, islamic_month_name: str, islamic_year: int, criterion: int, mode: str) -> tuple[str, int]:
+    criterion_suffix = {
+        0: "—Odeh",
+        1: "—Yallop",
+        2: "—Shaukat",
+    }[criterion]
     name = f"{start_date.strftime('%Y-%m-%d')} {islamic_month_name} {islamic_year}"
-    name += "—Yallop" if criterion == 1 else "—Odeh"
+    name += criterion_suffix
     quality = 95 if mode == "raw" else 90
     if mode == "raw":
         name += " Gradient"
@@ -169,7 +174,11 @@ def render_visibility_map(
         assert mesh is not None and epsilon is not None
         _create_scale(fig, mesh, norm, epsilon)
 
-    criterion_string = "Odeh, 2006" if criterion == 0 else "Yallop, 1997"
+    criterion_string = {
+        0: "Odeh, 2006",
+        1: "Yallop, 1997",
+        2: "Shaukat, n.d.",
+    }[criterion]
     plt.subplots_adjust(hspace=0.2, left=0.05, right=0.85, top=0.95, bottom=0.05)
     plt.figtext(0.15, 0.01, f"The New Moon (i.e. conjunction) occurs at {start_date.strftime('%Y-%m-%d %X')} UTC", ha="center", fontsize=12)
     plt.figtext(0.945, 0.03, f"Criterion: {criterion_string}", ha="center", fontsize=12)
@@ -189,4 +198,3 @@ def render_visibility_map(
     plt.savefig(output_path, format=render_cfg.image_format, pil_kwargs={"optimize": True, "progressive": True, "quality": quality})
     plt.close(fig)
     return output_path
-

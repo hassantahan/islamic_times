@@ -41,3 +41,20 @@ def test_visibilities_smoke() -> None:
     assert len(visibilities.dates) == 1
     assert len(visibilities.q_values) == 1
     assert len(visibilities.classifications) == 1
+
+
+def test_visibilities_smoke_shaukat() -> None:
+    location = ITLocation(
+        latitude=43.651070,
+        longitude=-79.347015,
+        elevation=10.0,
+        date=datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
+        find_local_tz=False,
+    )
+    visibilities = location.visibilities(days=1, criterion=2)
+
+    assert isinstance(visibilities, Visibilities)
+    assert visibilities.criterion == "Shaukat"
+    assert len(visibilities.dates) == 1
+    assert len(visibilities.q_values) == 1
+    assert len(visibilities.classifications) == 1

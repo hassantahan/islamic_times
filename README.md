@@ -8,7 +8,7 @@ It provides prayer times, Hijri date conversion, Qibla direction, and new moon c
 - Fast numerical core in C (`islamic_times.astro_core`) with Python orchestration APIs.
 - `ITLocation` public API for observer-centric calculations.
 - Built-in prayer method presets plus custom angle support.
-- Crescent visibility computation with Yallop (1997) and Odeh (2006) criteria.
+- Crescent visibility computation with Odeh (2006), Yallop (1997), and Shaukat (n.d.) criteria.
 - Optional map-generation pipeline (`islamic_times.mapper`) for visibility maps.
 
 ## Installation
@@ -45,6 +45,7 @@ loc = ITLocation(
 
 print(loc.prayer_times())
 print(loc.mecca())
+# criterion: 0=Odeh, 1=Yallop, 2=Shaukat
 print(loc.visibilities(days=3, criterion=1))
 ```
 
@@ -120,3 +121,7 @@ This project is licensed under the [MIT License](LICENSE).
 - Jean Meeus, *Astronomical Algorithms*, 2nd Edition, Willmann-Bell, Inc., 1998.
 - Prayer time methods: <https://praytimes.org/docs/calculation>
 - Delta T approximation: <https://eclipse.gsfc.nasa.gov/SEhelp/deltatpoly2004.html>
+- Sources for new moon crescent visibility prediciton criteria:
+     - Yallop (1997): <https://www.staff.science.uu.nl/~gent0113/islam/downloads/naotn_69.pdf>
+     - Odeh (2006): <https://doi.org/10.1007/s10686-005-9002-5>
+     - Shaukat (n.d.): <https://www.moonsighting.com/faq_ms.html>

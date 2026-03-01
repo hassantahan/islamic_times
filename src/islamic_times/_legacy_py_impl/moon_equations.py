@@ -178,6 +178,17 @@ def classify_visibility(q: float, criterion: int = 1) -> str:
             return "D: Crescent is not visible even by optical aid."
         raise ValueError("Invalid q value. Must be a float.")
 
+    if criterion == 2:
+        if q > 0.27:
+            return "A: Easily visible"
+        if q > -0.024:
+            return "B: Visible under perfect conditions."
+        if q > -0.212:
+            return "C: Optical aid needed to find the moon."
+        if q > -0.48:
+            return "D: Visible with optical aid only."
+        return "F: Not visible."
+
     if q > 0.216:
         return "A: Easily visible."
     if 0.216 >= q > -0.014:
@@ -191,4 +202,3 @@ def classify_visibility(q: float, criterion: int = 1) -> str:
     if -0.293 >= q:
         return "F: Not visible; below the Danjon limit."
     raise ValueError("Invalid q value. Must be a float.")
-

@@ -21,7 +21,7 @@ def _build_parser() -> argparse.ArgumentParser:
         target.add_argument("--map_mode", type=str, default="category", choices=("raw", "category"))
         target.add_argument("--resolution", type=int, default=300)
         target.add_argument("--days_to_generate", type=int, default=3)
-        target.add_argument("--criterion", type=int, default=1, choices=(0, 1))
+        target.add_argument("--criterion", type=int, default=1, choices=(0, 1, 2))
         target.add_argument("--save_logs", action="store_true")
         target.add_argument("--max_workers", type=int, default=None)
         target.add_argument("--perf_report", type=str, default=None, help="Optional JSON output path for timing report")

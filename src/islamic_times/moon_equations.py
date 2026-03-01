@@ -525,6 +525,7 @@ def find_proper_moontime(
 # Visibility calculations either:
 # Criterion 0: Odeh, 2006
 # Criterion 1: HMNAO TN No. 69, a.k.a. Yallop, 1997
+# Criterion 2: Shaukat, n.d. (Yallop q-values with Shaukat classification thresholds)
 def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt: Angle, moon_pi: Angle, criterion: int = 0) -> float:
 	"""
 	Calculate the visibility of the Moon's crescent for a given date and observer coordinates.
@@ -535,7 +536,9 @@ def calculate_visibility(sun_az: Angle, sun_alt: Angle, moon_az: Angle, moon_alt
 		moon_az (Angle): The Moon's azimuth.
 		moon_alt (Angle): The Moon's altitude.
 		moon_pi (Angle): The Moon's parallax.
-		criterion (int): The criterion of visibility calculation to use (0 or 1). Default is 0 which uses Odeh, 2006. When set to 1, it uses HMNAO TN No. 69 (a.k.a. Yallop, 1997).
+		criterion (int): The criterion of visibility calculation to use (0, 1, or 2).
+			Default is 0 which uses Odeh, 2006. When set to 1 or 2, it uses
+			the HMNAO TN No. 69 (Yallop, 1997) and Shaukat, n.d. q-value kernel respectively.
 	
 	Returns:
 		float: The visibility of the Moon's crescent.
@@ -580,14 +583,14 @@ def calculate_visibility_shaukat(sun_az: Angle, sun_long: Angle, moon_long: Angl
 	from islamic_times._legacy_py_impl import moon_equations as legacy_me
 	return legacy_me.calculate_visibility_shaukat(sun_az, sun_long, moon_long, moon_lat, moon_az, moon_pi, moon_illumin)
 
-# Classification according to Odeh, 2006 or HMNAO TN No.69
+# Classification according to Odeh, Yallop, or Shaukat thresholds.
 def classify_visibility(q: float, criterion: int = 1) -> str:
 	"""
 	Classify the visibility of the Moon's crescent based on the given q value.
 
 	Parameters:
 		q (float): The q value.
-		criterion (int): The criterion of visibility classification to use (0 or 1). Default is 1. When set to 1, it uses HMNAO TN No. 69 (a.k.a. Yallop, 1997).
+		criterion (int): The criterion of visibility classification to use (0, 1, or 2).
 
 	Returns:
 		str: The classification of the Moon's crescent visibility.

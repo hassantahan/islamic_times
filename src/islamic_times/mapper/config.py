@@ -25,8 +25,8 @@ class ComputeConfig:
     def __post_init__(self) -> None:
         if self.days_to_generate < 1:
             raise ValueError("'days_to_generate' must be >= 1.")
-        if self.criterion not in (0, 1):
-            raise ValueError("'criterion' must be 0 (Odeh) or 1 (Yallop).")
+        if self.criterion not in (0, 1, 2):
+            raise ValueError("'criterion' must be 0 (Odeh), 1 (Yallop), or 2 (Shaukat).")
         if self.max_workers is not None and self.max_workers < 1:
             raise ValueError("'max_workers' must be >= 1 when provided.")
 
@@ -84,4 +84,3 @@ class MapperConfig:
     @property
     def output_root(self) -> Path:
         return Path(self.master_path)
-

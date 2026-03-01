@@ -657,7 +657,8 @@ class ITLocation:
         days : int, default=3
             Number of consecutive days to evaluate from the nearest new moon.
         criterion : int, default=1
-            Visibility classifier: ``0`` (Odeh) or ``1`` (Yallop/HMNAO TN 69).
+            Visibility classifier: ``0`` (Odeh), ``1`` (Yallop/HMNAO TN 69),
+            or ``2`` (Shaukat; Yallop q-values with Shaukat thresholds).
 
         Returns
         -------
@@ -675,8 +676,8 @@ class ITLocation:
         if not isinstance(criterion, int) or isinstance(criterion, bool):
             raise TypeError(f"'criterion' must be of type `int`, but got `{type(criterion).__name__}`.")
 
-        if criterion not in (0, 1):
-            raise ValueError(f"'criterion' must be either 0 or 1. Invalid value: {criterion}.")
+        if criterion not in (0, 1, 2):
+            raise ValueError(f"'criterion' must be 0, 1, or 2. Invalid value: {criterion}.")
 
         visibilities: Visibilities = fast_astro.compute_visibilities(self.observer_dateinfo.date, self.observer_dateinfo.utc_offset, 
                                               self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, 

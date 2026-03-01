@@ -31,6 +31,14 @@ _CRITERION_LABELS: dict[int, list[CategoryEntry]] = {
         ("B: Visible under perfect conditions.", "#54b818", 1.0),
         ("A: Easily visible.", "#1bdf18", 1.0),
     ],
+    2: _SPECIAL_PREFIX
+    + [
+        ("F: Not visible.", "#807f80", 0.15),
+        ("D: Visible with optical aid only.", "#e3d61b", 1.0),
+        ("C: Optical aid needed to find the moon.", "#89d518", 1.0),
+        ("B: Visible under perfect conditions.", "#54b818", 1.0),
+        ("A: Easily visible", "#1bdf18", 1.0),
+    ],
 }
 
 
@@ -49,4 +57,3 @@ def category_labels(criterion: int) -> List[str]:
 def category_code_map(criterion: int) -> Dict[str, int]:
     """Map classification strings to compact integer codes."""
     return {label: idx for idx, label in enumerate(category_labels(criterion))}
-

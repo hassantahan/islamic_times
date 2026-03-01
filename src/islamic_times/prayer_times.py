@@ -54,7 +54,22 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
     PrayerMethod(name="Shia Ithna Ashari, Leva Research Institute, Qom (Jafari)",
         keys=('JAFARI', 'JAAFARI', 'SHIA', 'SHIA ITHNA ASHARI', 'LEVA', 'LEVA RESEARCH INSTITUTE', 'QOM', 'QUM', 'LRI', 'SIA', 'SIALRI'), 
         fajr_angle=Angle(16), isha_angle=Angle(14), maghrib_angle=Angle(4), midnight_type=1
-    )
+    ),
+    PrayerMethod(
+        name="Muslims of France", 
+        keys=('FRANCE',), 
+        fajr_angle=Angle(12), isha_angle=Angle(12)
+    ),
+    PrayerMethod(
+        name="Spiritual Administration of Muslims of Russia", 
+        keys=('RUSSIA',), 
+        fajr_angle=Angle(16), isha_angle=Angle(15)
+    ),
+    PrayerMethod(
+        name="Islamic Religious Council of Singapore", 
+        keys=('SINGAPORE',), 
+        fajr_angle=Angle(20), isha_angle=Angle(18)
+    ),
 ]
 
 

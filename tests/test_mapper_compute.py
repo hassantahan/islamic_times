@@ -31,3 +31,18 @@ def test_compute_visibility_volume_category_shape_and_dtype() -> None:
     assert volume.shape == (len(lat_centers), len(lon_centers), 1)
     assert volume.dtype == np.uint8
     assert int(volume.max()) <= 10
+
+
+def test_compute_visibility_volume_category_shaukat_code_range() -> None:
+    _, _, lon_centers, lat_centers = create_grid(10, -15, 15, 10, 40)
+    cfg = ComputeConfig(days_to_generate=1, criterion=2, max_workers=1)
+    volume = compute_visibility_volume(
+        lon_centers,
+        lat_centers,
+        datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc),
+        cfg,
+        "category",
+    )
+    assert volume.shape == (len(lat_centers), len(lon_centers), 1)
+    assert volume.dtype == np.uint8
+    assert int(volume.max()) <= 9
