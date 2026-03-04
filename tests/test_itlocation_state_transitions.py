@@ -53,6 +53,34 @@ def test_update_time_preserves_existing_timezone_for_naive_input(toronto_observe
     assert updated_date.utcoffset() == timedelta(0)
 
 
+def test_update_time_with_local_tz_refreshes_dst_offset() -> None:
+    location = ITLocation(
+        latitude=43.651070,
+        longitude=-79.347015,
+        date=datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+        find_local_tz=True,
+    )
+    winter_offset = location.dates_times().utc_offset
+
+    location.update_time(datetime(2025, 7, 15, 12, 0, 0, tzinfo=timezone.utc))
+    summer_offset = location.dates_times().utc_offset
+
+    assert winter_offset == pytest.approx(-5.0)
+    assert summer_offset == pytest.approx(-4.0)
+
+
+def test_update_time_with_local_tz_rejects_ambiguous_naive_wall_time() -> None:
+    location = ITLocation(
+        latitude=43.651070,
+        longitude=-79.347015,
+        date=datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+        find_local_tz=True,
+    )
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        location.update_time(datetime(2025, 11, 2, 1, 30, 0))
+
+
 def test_manual_mode_update_marks_state_as_stale(toronto_observer_kwargs: dict[str, object]) -> None:
     kwargs = dict(toronto_observer_kwargs)
     kwargs["auto_calculate"] = False

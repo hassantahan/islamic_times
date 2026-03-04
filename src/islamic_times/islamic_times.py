@@ -156,16 +156,13 @@ class ITLocation:
 
         # Check if find_local_tz is either 0, 1, or a bool value
         find_local_tz_flag = self._resolve_find_local_tz(find_local_tz)
+        self._find_local_tz = find_local_tz_flag
 
-        # Determine UTC Offset
-        tz = self.get_timezone(find_local_tz_flag, date)
-        tz_offset = tz.utcoffset(date)
-        if tz_offset is None:
-            raise ValueError("Could not determine UTC offset for the provided date and timezone.")
-        self.utc_offset = tz_offset.total_seconds() / 3600
-        date = date.replace(tzinfo=tz)
+        # Normalize user date into observer timezone context.
+        date = self._normalize_observer_datetime(date)
 
         self.observer_dateinfo = self._build_observer_dateinfo(date)
+        self.utc_offset = self.observer_dateinfo.utc_offset
 
         # Autocalculation for astronomical parameters
         self.auto_calculate = auto_calculate
@@ -253,6 +250,19 @@ class ITLocation:
             deltaT=delta_t,
         )
 
+    def _normalize_observer_datetime(self, date: datetime) -> datetime:
+        """Return datetime normalized to current observer timezone semantics."""
+        if not isinstance(date, datetime):
+            raise TypeError(f"'date' must be of type `datetime`, but got `{type(date).__name__}`.")
+
+        tz = self.get_timezone(self._find_local_tz, date)
+        if self._find_local_tz:
+            return te.localize_or_convert_datetime(date, tz)
+
+        if date.tzinfo is None:
+            return date.replace(tzinfo=tz)
+        return date.astimezone(tz)
+
     def get_timezone(self, find_local_tz: bool, date: datetime) -> timezone | tzinfo:
         """Resolve timezone from either coordinates or supplied datetime context.
 
@@ -271,8 +281,7 @@ class ITLocation:
         # Find UTC Offset According to Lat/Long datetime
         # This is very computationally expensive
         if find_local_tz:
-            tz_name, utc_offset = te.find_utc_offset(self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, date)
-            return timezone(offset=timedelta(hours=utc_offset), name=tz_name)
+            return te.find_timezone(self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, date)
         if date.tzinfo is None or date.tzinfo == timezone.utc:
             return timezone.utc
         return date.tzinfo
@@ -301,10 +310,16 @@ class ITLocation:
             raise TypeError(f"'new_date' must be of type `datetime`, but got `{type(new_date).__name__}`.")
 
         # If TZ is not specified in new datetime, but a TZ is specified in old datetime, preserve the previous TZ.
-        if new_date.tzinfo is None and self.observer_dateinfo.date.tzinfo is not None:
+        if (
+            new_date.tzinfo is None
+            and self.observer_dateinfo.date.tzinfo is not None
+            and not self._find_local_tz
+        ):
             new_date = new_date.replace(tzinfo=self.observer_dateinfo.date.tzinfo)
 
+        new_date = self._normalize_observer_datetime(new_date)
         self.observer_dateinfo = self._build_observer_dateinfo(new_date)
+        self.utc_offset = self.observer_dateinfo.utc_offset
 
         if self.auto_calculate:
             self.calculate_astro()

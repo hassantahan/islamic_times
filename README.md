@@ -91,6 +91,13 @@ Below is an example of a generated visibility map for the new moon crescent on *
 
 ![2025-04-27 Dhū al-Qaʿdah 1446—Yallop](https://github.com/hassantahan/islamic_times/blob/master/2025-04-27%20Dh%C5%AB%20al-Qa%CA%BFdah%201446%E2%80%94Yallop.jpg?raw=true)
 
+## Timezone and DST Behavior
+
+- With `find_local_tz=False`, naive datetimes are treated as UTC.
+- With `find_local_tz=True`, timezone is resolved from coordinates as an IANA zone and DST-aware localization is applied.
+- Naive local times that are ambiguous or nonexistent during DST transitions raise `ValueError` with an explicit message.
+- `ITLocation.update_time()` in local-timezone mode refreshes timezone offset for the new date (for example winter vs summer offset).
+
 ## Development
 
 Contributor workflow, validation commands, and platform-specific shell guidance are in `CONTRIBUTING.md`.

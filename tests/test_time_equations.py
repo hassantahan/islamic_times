@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta, timezone
 
+import pytz
 import pytest
 
 from islamic_times import time_equations as te
@@ -105,6 +106,33 @@ def test_find_utc_offset_caches_timezone_resolution(monkeypatch: pytest.MonkeyPa
 
     assert first == second
     assert finder.calls == 1
+
+
+def test_find_timezone_name_returns_iana_identifier() -> None:
+    tz_name = te.find_timezone_name(43.65107, -79.347015, datetime(2025, 6, 1))
+    assert isinstance(tz_name, str)
+    assert "/" in tz_name
+
+
+def test_localize_or_convert_datetime_rejects_nonexistent_local_time() -> None:
+    tz = pytz.timezone("America/Toronto")
+    with pytest.raises(ValueError, match="does not exist"):
+        te.localize_or_convert_datetime(datetime(2025, 3, 9, 2, 30, 0), tz)
+
+
+def test_localize_or_convert_datetime_rejects_ambiguous_local_time() -> None:
+    tz = pytz.timezone("America/Toronto")
+    with pytest.raises(ValueError, match="ambiguous"):
+        te.localize_or_convert_datetime(datetime(2025, 11, 2, 1, 30, 0), tz)
+
+
+def test_localize_or_convert_datetime_converts_aware_datetimes() -> None:
+    tz = pytz.timezone("America/Toronto")
+    converted = te.localize_or_convert_datetime(datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc), tz)
+
+    assert converted.hour == 7
+    assert converted.utcoffset() is not None
+    assert converted.utcoffset().total_seconds() / 3600.0 == pytest.approx(-5.0)
 
 
 def test_time_midpoint_happy_path() -> None:

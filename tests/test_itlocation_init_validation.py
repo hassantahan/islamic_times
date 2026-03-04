@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -85,3 +85,28 @@ def test_init_auto_mode_produces_observer_info(toronto_observer_kwargs: dict[str
 def test_get_timezone_uses_utc_for_naive_datetime() -> None:
     location = ITLocation(date=datetime(2025, 6, 1, 12, 0, 0), find_local_tz=False)
     assert location.dates_times().utc_offset == pytest.approx(0.0)
+
+
+def test_init_find_local_tz_tracks_named_timezone() -> None:
+    location = ITLocation(
+        latitude=43.651070,
+        longitude=-79.347015,
+        date=datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+        find_local_tz=True,
+    )
+    dt_info = location.dates_times()
+
+    assert dt_info.timezone is not None
+    assert "/" in dt_info.timezone
+    assert dt_info.utc_offset == pytest.approx(-5.0)
+    assert dt_info.date.hour == 7
+
+
+def test_init_find_local_tz_rejects_nonexistent_local_time() -> None:
+    with pytest.raises(ValueError, match="does not exist"):
+        ITLocation(
+            latitude=43.651070,
+            longitude=-79.347015,
+            date=datetime(2025, 3, 9, 2, 30, 0),
+            find_local_tz=True,
+        )

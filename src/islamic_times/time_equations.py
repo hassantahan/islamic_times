@@ -81,6 +81,18 @@ def _get_pytz_timezone_factory() -> Any:
     return _PYTZ_TIMEZONE_FACTORY
 
 
+def _get_timezone_object(timezone_str: str) -> Any:
+    """Return cached timezone object for an IANA timezone name."""
+    timezone = _TZ_OBJECT_CACHE.get(timezone_str)
+    if timezone is not None:
+        return timezone
+
+    timezone_factory = _get_pytz_timezone_factory()
+    timezone = timezone_factory(timezone_str)
+    _TZ_OBJECT_CACHE[timezone_str] = timezone
+    return timezone
+
+
 def _cleanup_timezone_finder() -> None:
     """Release timezonefinder file resources before interpreter teardown."""
     global _TZ_FINDER
@@ -102,6 +114,72 @@ def _cleanup_timezone_finder() -> None:
 
 
 atexit.register(_cleanup_timezone_finder)
+
+
+def find_timezone_name(lat: float, long: float, day: datetime) -> str:
+    """Determine IANA timezone name for a coordinate/date context."""
+    if not isinstance(day, datetime):
+        raise TypeError(f"'day' must be of type `datetime`, but got `{type(day).__name__}`.")
+
+    day_date = day.date()
+    coord_key = (round(lat, _TZ_COORD_ROUND_DIGITS), round(long, _TZ_COORD_ROUND_DIGITS))
+    timezone_str = _TZ_NAME_CACHE.get(coord_key)
+    if timezone_str is not None:
+        return timezone_str
+
+    tf = _get_timezone_finder()
+    timezone_str = tf.certain_timezone_at(lat=lat, lng=long)
+    if timezone_str is None:
+        timezone_str = tf.timezone_at(lat=lat, lng=long)
+    if not timezone_str:
+        raise ValueError(
+            f"Unable to determine timezone for latitude={lat}, longitude={long}, date={day_date.isoformat()}."
+        )
+
+    _TZ_NAME_CACHE[coord_key] = timezone_str
+    return timezone_str
+
+
+def localize_or_convert_datetime(day: datetime, timezone_obj: Any) -> datetime:
+    """Return datetime normalized into ``timezone_obj`` with DST-safe semantics.
+
+    For naive datetimes, this performs strict localization (`is_dst=None`) when
+    supported by the timezone object so ambiguous and nonexistent wall times are
+    surfaced as explicit errors.
+    """
+    if not isinstance(day, datetime):
+        raise TypeError(f"'day' must be of type `datetime`, but got `{type(day).__name__}`.")
+
+    if day.tzinfo is None:
+        localize = getattr(timezone_obj, "localize", None)
+        if callable(localize):
+            from pytz.exceptions import AmbiguousTimeError, NonExistentTimeError
+
+            try:
+                return localize(day, is_dst=None)
+            except NonExistentTimeError as exc:
+                raise ValueError(
+                    "The provided local time does not exist because of a DST transition. "
+                    f"datetime={day.isoformat()}, timezone={timezone_obj}."
+                ) from exc
+            except AmbiguousTimeError as exc:
+                raise ValueError(
+                    "The provided local time is ambiguous because of a DST transition. "
+                    f"datetime={day.isoformat()}, timezone={timezone_obj}."
+                ) from exc
+        return day.replace(tzinfo=timezone_obj)
+
+    converted = day.astimezone(timezone_obj)
+    normalize = getattr(timezone_obj, "normalize", None)
+    if callable(normalize):
+        return normalize(converted)
+    return converted
+
+
+def find_timezone(lat: float, long: float, day: datetime) -> Any:
+    """Resolve and return timezone object for a coordinate/date context."""
+    timezone_str = find_timezone_name(lat, long, day)
+    return _get_timezone_object(timezone_str)
 
 def fraction_of_day(date: datetime) -> float:
     """Return elapsed fraction of the civil day for a datetime.
@@ -361,32 +439,14 @@ def find_utc_offset(lat: float, long: float, day: datetime) -> Tuple[str, float]
         raise TypeError(f"'day' must be of type `datetime`, but got `{type(day).__name__}`.")
 
     day_date = day.date()
-    coord_key = (round(lat, _TZ_COORD_ROUND_DIGITS), round(long, _TZ_COORD_ROUND_DIGITS))
-    timezone_str = _TZ_NAME_CACHE.get(coord_key)
-
-    if timezone_str is None:
-        tf = _get_timezone_finder()
-        timezone_str = tf.certain_timezone_at(lat=lat, lng=long)
-        if timezone_str is None:
-            timezone_str = tf.timezone_at(lat=lat, lng=long)
-        if not timezone_str:
-            raise ValueError(
-                f"Unable to determine timezone for latitude={lat}, longitude={long}, date={day_date.isoformat()}."
-            )
-        _TZ_NAME_CACHE[coord_key] = timezone_str
-
+    timezone_str = find_timezone_name(lat, long, day)
     offset_key = (timezone_str, day_date.toordinal())
     cached_offset = _UTC_OFFSET_CACHE.get(offset_key)
     if cached_offset is not None:
         return timezone_str, cached_offset
 
-    timezone = _TZ_OBJECT_CACHE.get(timezone_str)
-    if timezone is None:
-        timezone_factory = _get_pytz_timezone_factory()
-        timezone = timezone_factory(timezone_str)
-        _TZ_OBJECT_CACHE[timezone_str] = timezone
-
-    localized_datetime = timezone.localize(datetime.combine(day_date, datetime.min.time()))
+    timezone_obj = _get_timezone_object(timezone_str)
+    localized_datetime = localize_or_convert_datetime(datetime.combine(day_date, datetime.min.time()), timezone_obj)
     utc_offset = localized_datetime.utcoffset()
     if utc_offset is None:
         raise ValueError(
