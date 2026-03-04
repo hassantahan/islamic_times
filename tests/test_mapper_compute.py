@@ -48,6 +48,44 @@ def test_compute_visibility_volume_category_shaukat_code_range() -> None:
     assert int(volume.max()) <= 9
 
 
+def test_compute_visibility_volume_category_adaptive_matches_dense() -> None:
+    _, _, lon_centers, lat_centers = create_grid(36, -70, 30, -25, 55)
+    dt = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+    dense_cfg = ComputeConfig(days_to_generate=2, criterion=1, max_workers=1, adaptive_category=False)
+    adaptive_cfg = ComputeConfig(
+        days_to_generate=2,
+        criterion=1,
+        max_workers=1,
+        adaptive_category=True,
+        adaptive_min_block_cells=64,
+        adaptive_max_depth=8,
+    )
+
+    dense = compute_visibility_volume(lon_centers, lat_centers, dt, dense_cfg, "category")
+    adaptive = compute_visibility_volume(lon_centers, lat_centers, dt, adaptive_cfg, "category")
+
+    assert np.array_equal(adaptive, dense)
+
+
+def test_compute_visibility_volume_category_adaptive_matches_dense_shaukat() -> None:
+    _, _, lon_centers, lat_centers = create_grid(28, -40, 60, -10, 45)
+    dt = datetime(2025, 9, 1, 12, 0, tzinfo=timezone.utc)
+    dense_cfg = ComputeConfig(days_to_generate=1, criterion=2, max_workers=1, adaptive_category=False)
+    adaptive_cfg = ComputeConfig(
+        days_to_generate=1,
+        criterion=2,
+        max_workers=1,
+        adaptive_category=True,
+        adaptive_min_block_cells=49,
+        adaptive_max_depth=7,
+    )
+
+    dense = compute_visibility_volume(lon_centers, lat_centers, dt, dense_cfg, "category")
+    adaptive = compute_visibility_volume(lon_centers, lat_centers, dt, adaptive_cfg, "category")
+
+    assert np.array_equal(adaptive, dense)
+
+
 def test_compute_visibility_volume_returns_profile_when_requested() -> None:
     _, _, lon_centers, lat_centers = create_grid(8, -10, 10, 10, 30)
     cfg = ComputeConfig(days_to_generate=2, criterion=1, max_workers=1)

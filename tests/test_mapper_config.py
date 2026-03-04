@@ -33,6 +33,16 @@ def test_compute_config_rejects_unknown_criterion() -> None:
         ComputeConfig(criterion=9)
 
 
+def test_compute_config_rejects_nonpositive_adaptive_min_block_cells() -> None:
+    with pytest.raises(ValueError, match="adaptive_min_block_cells"):
+        ComputeConfig(adaptive_min_block_cells=0)
+
+
+def test_compute_config_rejects_nonpositive_adaptive_max_depth() -> None:
+    with pytest.raises(ValueError, match="adaptive_max_depth"):
+        ComputeConfig(adaptive_max_depth=0)
+
+
 def test_shaukat_palette_contains_expected_terminal_labels() -> None:
     labels = category_labels(2)
     assert labels[-5:] == [
