@@ -14,11 +14,12 @@ References:
 
 import islamic_times.astro_core as fast_astro
 from numbers import Number
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Sequence, Tuple
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone, tzinfo
 from islamic_times.it_dataclasses import (
     Angle,
+    BatchVisibilities,
     DateTimeInfo,
     Distance,
     DistanceUnits,
@@ -701,3 +702,157 @@ class ITLocation:
                                               days, criterion)
 
         return visibilities
+
+    @staticmethod
+    def _normalize_batch_coordinates(name: str, values: Sequence[float]) -> tuple[float, ...]:
+        """Validate and normalize batch latitude/longitude sequences."""
+        if isinstance(values, (str, bytes)):
+            raise TypeError(f"'{name}' must be a sequence of numeric values.")
+        try:
+            seq = tuple(values)
+        except TypeError as exc:
+            raise TypeError(f"'{name}' must be a sequence of numeric values.") from exc
+
+        if not seq:
+            raise ValueError(f"'{name}' must contain at least one value.")
+
+        normalized: list[float] = []
+        for idx, value in enumerate(seq):
+            if not isinstance(value, Number) or isinstance(value, bool):
+                raise TypeError(
+                    f"All '{name}' values must be numeric. Invalid element at index {idx}: {type(value).__name__}."
+                )
+            normalized.append(float(value))
+        return tuple(normalized)
+
+    @staticmethod
+    def batch_visibilities(
+        latitudes: Sequence[float],
+        longitudes: Sequence[float],
+        date: datetime,
+        *,
+        days: int = 3,
+        criterion: int = 1,
+        utc_offset: float = 0.0,
+        elevation: float = 0.0,
+        temperature: float = 10.0,
+        pressure: float = 101.325,
+        output: Literal["raw", "classification", "code"] = "raw",
+    ) -> BatchVisibilities:
+        """Compute visibility values for multiple coordinates in one call.
+
+        Parameters
+        ----------
+        latitudes : Sequence[float]
+            Latitude sequence (decimal degrees) for each location.
+        longitudes : Sequence[float]
+            Longitude sequence (decimal degrees) for each location. Must match
+            ``latitudes`` length.
+        date : datetime
+            Reference datetime used for new-moon anchoring.
+        days : int, default=3
+            Number of consecutive days per location.
+        criterion : int, default=1
+            Visibility classifier: ``0`` (Odeh), ``1`` (Yallop), ``2`` (Shaukat).
+        utc_offset : float, default=0.0
+            UTC offset in hours used by native batch kernels.
+        elevation : float, default=0.0
+            Elevation in meters used by native batch kernels.
+        temperature : float, default=10.0
+            Temperature in Celsius used by native batch kernels.
+        pressure : float, default=101.325
+            Pressure in kPa used by native batch kernels.
+        output : {"raw", "classification", "code"}, default="raw"
+            Output value mode:
+            - ``raw`` -> q-values (float),
+            - ``classification`` -> category labels (str),
+            - ``code`` -> compact category codes (int).
+
+        Returns
+        -------
+        BatchVisibilities
+            Batch result with deterministic shape ``(locations, days)``.
+        """
+        if not isinstance(date, datetime):
+            raise TypeError(f"'date' must be of type `datetime`, but got `{type(date).__name__}`.")
+
+        if not isinstance(days, int) or isinstance(days, bool):
+            raise TypeError(f"'days' must be of type `int`, but got `{type(days).__name__}`.")
+        if days < 1:
+            raise ValueError(f"'days' must be greater than 0. Invalid value: {days}.")
+
+        if not isinstance(criterion, int) or isinstance(criterion, bool):
+            raise TypeError(f"'criterion' must be of type `int`, but got `{type(criterion).__name__}`.")
+        if criterion not in (0, 1, 2):
+            raise ValueError(f"'criterion' must be 0, 1, or 2. Invalid value: {criterion}.")
+
+        for field_name, value in {
+            "utc_offset": utc_offset,
+            "elevation": elevation,
+            "temperature": temperature,
+            "pressure": pressure,
+        }.items():
+            if not isinstance(value, Number) or isinstance(value, bool):
+                raise TypeError(f"'{field_name}' must be numeric, but got `{type(value).__name__}`.")
+
+        if output not in ("raw", "classification", "code"):
+            raise ValueError(
+                f"'output' must be one of 'raw', 'classification', or 'code'. Invalid value: {output!r}."
+            )
+
+        lat_tuple = ITLocation._normalize_batch_coordinates("latitudes", latitudes)
+        lon_tuple = ITLocation._normalize_batch_coordinates("longitudes", longitudes)
+        if len(lat_tuple) != len(lon_tuple):
+            raise ValueError("'latitudes' and 'longitudes' must have the same length.")
+
+        import numpy as np
+
+        lat_arr = np.ascontiguousarray(lat_tuple, dtype=np.float64)
+        lon_arr = np.ascontiguousarray(lon_tuple, dtype=np.float64)
+
+        if output == "code":
+            values = fast_astro.compute_visibilities_batch_codes(
+                lat_arr,
+                lon_arr,
+                date,
+                days,
+                criterion,
+                float(utc_offset),
+                float(elevation),
+                float(temperature),
+                float(pressure),
+            ).reshape(len(lat_tuple), days)
+        else:
+            value_type = "r" if output == "raw" else "c"
+            values = fast_astro.compute_visibilities_batch(
+                lat_arr,
+                lon_arr,
+                date,
+                days,
+                criterion,
+                float(utc_offset),
+                float(elevation),
+                float(temperature),
+                float(pressure),
+                value_type,
+            ).reshape(len(lat_tuple), days)
+
+        if output == "classification":
+            matrix: tuple[tuple[float | str | int, ...], ...] = tuple(
+                tuple(str(cell) for cell in row) for row in values.tolist()
+            )
+        elif output == "code":
+            matrix = tuple(tuple(int(cell) for cell in row) for row in values.tolist())
+        else:
+            matrix = tuple(tuple(float(cell) for cell in row) for row in values.tolist())
+
+        criterion_name = {0: "Odeh", 1: "Yallop", 2: "Shaukat"}[criterion]
+        return BatchVisibilities(
+            criterion=criterion_name,
+            output=output,
+            date=date,
+            days=days,
+            latitudes=lat_tuple,
+            longitudes=lon_tuple,
+            values=matrix,
+        )

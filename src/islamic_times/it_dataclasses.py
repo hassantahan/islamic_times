@@ -851,3 +851,50 @@ class Visibilities:
             "criterion": self.criterion,
             "entries": entries,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class BatchVisibilities:
+    """Batch visibility output for multiple coordinates and days.
+
+    Attributes:
+        criterion (str): Criterion name used for the run.
+        output (str): Output mode: ``raw``, ``classification``, or ``code``.
+        date (datetime): Input reference datetime.
+        days (int): Number of days generated per location.
+        latitudes (Tuple[float, ...]): Input latitude sequence in order.
+        longitudes (Tuple[float, ...]): Input longitude sequence in order.
+        values (Tuple[Tuple[float | str | int, ...], ...]): Matrix indexed as
+            ``[location_index][day_index]``.
+    """
+
+    criterion: str
+    output: str
+    date: datetime
+    days: int
+    latitudes: Tuple[float, ...]
+    longitudes: Tuple[float, ...]
+    values: Tuple[Tuple[float | str | int, ...], ...]
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        """Return matrix shape as (locations, days)."""
+        location_count = len(self.values)
+        if location_count == 0:
+            return (0, 0)
+        return (location_count, len(self.values[0]))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize batch output with stable schema metadata."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "BatchVisibilities",
+            "criterion": self.criterion,
+            "output": self.output,
+            "date_iso": self.date.isoformat(),
+            "days": self.days,
+            "shape": list(self.shape),
+            "latitudes": list(self.latitudes),
+            "longitudes": list(self.longitudes),
+            "values": [list(row) for row in self.values],
+        }
