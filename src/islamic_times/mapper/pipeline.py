@@ -33,6 +33,7 @@ class MonthRunResult:
     new_moon_date_utc: datetime
     output_path: str
     timings_s: Dict[str, float]
+    compute_profile: Dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -41,6 +42,7 @@ class MapRunResult:
     month_results: List[MonthRunResult]
     total_time_s: float
     aggregate_timings_s: Dict[str, float]
+    aggregate_compute_profile: Dict[str, Any] | None = None
 
 
 def _print_ts(message: str) -> None:
@@ -84,6 +86,35 @@ def _next_new_moon_date(date: datetime, month_index: int) -> datetime:
     return fast_astro.next_phases_of_moon_utc(date + timedelta(days=month_index * AVERAGE_LUNAR_MONTH_DAYS))[0]
 
 
+def _build_perf_payload(result: MapRunResult) -> Dict[str, Any]:
+    """Build machine-readable perf-report payload from run result."""
+    return {
+        "config": {
+            "date": result.config.date.isoformat(),
+            "total_months": result.config.total_months,
+            "map_region": result.config.map_region,
+            "resolution": result.config.resolution,
+            "master_path": result.config.master_path,
+            "compute": asdict(result.config.compute),
+            "render": asdict(result.config.render),
+        },
+        "total_time_s": result.total_time_s,
+        "aggregate_timings_s": result.aggregate_timings_s,
+        "aggregate_compute_profile": result.aggregate_compute_profile,
+        "month_results": [
+            {
+                "month_index": month.month_index,
+                "new_moon_date_utc": month.new_moon_date_utc.isoformat(),
+                "output_path": month.output_path,
+                "timings_s": month.timings_s,
+                "compute_profile": month.compute_profile,
+            }
+            for month in result.month_results
+        ],
+        "mapper_import_error": str(_MAPPER_IMPORT_ERROR) if _MAPPER_IMPORT_ERROR else None,
+    }
+
+
 def generate_maps(config: MapperConfig, perf_report_path: str | None = None) -> MapRunResult:
     """Generate one or more monthly visibility maps for configured region/workload."""
     require_mapper_dependencies()
@@ -111,6 +142,14 @@ def generate_maps(config: MapperConfig, perf_report_path: str | None = None) -> 
 
         month_results: list[MonthRunResult] = []
         aggregate = {"compute": 0.0, "render": 0.0, "other": 0.0}
+        aggregate_compute_profile = {
+            "months": 0,
+            "location_count": 0,
+            "total_cells": 0,
+            "chunk_count": 0,
+            "worker_count_max": 0,
+            "compute_elapsed_sum_s": 0.0,
+        }
 
         try:
             for month_idx in range(config.total_months):
@@ -121,13 +160,14 @@ def generate_maps(config: MapperConfig, perf_report_path: str | None = None) -> 
 
                 _print_ts(f"===Generating map for {islamic_month_name}, {islamic_year}===")
                 timer.start("compute")
-                visibilities = compute_visibility_volume(
+                visibilities, compute_profile = compute_visibility_volume(
                     lon_centers,
                     lat_centers,
                     new_moon_date,
                     cfg=config.compute,
                     mode=config.render.map_mode,
                     pool=pool,
+                    return_profile=True,
                 )
                 compute_dt = timer.stop("compute")
                 _print_ts(f"Compute done in {compute_dt:.2f}s")
@@ -154,12 +194,21 @@ def generate_maps(config: MapperConfig, perf_report_path: str | None = None) -> 
 
                 aggregate["compute"] += compute_dt
                 aggregate["render"] += render_dt
+                aggregate_compute_profile["months"] += 1
+                aggregate_compute_profile["location_count"] += int(compute_profile.location_count)
+                aggregate_compute_profile["total_cells"] += int(compute_profile.total_cells)
+                aggregate_compute_profile["chunk_count"] += int(compute_profile.chunk_count)
+                aggregate_compute_profile["worker_count_max"] = max(
+                    int(aggregate_compute_profile["worker_count_max"]), int(compute_profile.worker_count)
+                )
+                aggregate_compute_profile["compute_elapsed_sum_s"] += float(compute_profile.total_compute_elapsed_s)
                 month_results.append(
                     MonthRunResult(
                         month_index=month_idx,
                         new_moon_date_utc=new_moon_date,
                         output_path=str(output_path),
                         timings_s=dict(timer.elapsed),
+                        compute_profile=compute_profile.to_dict(),
                     )
                 )
                 gc.collect()
@@ -172,32 +221,16 @@ def generate_maps(config: MapperConfig, perf_report_path: str | None = None) -> 
         aggregate["other"] = max(0.0, total_time - aggregate["compute"] - aggregate["render"])
         _print_ts(f"~~~ --- === Total time taken: {total_time:.2f}s === --- ~~~")
 
-        result = MapRunResult(config=config, month_results=month_results, total_time_s=total_time, aggregate_timings_s=aggregate)
+        result = MapRunResult(
+            config=config,
+            month_results=month_results,
+            total_time_s=total_time,
+            aggregate_timings_s=aggregate,
+            aggregate_compute_profile=aggregate_compute_profile,
+        )
 
         if perf_report_path is not None:
-            payload: Dict[str, Any] = {
-                "config": {
-                    "date": config.date.isoformat(),
-                    "total_months": config.total_months,
-                    "map_region": config.map_region,
-                    "resolution": config.resolution,
-                    "master_path": config.master_path,
-                    "compute": asdict(config.compute),
-                    "render": asdict(config.render),
-                },
-                "total_time_s": result.total_time_s,
-                "aggregate_timings_s": result.aggregate_timings_s,
-                "month_results": [
-                    {
-                        "month_index": month.month_index,
-                        "new_moon_date_utc": month.new_moon_date_utc.isoformat(),
-                        "output_path": month.output_path,
-                        "timings_s": month.timings_s,
-                    }
-                    for month in month_results
-                ],
-                "mapper_import_error": str(_MAPPER_IMPORT_ERROR) if _MAPPER_IMPORT_ERROR else None,
-            }
+            payload = _build_perf_payload(result)
             Path(perf_report_path).parent.mkdir(parents=True, exist_ok=True)
             Path(perf_report_path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
