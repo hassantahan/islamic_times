@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from islamic_times.islamic_times import ITLocation
@@ -103,6 +105,23 @@ def test_set_extreme_latitude_rule_validates_input(toronto_observer_kwargs: dict
 
     location.set_extreme_latitude_rule("ANGLEBASED")
     assert location.prayer_times().method.extreme_lats == "ANGLEBASED"
+
+
+def test_prayer_times_expose_extreme_latitude_fallback_metadata() -> None:
+    location = ITLocation(
+        latitude=69.6492,
+        longitude=18.9553,
+        elevation=0.0,
+        date=datetime(2025, 12, 15, 12, 0, 0, tzinfo=timezone.utc),
+        find_local_tz=False,
+    )
+    location.set_extreme_latitude_rule("ANGLEBASED")
+    prayer_times = location.prayer_times()
+
+    assert prayer_times.extreme_latitude_applied is True
+    assert prayer_times.extreme_latitude_rule == "ANGLEBASED"
+    assert prayer_times.extreme_latitude_reason is not None
+    assert "solar events" in prayer_times.extreme_latitude_reason.lower()
 
 
 def test_mecca_returns_typed_result(toronto_observer_kwargs: dict[str, object]) -> None:

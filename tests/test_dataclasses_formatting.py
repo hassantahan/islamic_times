@@ -105,6 +105,30 @@ def test_prayer_and_prayertimes_string_output() -> None:
     assert "Midnight" in str(prayer_times)
 
 
+def test_prayer_times_string_includes_extreme_latitude_metadata() -> None:
+    method = PrayerMethod(name="Test", fajr_angle=Angle(18), isha_angle=Angle(17))
+    now = datetime(2025, 6, 1, 12, 0, 0)
+    prayer = Prayer("Fajr", now, method)
+    prayer_times = PrayerTimes(
+        method=method,
+        fajr=prayer,
+        sunrise=Prayer("Sunrise", now, method),
+        zuhr=Prayer("Ẓuhr", now, method),
+        asr=Prayer("ʿAṣr", now, method),
+        sunset=Prayer("Sunset", now, method),
+        maghrib=Prayer("Maghrib", now, method),
+        isha=Prayer("ʿIshāʾ", now, method),
+        midnight=Prayer("Midnight", now, method),
+        extreme_latitude_applied=True,
+        extreme_latitude_rule="ANGLEBASED",
+        extreme_latitude_reason="One or more required solar events were unavailable.",
+    )
+
+    rendered = str(prayer_times)
+    assert "Extreme Latitude" in rendered
+    assert "ANGLEBASED" in rendered
+
+
 def test_mecca_sun_moon_and_visibility_strings() -> None:
     now = datetime(2025, 6, 1, 12, 0, 0)
     mecca = MeccaInfo(distance=Distance(1000, DistanceUnits.KILOMETRE), angle=Angle(45), cardinal="NE")

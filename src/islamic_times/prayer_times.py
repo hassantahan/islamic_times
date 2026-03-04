@@ -523,7 +523,9 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     Returns
     -------
     PrayerTimes
-        Structured prayer output dataclass.
+        Structured prayer output dataclass. When a high-latitude fallback path
+        is used, ``extreme_latitude_applied``/``extreme_latitude_rule``/
+        ``extreme_latitude_reason`` are populated.
 
     Notes
     -----
@@ -597,12 +599,20 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
         ("Midnight", _to_prayer_value(midnight_dt)),
     ]
     prayer_list: List[Prayer] = [Prayer(name, _to_legacy_time(value), method) for name, value in prayer_values]
+    extreme_latitude_applied = False
+    extreme_latitude_rule: str | None = None
+    extreme_latitude_reason: str | None = None
 
     # Deal with locations at extreme latitudes
     if abs(observer.latitude.decimal) > 46.5: # 90 - obliquity (23.5) - max fajr angle (20)
         if any(value.status == PrayerStatus.MISSING_EVENT for _, value in prayer_values):
             warnings.warn("Extreme latitude warning. Prayer times at this latitude are not well established.")
             prayer_list = extreme_latitudes(observer_date, observer, prayer_list, sun_info.apparent_declination)
+            extreme_latitude_applied = True
+            extreme_latitude_rule = method.extreme_lats
+            extreme_latitude_reason = (
+                "One or more required solar events were unavailable for standard-angle solving at this latitude/date."
+            )
 
     return PrayerTimes(
         method=method,
@@ -614,4 +624,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
         maghrib=prayer_list[5],
         isha=prayer_list[6],
         midnight=prayer_list[7],
+        extreme_latitude_applied=extreme_latitude_applied,
+        extreme_latitude_rule=extreme_latitude_rule,
+        extreme_latitude_reason=extreme_latitude_reason,
     )

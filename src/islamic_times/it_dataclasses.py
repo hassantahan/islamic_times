@@ -439,6 +439,9 @@ class PrayerTimes:
         maghrib (Prayer): Maghrib prayer.
         isha (Prayer): ʿishāʾ prayer.
         midnight (Prayer): Midnight marker.
+        extreme_latitude_applied (bool): Whether an extreme-latitude fallback was applied.
+        extreme_latitude_rule (str | None): Rule used when fallback was applied.
+        extreme_latitude_reason (str | None): Human-readable reason for fallback activation.
     """
 
     method: PrayerMethod
@@ -450,10 +453,18 @@ class PrayerTimes:
     maghrib: Prayer
     isha: Prayer
     midnight: Prayer
+    extreme_latitude_applied: bool = False
+    extreme_latitude_rule: str | None = None
+    extreme_latitude_reason: str | None = None
 
     def __str__(self):
+        extreme_line = ""
+        if self.extreme_latitude_applied:
+            reason = self.extreme_latitude_reason or "Extreme latitude fallback applied."
+            extreme_line = f"\tExtreme Latitude:\t{self.extreme_latitude_rule} ({reason})\n"
         return ("Prayer Times at Observer Timezone\n"
                 f"\tMethod:\t\t\t{self.method.name}\n"
+                f"{extreme_line}"
                 f"\t{self.fajr.name}:\t\t\t{self.fajr.time_str}\n"
                 f"\t{self.sunrise.name}:\t\t{self.sunrise.time_str}\n"
                 f"\t{self.zuhr.name}:\t\t\t{self.zuhr.time_str}\n"
