@@ -18,9 +18,36 @@ Contents:
 
 
 import math
-from typing import Tuple, ClassVar
+from typing import Tuple, ClassVar, Any
 from datetime import datetime
 from dataclasses import dataclass
+
+
+PUBLIC_SCHEMA_VERSION: str = "1.0"
+
+
+def _serialize_time_value(value: datetime | str | float) -> dict[str, Any]:
+    """Serialize prayer/sun/moon time values with explicit kind metadata."""
+    if isinstance(value, datetime):
+        return {
+            "kind": "datetime",
+            "iso": value.isoformat(),
+            "display": value.strftime("%X %d-%m-%Y"),
+        }
+    if isinstance(value, str):
+        return {
+            "kind": "message",
+            "message": value,
+        }
+    if value == math.inf:
+        return {
+            "kind": "missing",
+            "message": "Does not exist.",
+        }
+    return {
+        "kind": "numeric",
+        "value": float(value),
+    }
 
 # === Helper Classes ===
 
@@ -68,6 +95,20 @@ class Angle:
         """
         d, m, s = self.dms
         return f"{d:+04}\u00b0 {m:02}\u2032 {s:05.2f}\u2033"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize angle with stable numeric and display fields."""
+        d, m, s = self.dms
+        return {
+            "decimal_degrees": self.decimal,
+            "radians": self.radians,
+            "dms": {
+                "degrees": d,
+                "minutes": m,
+                "seconds": s,
+                "display": self.dms_str(),
+            },
+        }
 
     def __str__(self):
         return f"{self.decimal:+08.3f}\u00b0\t\t({self.dms_str()})"
@@ -137,6 +178,24 @@ class RightAscension:
     def dms_str(self) -> str:
         d, m, s = self.dms
         return f"{d:+04}\u00b0 {m:02}\u2032 {s:05.2f}\u2033"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize right ascension in both hour and degree forms."""
+        h, m, s = self.hms
+        return {
+            "decimal_hours": self.decimal_hours,
+            "decimal_degrees": self.decimal_degrees.decimal,
+            "radians": self.radians,
+            "hms": {
+                "hours": h,
+                "minutes": m,
+                "seconds": s,
+                "display": self.hms_str(),
+            },
+            "dms": {
+                "display": self.dms_str(),
+            },
+        }
 
     def __str__(self):
         return f"{self.hms_str()}\t\t({self.decimal_degrees})"
@@ -230,6 +289,18 @@ class Distance:
         """
         return Distance(self.in_unit(target_unit), target_unit)
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize distance preserving explicit unit metadata."""
+        return {
+            "value": self.value,
+            "unit": {
+                "name": self.unit.name,
+                "symbol": self.unit.symbol,
+                "to_m_factor": self.unit.to_m_factor,
+            },
+            "meters": self.in_unit(DistanceUnits.METRE),
+        }
+
     def __str__(self):
         if self.unit == DistanceUnits.METRE:
             return f"{self.value:.2f} {self.unit}"
@@ -262,6 +333,18 @@ class ObserverInfo:
     elevation: Distance
     pressure: float = 101.325
     temperature: float = 10
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize observer configuration with stable field names."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "ObserverInfo",
+            "latitude": self.latitude.to_dict(),
+            "longitude": self.longitude.to_dict(),
+            "elevation": self.elevation.to_dict(),
+            "pressure_kpa": self.pressure,
+            "temperature_c": self.temperature,
+        }
 
     def __str__(self):
         return ("Observer Parameters\n"
@@ -320,6 +403,17 @@ class IslamicDateInfo:
     def full_date(self, day_of_week: str) -> str:
         return f"{self.hijri_day_of_week_name(day_of_week)}, {self.hijri_day} {self.hijri_month_name}, {self.hijri_year}"
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize Hijri date with canonical numeric/date-name fields."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "IslamicDateInfo",
+            "hijri_year": self.hijri_year,
+            "hijri_month": self.hijri_month,
+            "hijri_day": self.hijri_day,
+            "hijri_month_name": self.hijri_month_name,
+        }
+
 @dataclass(frozen=True, slots=True)
 class DateTimeInfo:
     """
@@ -375,6 +469,23 @@ class DateTimeInfo:
                 f"\tJulian Day:\t\t{self.jd}\n"
                 f"\tEstimated ΔT:\t\t{self.deltaT:.2f} s")
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize date-time info with stable machine-readable schema."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "DateTimeInfo",
+            "date_iso": self.date.isoformat(),
+            "gregorian_date": self.gregorian_date,
+            "clock_24h": self.clock,
+            "timezone": self.timezone,
+            "utc_offset_hours": self.utc_offset,
+            "utc_offset_display": self.format_utc_offset(),
+            "julian_day": self.jd,
+            "delta_t_seconds": self.deltaT,
+            "julian_ephemeris_day": self.jde,
+            "hijri": None if self.hijri is None else self.hijri.to_dict(),
+        }
+
 @dataclass(frozen=True, slots=True)
 class PrayerMethod:
     """
@@ -398,6 +509,21 @@ class PrayerMethod:
     asr_type: int = 0
     midnight_type: int = 0
     extreme_lats: str = 'ANGLEBASED'
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize prayer-method configuration with explicit units."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "PrayerMethod",
+            "name": self.name,
+            "keys": list(self.keys) if self.keys is not None else None,
+            "fajr_angle_degrees": self.fajr_angle.decimal,
+            "maghrib_angle_degrees": self.maghrib_angle.decimal,
+            "isha_angle_degrees": self.isha_angle.decimal,
+            "asr_type": self.asr_type,
+            "midnight_type": self.midnight_type,
+            "extreme_lats": self.extreme_lats,
+        }
 
 @dataclass(frozen=True, slots=True)
 class Prayer:
@@ -423,6 +549,17 @@ class Prayer:
             return self.time
         else:
             return str(self.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize a prayer event and its underlying method context."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "Prayer",
+            "name": self.name,
+            "time": _serialize_time_value(self.time),
+            "time_display": self.time_str,
+            "method_name": self.method.name,
+        }
 
 @dataclass(frozen=True, slots=True)
 class PrayerTimes:
@@ -474,6 +611,29 @@ class PrayerTimes:
                 f"\t{self.isha.name}:\t\t\t{self.isha.time_str}\n"
                 f"\t{self.midnight.name}:\t\t{self.midnight.time_str}")
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize full prayer-time output as a stable API payload."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "PrayerTimes",
+            "method": self.method.to_dict(),
+            "prayers": {
+                "fajr": self.fajr.to_dict(),
+                "sunrise": self.sunrise.to_dict(),
+                "zuhr": self.zuhr.to_dict(),
+                "asr": self.asr.to_dict(),
+                "sunset": self.sunset.to_dict(),
+                "maghrib": self.maghrib.to_dict(),
+                "isha": self.isha.to_dict(),
+                "midnight": self.midnight.to_dict(),
+            },
+            "extreme_latitude": {
+                "applied": self.extreme_latitude_applied,
+                "rule": self.extreme_latitude_rule,
+                "reason": self.extreme_latitude_reason,
+            },
+        }
+
 @dataclass(frozen=True, slots=True)
 class MeccaInfo:
     """
@@ -493,6 +653,16 @@ class MeccaInfo:
         return ("Mecca\n"
                 f"\tDistance:\t\t{self.distance.value:,.0f} {self.distance.unit}\t\t({self.distance.in_unit(DistanceUnits.MILE):,.0f} mi)\n"
                 f"\tDirection:\t\t{self.cardinal}\t\t\t({self.angle})")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize Qibla distance/direction output."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "MeccaInfo",
+            "distance": self.distance.to_dict(),
+            "angle": self.angle.to_dict(),
+            "cardinal": self.cardinal,
+        }
 
 @dataclass(frozen=True, slots=True)
 class SunInfo:
@@ -543,6 +713,23 @@ class SunInfo:
                 f"\tApp. Right Ascension:\t{self.apparent_right_ascension}\n"
                 f"\tGreenwich Hour Angle:\t{self.greenwich_hour_angle}\n"
                 f"\tLocal Hour Angle:\t{self.local_hour_angle}")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize solar event and coordinate outputs."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "SunInfo",
+            "sunrise": _serialize_time_value(self.sunrise),
+            "sun_transit": _serialize_time_value(self.sun_transit),
+            "sunset": _serialize_time_value(self.sunset),
+            "apparent_altitude": self.apparent_altitude.to_dict(),
+            "true_azimuth": self.true_azimuth.to_dict(),
+            "geocentric_distance": self.geocentric_distance.to_dict(),
+            "apparent_declination": self.apparent_declination.to_dict(),
+            "apparent_right_ascension": self.apparent_right_ascension.to_dict(),
+            "greenwich_hour_angle": self.greenwich_hour_angle.to_dict(),
+            "local_hour_angle": self.local_hour_angle.to_dict(),
+        }
 
 @dataclass(frozen=True, slots=True)
 class MoonInfo:
@@ -600,6 +787,25 @@ class MoonInfo:
                 f"\tGreenwich Hour Angle:\t{self.greenwich_hour_angle}\n"
                 f"\tLocal Hour Angle:\t{self.local_hour_angle}")
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize lunar event and coordinate outputs."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "MoonInfo",
+            "moonrise": _serialize_time_value(self.moonrise),
+            "moon_transit": _serialize_time_value(self.moon_transit),
+            "moonset": _serialize_time_value(self.moonset),
+            "illumination_fraction": self.illumination,
+            "apparent_altitude": self.apparent_altitude.to_dict(),
+            "true_azimuth": self.true_azimuth.to_dict(),
+            "geocentric_distance": self.geocentric_distance.to_dict(),
+            "parallax": self.parallax.to_dict(),
+            "topocentric_declination": self.topocentric_declination.to_dict(),
+            "topocentric_right_ascension": self.topocentric_right_ascension.to_dict(),
+            "greenwich_hour_angle": self.greenwich_hour_angle.to_dict(),
+            "local_hour_angle": self.local_hour_angle.to_dict(),
+        }
+
 @dataclass(frozen=True, slots=True)
 class Visibilities:
     """
@@ -628,3 +834,20 @@ class Visibilities:
 
             base += f"\t{self.dates[i].strftime('%X %d-%m-%Y')}:\t{formatted_q}\t{self.classifications[i]}\n"
         return base
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize visibility sequence with stable ordered entries."""
+        entries = [
+            {
+                "date_iso": date.isoformat(),
+                "q_value": q,
+                "classification": classification,
+            }
+            for date, q, classification in zip(self.dates, self.q_values, self.classifications)
+        ]
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "Visibilities",
+            "criterion": self.criterion,
+            "entries": entries,
+        }
