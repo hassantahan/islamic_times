@@ -21,6 +21,8 @@ class ComputeConfig:
     temperature_c: float = 20.0
     pressure_kpa: float = 101.325
     max_workers: int | None = None
+    chunk_multiplier: int = 2
+    min_chunk_rows: int = 8
     adaptive_category: bool = True
     adaptive_min_block_cells: int = 256
     adaptive_max_depth: int = 8
@@ -32,6 +34,10 @@ class ComputeConfig:
             raise ValueError("'criterion' must be 0 (Odeh), 1 (Yallop), or 2 (Shaukat).")
         if self.max_workers is not None and self.max_workers < 1:
             raise ValueError("'max_workers' must be >= 1 when provided.")
+        if self.chunk_multiplier < 1:
+            raise ValueError("'chunk_multiplier' must be >= 1.")
+        if self.min_chunk_rows < 1:
+            raise ValueError("'min_chunk_rows' must be >= 1.")
         if self.adaptive_min_block_cells < 1:
             raise ValueError("'adaptive_min_block_cells' must be >= 1.")
         if self.adaptive_max_depth < 1:

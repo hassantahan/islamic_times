@@ -256,8 +256,56 @@ def _compute_chunk_profiled(
     return output, perf_counter() - t0
 
 
-def _split_chunks(lat_centers: np.ndarray, workers: int) -> list[np.ndarray]:
-    return [chunk for chunk in np.array_split(lat_centers, workers) if chunk.size]
+def _split_chunk_ranges(
+    total_rows: int,
+    workers: int,
+    chunk_multiplier: int,
+    min_chunk_rows: int,
+) -> list[tuple[int, int]]:
+    if total_rows < 1:
+        return []
+    target_chunks = min(total_rows, max(1, workers * max(1, chunk_multiplier)))
+    max_chunks_for_min_rows = max(1, total_rows // max(1, min_chunk_rows))
+    target_chunks = min(target_chunks, max_chunks_for_min_rows)
+    target_chunks = max(1, target_chunks)
+
+    base, remainder = divmod(total_rows, target_chunks)
+    ranges: list[tuple[int, int]] = []
+    start = 0
+    for idx in range(target_chunks):
+        rows = base + (1 if idx < remainder else 0)
+        end = start + rows
+        if end > start:
+            ranges.append((start, end))
+        start = end
+    return ranges
+
+
+def _compute_chunk_profiled_task(
+    task: tuple[int, int, np.ndarray, np.ndarray, Any, ComputeConfig, str],
+) -> tuple[int, int, np.ndarray, float]:
+    chunk_idx, row_start, lat_chunk, lon_centers, new_moon_date, cfg, mode = task
+    output, elapsed = _compute_chunk_profiled(lat_chunk, lon_centers, new_moon_date, cfg, mode)
+    return chunk_idx, row_start, output, float(elapsed)
+
+
+def _assemble_volume_from_results(
+    chunk_results: list[tuple[int, int, np.ndarray, float]],
+    total_rows: int,
+    lon_count: int,
+    days: int,
+    chunk_count: int,
+) -> tuple[np.ndarray, tuple[float, ...]]:
+    if not chunk_results:
+        raise ValueError("No chunk results were produced.")
+
+    volume = np.empty((total_rows, lon_count, days), dtype=chunk_results[0][2].dtype)
+    chunk_elapsed: list[float] = [0.0] * chunk_count
+    for chunk_idx, row_start, output, elapsed in chunk_results:
+        row_end = row_start + output.shape[0]
+        volume[row_start:row_end, :, :] = output
+        chunk_elapsed[chunk_idx] = float(elapsed)
+    return volume, tuple(chunk_elapsed)
 
 
 def compute_visibility_volume(
@@ -273,8 +321,17 @@ def compute_visibility_volume(
 
     When ``return_profile=True``, returns ``(volume, ComputeProfile)``.
     """
-    workers = min(max(1, cfg.max_workers or cpu_count()), len(lat_centers))
-    chunks = _split_chunks(lat_centers, workers)
+    total_rows = len(lat_centers)
+    workers = min(max(1, cfg.max_workers or cpu_count()), total_rows)
+    chunk_ranges = _split_chunk_ranges(
+        total_rows=total_rows,
+        workers=workers,
+        chunk_multiplier=cfg.chunk_multiplier,
+        min_chunk_rows=cfg.min_chunk_rows,
+    )
+    chunk_rows = tuple(row_end - row_start for row_start, row_end in chunk_ranges)
+    chunks = [lat_centers[row_start:row_end] for row_start, row_end in chunk_ranges]
+    effective_workers = min(workers, len(chunk_ranges))
 
     backend = "batch_raw"
     if mode == "category":
@@ -292,7 +349,7 @@ def compute_visibility_volume(
             days=cfg.days_to_generate,
             worker_count=1,
             chunk_count=1,
-            chunk_rows=(len(chunks[0]),),
+            chunk_rows=(chunk_rows[0],),
             chunk_elapsed_s=(chunk_elapsed,),
             backend=backend,
             used_multiprocessing=False,
@@ -302,30 +359,41 @@ def compute_visibility_volume(
         )
         return chunk_output, profile
 
-    args = [(chunk, lon_centers, new_moon_date, cfg, mode) for chunk in chunks]
+    tasks = [
+        (chunk_idx, row_start, lat_centers[row_start:row_end], lon_centers, new_moon_date, cfg, mode)
+        for chunk_idx, (row_start, row_end) in enumerate(chunk_ranges)
+    ]
     if pool is not None:
-        outputs_profiled = pool.starmap(_compute_chunk_profiled, args)
+        chunk_results = list(pool.imap_unordered(_compute_chunk_profiled_task, tasks))
+    elif effective_workers > 1:
+        with Pool(effective_workers) as local_pool:
+            chunk_results = list(local_pool.imap_unordered(_compute_chunk_profiled_task, tasks))
     else:
-        with Pool(workers) as local_pool:
-            outputs_profiled = local_pool.starmap(_compute_chunk_profiled, args)
+        chunk_results = [_compute_chunk_profiled_task(task) for task in tasks]
 
-    outputs = [out for out, _ in outputs_profiled]
-    chunk_elapsed_s = tuple(float(elapsed) for _, elapsed in outputs_profiled)
-    volume = np.concatenate(outputs, axis=0)
+    volume, chunk_elapsed_s = _assemble_volume_from_results(
+        chunk_results=chunk_results,
+        total_rows=total_rows,
+        lon_count=len(lon_centers),
+        days=cfg.days_to_generate,
+        chunk_count=len(chunk_ranges),
+    )
     if not return_profile:
         return volume
 
     location_count = len(lat_centers) * len(lon_centers)
+    used_multiprocessing = pool is not None or effective_workers > 1
+    profile_workers = effective_workers if used_multiprocessing else 1
     profile = ComputeProfile(
         mode=mode,
         criterion=cfg.criterion,
         days=cfg.days_to_generate,
-        worker_count=workers,
-        chunk_count=len(chunks),
-        chunk_rows=tuple(len(chunk) for chunk in chunks),
+        worker_count=profile_workers,
+        chunk_count=len(chunk_ranges),
+        chunk_rows=chunk_rows,
         chunk_elapsed_s=chunk_elapsed_s,
         backend=backend,
-        used_multiprocessing=True,
+        used_multiprocessing=used_multiprocessing,
         location_count=location_count,
         total_cells=location_count * cfg.days_to_generate,
         total_compute_elapsed_s=sum(chunk_elapsed_s),

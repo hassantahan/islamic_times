@@ -43,6 +43,16 @@ def test_compute_config_rejects_nonpositive_adaptive_max_depth() -> None:
         ComputeConfig(adaptive_max_depth=0)
 
 
+def test_compute_config_rejects_nonpositive_chunk_multiplier() -> None:
+    with pytest.raises(ValueError, match="chunk_multiplier"):
+        ComputeConfig(chunk_multiplier=0)
+
+
+def test_compute_config_rejects_nonpositive_min_chunk_rows() -> None:
+    with pytest.raises(ValueError, match="min_chunk_rows"):
+        ComputeConfig(min_chunk_rows=0)
+
+
 def test_shaukat_palette_contains_expected_terminal_labels() -> None:
     labels = category_labels(2)
     assert labels[-5:] == [

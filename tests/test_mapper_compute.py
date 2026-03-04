@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from islamic_times.mapper.compute import ComputeProfile, compute_visibility_volume, create_grid
+from islamic_times.mapper.compute import ComputeProfile, _split_chunk_ranges, compute_visibility_volume, create_grid
 from islamic_times.mapper.config import ComputeConfig
 
 
@@ -110,3 +110,39 @@ def test_compute_visibility_volume_returns_profile_when_requested() -> None:
     assert profile.total_compute_elapsed_s >= 0.0
     serialized = profile.to_dict()
     assert serialized["chunk_count"] == 1
+
+
+def test_split_chunk_ranges_respects_min_rows_and_multiplier() -> None:
+    chunk_ranges = _split_chunk_ranges(total_rows=100, workers=4, chunk_multiplier=3, min_chunk_rows=10)
+
+    assert len(chunk_ranges) == 10
+    assert chunk_ranges[0] == (0, 10)
+    assert chunk_ranges[-1] == (90, 100)
+
+
+def test_compute_visibility_volume_chunks_when_single_worker() -> None:
+    _, _, lon_centers, lat_centers = create_grid(24, -50, 50, -20, 40)
+    cfg = ComputeConfig(
+        days_to_generate=1,
+        criterion=1,
+        max_workers=1,
+        chunk_multiplier=4,
+        min_chunk_rows=3,
+        adaptive_category=True,
+    )
+
+    volume, profile = compute_visibility_volume(
+        lon_centers,
+        lat_centers,
+        datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc),
+        cfg,
+        "category",
+        return_profile=True,
+    )
+
+    assert volume.shape == (len(lat_centers), len(lon_centers), 1)
+    assert profile.worker_count == 1
+    assert profile.used_multiprocessing is False
+    assert profile.chunk_count > 1
+    assert sum(profile.chunk_rows) == len(lat_centers)
+    assert len(profile.chunk_elapsed_s) == profile.chunk_count
