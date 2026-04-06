@@ -242,13 +242,15 @@ class ITLocation:
             raise ValueError("Input datetime must include timezone information.")
 
         jd = fast_astro.gregorian_to_jd(date, utc_offset.total_seconds() / 3600)
-        delta_t = fast_astro.delta_t_approx(date.year, date.month)
+        tt_minus_utc, ut1_minus_utc, delta_t = fast_astro.resolve_time_scales(jd)
         islamic_dates = te.gregorian_to_hijri(date.year, date.month, date.day)
         return DateTimeInfo(
             date=date,
             hijri=IslamicDateInfo(*islamic_dates),
             jd=jd,
             deltaT=delta_t,
+            tt_minus_utc=tt_minus_utc,
+            ut1_minus_utc=ut1_minus_utc,
         )
 
     def _normalize_observer_datetime(self, date: datetime) -> datetime:

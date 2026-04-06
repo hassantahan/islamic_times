@@ -498,7 +498,7 @@ MoonNutationResult moon_nutation(double jde) {
  *   - pressure: kPa
  *   - deltaPsi/ecliptic: degrees
  */
-void compute_moon_result(double jde, double deltaT, double local_latitude, double local_longitude,
+void compute_moon_result(double jde, double jd_ut1, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure, 
                         double deltaPsi, double ecliptic, 
                         MoonResult* result) {
@@ -530,8 +530,7 @@ void compute_moon_result(double jde, double deltaT, double local_latitude, doubl
     result->declination = dec_deg;
 
     // Hour angles
-    double jd = jde - deltaT / 86400.0;
-    double gmst = greenwich_mean_sidereal_time(jd);
+    double gmst = greenwich_mean_sidereal_time(jd_ut1);
     double gst, gha_deg, lha_deg;
     compute_gha_lha(result->true_obliquity, deltaPsi, gmst, local_longitude, ra_deg,
                     &gst, &gha_deg, &lha_deg);
@@ -559,7 +558,10 @@ void compute_moon_result(double jde, double deltaT, double local_latitude, doubl
     result->true_azimuth = true_az;
 
     // Apparent altitude (refraction correction)
-    double refraction_correction = 0.0167 / tan((result->true_altitude + 10.3 / (result->true_altitude + 5.11)) * M_PI / 180.0);
+    // Bennett-style refraction is only reliable near the horizon; clamp the
+    // input altitude below -1 deg to avoid over-correcting sub-horizon bodies.
+    double refraction_altitude = result->true_altitude < -1.0 ? -1.0 : result->true_altitude;
+    double refraction_correction = 0.017 / tan((refraction_altitude + 10.3 / (refraction_altitude + 5.11)) * M_PI / 180.0);
     result->apparent_altitude = result->true_altitude + refraction_correction;
 }
 
@@ -637,7 +639,7 @@ PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t narg
     }
     
     double jde = PyFloat_AsDouble(args[0]);
-    double deltaT = PyFloat_AsDouble(args[1]);
+    double time_arg = PyFloat_AsDouble(args[1]);
     double latitude = PyFloat_AsDouble(args[2]);
     double longitude = PyFloat_AsDouble(args[3]);
     double elevation = PyFloat_AsDouble(args[4]);
@@ -649,7 +651,8 @@ PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t narg
     if (PyErr_Occurred()) return NULL;
     
     MoonResult result;
-    compute_moon_result(jde, deltaT, latitude, longitude, 
+    double jd_ut1 = (time_arg > 100000.0) ? time_arg : (jde - time_arg / SECONDS_IN_DAY);
+    compute_moon_result(jde, jd_ut1, latitude, longitude, 
                         elevation, temperature, pressure, 
                         deltaPsi, ecliptic,
                         &result);
@@ -758,7 +761,7 @@ error:
 
 static void resolve_solar_terms_for_moon_iteration(
     double t_jde,
-    double t_deltaT,
+    double t_jd_ut1,
     double local_latitude,
     double local_longitude,
     double elevation,
@@ -779,7 +782,7 @@ static void resolve_solar_terms_for_moon_iteration(
     SunResult sun_params;
     compute_sun_result(
         t_jde,
-        t_deltaT,
+        t_jd_ut1,
         local_latitude,
         local_longitude,
         elevation,
@@ -801,19 +804,25 @@ int find_moon_transit(datetime date, double utc_offset, double local_latitude, d
                     datetime* moon_event) {
 
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
-    double new_deltaT = delta_t_approx(date.year, date.month);
+    double new_tt_utc;
+    double new_ut1_utc;
+    double new_deltaT;
+    resolve_time_scales_for_jd(new_jd, &new_tt_utc, &new_ut1_utc, &new_deltaT);
 
     MoonResult moon_params[3];
     for (int i = 0; i < 3; i++) {
-        datetime temp_date;
-        jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
-        double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
-        double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
+        double day_jd_utc = new_jd + i - 1;
+        double t_tt_utc;
+        double t_ut1_utc;
+        double t_deltaT;
+        resolve_time_scales_for_jd(day_jd_utc, &t_tt_utc, &t_ut1_utc, &t_deltaT);
+        double t_jde = day_jd_utc + t_tt_utc / SECONDS_IN_DAY;
+        double t_jd_ut1 = day_jd_utc + t_ut1_utc / SECONDS_IN_DAY;
         double resolved_deltaPsi;
         double resolved_true_obliquity;
         resolve_solar_terms_for_moon_iteration(
             t_jde,
-            t_deltaT,
+            t_jd_ut1,
             local_latitude,
             local_longitude,
             elevation,
@@ -825,12 +834,12 @@ int find_moon_transit(datetime date, double utc_offset, double local_latitude, d
             &resolved_deltaPsi,
             &resolved_true_obliquity
         );
-        compute_moon_result(t_jde, t_deltaT, 
+        compute_moon_result(t_jde, t_jd_ut1,
             local_latitude, local_longitude, elevation, temperature, pressure,
             resolved_deltaPsi, resolved_true_obliquity, &moon_params[i]);
     }
     
-    double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double sidereal_time = greenwich_mean_sidereal_time(new_jd + new_ut1_utc / SECONDS_IN_DAY);
     double right_ascension_deg[3] = {
         moon_params[0].right_ascension,
         moon_params[1].right_ascension,
@@ -962,19 +971,25 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
     
     double lat_rad = RADIANS(local_latitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
-    double new_deltaT = delta_t_approx(date.year, date.month);
+    double new_tt_utc;
+    double new_ut1_utc;
+    double new_deltaT;
+    resolve_time_scales_for_jd(new_jd, &new_tt_utc, &new_ut1_utc, &new_deltaT);
 
     MoonResult moon_params[3];
     for (int i = 0; i < 3; i++) {
-        datetime temp_date;
-        jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
-        double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
-        double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
+        double day_jd_utc = new_jd + i - 1;
+        double t_tt_utc;
+        double t_ut1_utc;
+        double t_deltaT;
+        resolve_time_scales_for_jd(day_jd_utc, &t_tt_utc, &t_ut1_utc, &t_deltaT);
+        double t_jde = day_jd_utc + t_tt_utc / SECONDS_IN_DAY;
+        double t_jd_ut1 = day_jd_utc + t_ut1_utc / SECONDS_IN_DAY;
         double resolved_deltaPsi;
         double resolved_true_obliquity;
         resolve_solar_terms_for_moon_iteration(
             t_jde,
-            t_deltaT,
+            t_jd_ut1,
             local_latitude,
             local_longitude,
             elevation,
@@ -986,7 +1001,7 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
             &resolved_deltaPsi,
             &resolved_true_obliquity
         );
-        compute_moon_result(t_jde, t_deltaT, 
+        compute_moon_result(t_jde, t_jd_ut1,
             local_latitude, local_longitude, elevation, temperature, pressure,
             resolved_deltaPsi, resolved_true_obliquity, &moon_params[i]);
     }
@@ -1008,7 +1023,7 @@ int moonrise_or_moonset(datetime date, double utc_offset, double local_latitude,
         return -1;
     }
     
-    double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double sidereal_time = greenwich_mean_sidereal_time(new_jd + new_ut1_utc / SECONDS_IN_DAY);
     double m0 = (moon_params[1].right_ascension - local_longitude - sidereal_time) / 360.0;
 
     double m_event;
@@ -1232,10 +1247,11 @@ void next_phases_of_moon_utc(datetime date, datetime phases[4]) {
         else if (p == 3)
             phase_jde -= w;
 
-        /* Adjust from Terrestrial Dynamical Time to UT */
-        phase_jde -= delta_t_approx(date.year, date.month) / 86400.0;
-
-        jd_to_gregorian(phase_jde, 0, &phases[p]);
+        /* Adjust from TT to UTC using TT-UTC, not Delta-T (TT-UT1). */
+        {
+            double phase_jd_utc = phase_jde - tt_minus_utc_for_jd(phase_jde) / SECONDS_IN_DAY;
+            jd_to_gregorian(phase_jd_utc, 0, &phases[p]);
+        }
     }
 }
 

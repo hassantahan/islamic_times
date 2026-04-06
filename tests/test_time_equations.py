@@ -62,6 +62,23 @@ def test_delta_t_approx_branches_return_float(year: int, month: int) -> None:
     assert isinstance(delta_t, float)
 
 
+def test_delta_t_approx_uses_modern_usno_values_for_2026() -> None:
+    with pytest.warns(DeprecationWarning):
+        delta_t = te.delta_t_approx(2026, 3)
+    assert delta_t == pytest.approx(69.0939, abs=0.02)
+
+
+def test_resolve_time_scales_matches_toronto_reference_timestamp() -> None:
+    dt_utc = datetime(2026, 3, 19, 23, 58, 0, tzinfo=timezone.utc)
+    with pytest.warns(DeprecationWarning):
+        jd = te.gregorian_to_jd(dt_utc, zone=0)
+    tt_minus_utc, ut1_minus_utc, delta_t = te.resolve_time_scales(jd)
+
+    assert tt_minus_utc == pytest.approx(69.184, abs=1e-6)
+    assert delta_t == pytest.approx(69.0928431609, abs=0.02)
+    assert ut1_minus_utc == pytest.approx(0.0911568391, abs=0.02)
+
+
 def test_find_utc_offset_returns_timezone_and_offset() -> None:
     tz_name, offset_hours = te.find_utc_offset(43.65107, -79.347015, datetime(2025, 1, 15))
     assert isinstance(tz_name, str)

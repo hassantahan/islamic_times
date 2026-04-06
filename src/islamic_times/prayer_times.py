@@ -177,10 +177,14 @@ def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angl
         Event datetime in observer-local timezone.
     """
     new_date: datetime = observer_date.date + timedelta(days=num_days) 
+    new_jd = observer_date.jd + num_days
+    tt_minus_utc, ut1_minus_utc, delta_t = fast_astro.resolve_time_scales(new_jd)
     tomorrow_date: DateTimeInfo = replace(observer_date, 
                                             date=new_date,
-                                            jd=observer_date.jd + num_days,
-                                            deltaT=fast_astro.delta_t_approx(new_date.year, new_date.month))
+                                            jd=new_jd,
+                                            deltaT=delta_t,
+                                            tt_minus_utc=tt_minus_utc,
+                                            ut1_minus_utc=ut1_minus_utc)
     tomorrow_standard_time = safe_sun_time(tomorrow_date, observer, rise_or_set, angle)
 
     return tomorrow_standard_time

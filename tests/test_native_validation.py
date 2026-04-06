@@ -345,6 +345,17 @@ def test_find_proper_moontime_rejects_invalid_event_code() -> None:
         )
 
 
+def test_resolve_time_scales_matches_modern_reference_timestamp() -> None:
+    observer_dt = datetime(2026, 3, 19, 23, 58, tzinfo=timezone.utc)
+    jd = fast_astro.gregorian_to_jd(observer_dt, 0.0)
+
+    tt_minus_utc, ut1_minus_utc, delta_t = fast_astro.resolve_time_scales(jd)
+
+    assert tt_minus_utc == pytest.approx(69.184, abs=1e-6)
+    assert delta_t == pytest.approx(69.0928431609, abs=0.02)
+    assert ut1_minus_utc == pytest.approx(0.0911568391, abs=0.02)
+
+
 def test_astro_core_reload_keeps_type_backed_wrappers_operational() -> None:
     module = fast_astro
     observer_dt = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)

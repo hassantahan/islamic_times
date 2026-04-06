@@ -19,6 +19,8 @@ static PyMethodDef AstroCoreMethods[] = {
      "gregorian_to_jd(dt, utc_offset) -> float\nConvert Gregorian datetime to Julian Day."},
     {"delta_t_approx", py_delta_t_approx, METH_VARARGS,
      "delta_t_approx(year, month) -> float\nApproximate Delta-T (TT-UT) in seconds."},
+    {"resolve_time_scales", py_resolve_time_scales, METH_VARARGS,
+     "resolve_time_scales(jd_utc) -> tuple[float, float, float]\nReturn (TT-UTC, UT1-UTC, Delta-T) in seconds for a UTC Julian Day."},
     {"compute_sun", (PyCFunction)(PyObject *(*)(PyObject *, PyObject *const *, Py_ssize_t))py_compute_sun, METH_FASTCALL,
      "compute_sun(...) -> Sun\nCompute solar coordinates and derived parameters."},
     {"find_sun_transit", py_find_sun_transit, METH_VARARGS,

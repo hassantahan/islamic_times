@@ -407,8 +407,25 @@ def delta_t_approx(year: int, month: int) -> float:
     """
     warn('This particular function will no longer be supported in python. The proper function is in the C extension as "islamic_times.astro_core.delta_t_approx()".', DeprecationWarning)
     
-    from islamic_times._legacy_py_impl import time_equations as legacy_te
-    return legacy_te.delta_t_approx(year, month)
+    import islamic_times.astro_core as fast_astro
+    return fast_astro.delta_t_approx(year, month)
+
+
+def resolve_time_scales(julian_day_utc: float) -> tuple[float, float, float]:
+    """Resolve TT-UTC, UT1-UTC, and Delta T for a UTC Julian Day.
+
+    Parameters
+    ----------
+    julian_day_utc : float
+        UTC-based Julian Day.
+
+    Returns
+    -------
+    tuple[float, float, float]
+        ``(tt_minus_utc_seconds, ut1_minus_utc_seconds, delta_t_seconds)``.
+    """
+    import islamic_times.astro_core as fast_astro
+    return fast_astro.resolve_time_scales(julian_day_utc)
 
 # The most computationally expensive function
 # Finds the UTC offset given a date and coordinates

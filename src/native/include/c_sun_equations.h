@@ -38,11 +38,11 @@ typedef struct {
     double apparent_altitude;
 } SunResult;
 
-/* Populate solar state for a given JDE and observer configuration.
+/* Populate solar state for a given TT ephemeris day and UT1 day.
  * NOTE: temperature/pressure are currently reserved for future solar
  * refraction modeling and are not applied to apparent solar altitude.
  */
-void compute_sun_result(double jde, double deltaT, double local_latitude, double local_longitude,
+void compute_sun_result(double jde, double jd_ut1, double local_latitude, double local_longitude,
     double elevation, double temperature, double pressure,
     SunResult* result);
 /* Solve local sunrise/sunset for JD reference day and target altitude. */

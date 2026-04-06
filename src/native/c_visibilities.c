@@ -125,9 +125,6 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
     for (int i = start; i < days; i++) {
         // Per-day temporal context.
         double test_jd_new_moon = jd_new_moon + i;
-        datetime test_ymd_new_moon = add_days(new_moon_dt, i);
-        double test_deltaT_new_moon = delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month);
-
         // Sunset and moonset calculations, reusing nutation buffers.
         double deltaPsi[3]; double true_obliquity[3]; // To store the nutations and avoid unnecessary computations
         datetime test_nm_sunset = find_proper_suntime_w_nutation(test_jd_new_moon, utc_offset, lat, lon, elev, temp, press, 
@@ -180,12 +177,16 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         double best_time_jd = test_nm_sunset_jd + 4.0 / 9.0 * lag_days;
         
         // Compute sun/moon state at the selected best time.
-        double best_time_jde = best_time_jd + test_deltaT_new_moon / SECONDS_IN_DAY;
+        double best_time_tt_utc;
+        double best_time_ut1_utc;
+        resolve_time_scales_for_jd(best_time_jd, &best_time_tt_utc, &best_time_ut1_utc, NULL);
+        double best_time_jde = best_time_jd + best_time_tt_utc / SECONDS_IN_DAY;
+        double best_time_jd_ut1 = best_time_jd + best_time_ut1_utc / SECONDS_IN_DAY;
         SunResult nm_sun_params;
-        compute_sun_result(best_time_jde, test_deltaT_new_moon, lat, lon, elev, temp, press, &nm_sun_params);
+        compute_sun_result(best_time_jde, best_time_jd_ut1, lat, lon, elev, temp, press, &nm_sun_params);
 
         MoonResult nm_moon_params;
-        compute_moon_result(best_time_jde, test_deltaT_new_moon, lat, lon, elev, temp, press, 
+        compute_moon_result(best_time_jde, best_time_jd_ut1, lat, lon, elev, temp, press, 
             nm_sun_params.nutation_longitude, nm_sun_params.true_obliquity, &nm_moon_params);
         
         // Compute criterion-specific q-value.

@@ -75,9 +75,33 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
     for i in range(3):
         ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
         delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-        sun_params = se.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer)
+        sun_params = se.sunpos(
+            replace(
+                observer_date,
+                date=ymd_temp,
+                jd=(new_jd + i - 1),
+                deltaT=delT_temp,
+                tt_minus_utc=None,
+                ut1_minus_utc=None,
+            ),
+            observer,
+        )
         delPsi = sun_params.nutation[0]
-        moon_params.append(active.moonpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer, delPsi, sun_params.true_obliquity))
+        moon_params.append(
+            active.moonpos(
+                replace(
+                    observer_date,
+                    date=ymd_temp,
+                    jd=(new_jd + i - 1),
+                    deltaT=delT_temp,
+                    tt_minus_utc=None,
+                    ut1_minus_utc=None,
+                ),
+                observer,
+                delPsi,
+                sun_params.true_obliquity,
+            )
+        )
 
     h_zero: Angle = Angle(0.7275 * moon_params[1].eh_parallax.decimal - 0.566667)
     cosH_zero: float = (math.sin(h_zero.radians) - math.sin(observer.latitude.radians) * math.sin(moon_params[1].declination.radians)) / (

@@ -350,7 +350,7 @@ def moonpos(observer_date: DateTimeInfo, observer: ObserverInfo, deltaPsi: Angle
 	"""
 
 	import islamic_times.astro_core as fast_astro
-	the_moon: Moon = fast_astro.compute_moon(observer_date.jde, observer_date.deltaT, 
+	the_moon: Moon = fast_astro.compute_moon(observer_date.jde_tt, observer_date.jd_ut1, 
 						 observer.latitude.decimal, observer.longitude.decimal, 
 						 observer.elevation.in_unit(DistanceUnits.METRE), 0, 0, 
 						 deltaPsi.decimal, ecliptic.decimal)

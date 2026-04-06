@@ -1,5 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include "c_time_equations.h"
+#include "c_time_scale_data.h"
 
 /* ================================
    Definitions & Helper Constants
@@ -164,11 +165,11 @@ double fraction_of_day_jd(double jd, double utc_offset) {
 
 /* ================================
    Delta-T approximation (seconds)
-   Source polynomial sets:
-   https://eclipse.gsfc.nasa.gov/LEcat5/deltatpoly.html
+   Modern dates use bundled official USNO data. Historical/out-of-range dates
+   fall back to the NASA eclipse polynomial set.
    ================================ */
 
-double delta_t_approx(int year, int month) {
+static double delta_t_polynomial_approx(int year, int month) {
     double y = year + (month - 0.5) / 12.0;
     double u, t, dt;
 
@@ -239,6 +240,107 @@ double delta_t_approx(int year, int month) {
     return dt;
 }
 
+static int interpolate_usno_delta_t(double mjd_utc, double* delta_t_seconds) {
+    if (USNO_DELTA_T_TABLE_LEN <= 0) {
+        return 0;
+    }
+
+    if (mjd_utc < USNO_DELTA_T_TABLE[0].mjd || mjd_utc > USNO_DELTA_T_TABLE[USNO_DELTA_T_TABLE_LEN - 1].mjd) {
+        return 0;
+    }
+
+    if (mjd_utc == USNO_DELTA_T_TABLE[USNO_DELTA_T_TABLE_LEN - 1].mjd) {
+        *delta_t_seconds = USNO_DELTA_T_TABLE[USNO_DELTA_T_TABLE_LEN - 1].delta_t_seconds;
+        return 1;
+    }
+
+    for (int i = 0; i < USNO_DELTA_T_TABLE_LEN - 1; ++i) {
+        const DeltaTTableEntry left = USNO_DELTA_T_TABLE[i];
+        const DeltaTTableEntry right = USNO_DELTA_T_TABLE[i + 1];
+        if (mjd_utc < left.mjd || mjd_utc > right.mjd) {
+            continue;
+        }
+        if (right.mjd == left.mjd) {
+            *delta_t_seconds = right.delta_t_seconds;
+            return 1;
+        }
+        double alpha = (mjd_utc - left.mjd) / (right.mjd - left.mjd);
+        *delta_t_seconds = left.delta_t_seconds + alpha * (right.delta_t_seconds - left.delta_t_seconds);
+        return 1;
+    }
+
+    *delta_t_seconds = USNO_DELTA_T_TABLE[USNO_DELTA_T_TABLE_LEN - 1].delta_t_seconds;
+    return 1;
+}
+
+static double tai_minus_utc_for_jd(double jd_utc) {
+    const TaiUtcTableEntry* current = &USNO_TAI_UTC_TABLE[0];
+
+    for (int i = 0; i < USNO_TAI_UTC_TABLE_LEN; ++i) {
+        if (jd_utc >= USNO_TAI_UTC_TABLE[i].jd_start) {
+            current = &USNO_TAI_UTC_TABLE[i];
+        } else {
+            break;
+        }
+    }
+
+    double mjd_utc = jd_utc - 2400000.5;
+    return current->base_seconds + (mjd_utc - current->mjd_reference) * current->slope_seconds_per_day;
+}
+
+double tt_minus_utc_for_jd(double jd_utc) {
+    return 32.184 + tai_minus_utc_for_jd(jd_utc);
+}
+
+double delta_t_for_jd(double jd_utc) {
+    double mjd_utc = jd_utc - 2400000.5;
+    double delta_t_seconds;
+    if (interpolate_usno_delta_t(mjd_utc, &delta_t_seconds)) {
+        return delta_t_seconds;
+    }
+
+    datetime date;
+    if (jd_to_gregorian(jd_utc, 0.0, &date) != 0) {
+        return delta_t_polynomial_approx(2000, 1);
+    }
+    return delta_t_polynomial_approx(date.year, date.month);
+}
+
+double ut1_minus_utc_for_jd(double jd_utc) {
+    return tt_minus_utc_for_jd(jd_utc) - delta_t_for_jd(jd_utc);
+}
+
+void resolve_time_scales_for_jd(double jd_utc, double* tt_minus_utc, double* ut1_minus_utc, double* delta_t) {
+    double resolved_tt_utc = tt_minus_utc_for_jd(jd_utc);
+    double resolved_delta_t = delta_t_for_jd(jd_utc);
+    double resolved_ut1_utc = resolved_tt_utc - resolved_delta_t;
+
+    if (tt_minus_utc != NULL) {
+        *tt_minus_utc = resolved_tt_utc;
+    }
+    if (ut1_minus_utc != NULL) {
+        *ut1_minus_utc = resolved_ut1_utc;
+    }
+    if (delta_t != NULL) {
+        *delta_t = resolved_delta_t;
+    }
+}
+
+double delta_t_approx(int year, int month) {
+    datetime month_start = {
+        .year = year,
+        .month = month,
+        .day = 1,
+        .hour = 0,
+        .minute = 0,
+        .second = 0,
+        .microsecond = 0,
+    };
+    int month_length = days_in_month(year, month);
+    double midpoint_jd = gregorian_to_jd(month_start, 0.0) + ((double)month_length / 2.0);
+    return delta_t_for_jd(midpoint_jd);
+}
+
 /* Python wrapper: delta_t_approx(year, month) -> float */
 PyObject* py_delta_t_approx(PyObject *self, PyObject *args) {
     int year, month; 
@@ -248,4 +350,18 @@ PyObject* py_delta_t_approx(PyObject *self, PyObject *args) {
     double result = delta_t_approx(year, month);
 
     return Py_BuildValue("d", result);
+}
+
+PyObject* py_resolve_time_scales(PyObject *self, PyObject *args) {
+    double jd_utc;
+    if (!PyArg_ParseTuple(args, "d", &jd_utc)) {
+        return NULL;
+    }
+
+    double tt_minus_utc;
+    double ut1_minus_utc;
+    double delta_t;
+    resolve_time_scales_for_jd(jd_utc, &tt_minus_utc, &ut1_minus_utc, &delta_t);
+
+    return Py_BuildValue("ddd", tt_minus_utc, ut1_minus_utc, delta_t);
 }

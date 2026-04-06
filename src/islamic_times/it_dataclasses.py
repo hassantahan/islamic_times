@@ -422,13 +422,17 @@ class DateTimeInfo:
     Attributes:
         date (datetime): Gregorian date and time.
         jd (float): Julian Date.
-        deltaT (float): Difference TT - UT in seconds.
+        deltaT (float): Difference TT - UT1 in seconds.
+        tt_minus_utc (float | None): Difference TT - UTC in seconds.
+        ut1_minus_utc (float | None): Difference UT1 - UTC in seconds.
         hijri (IslamicDateInfo | None): Islamic date information.
     """
 
     date: datetime
     jd: float
     deltaT: float
+    tt_minus_utc: float | None = None
+    ut1_minus_utc: float | None = None
     hijri: IslamicDateInfo | None = None
 
     @property
@@ -449,8 +453,26 @@ class DateTimeInfo:
         return 0.0 if tz_delta is None else tz_delta.total_seconds() / 3600
     
     @property
+    def tt_utc_seconds(self) -> float:
+        return self.deltaT if self.tt_minus_utc is None else self.tt_minus_utc
+
+    @property
+    def ut1_utc_seconds(self) -> float:
+        if self.ut1_minus_utc is not None:
+            return self.ut1_minus_utc
+        return self.tt_utc_seconds - self.deltaT
+
+    @property
     def jde(self) -> float:
-        return self.jd + self.deltaT / 86400
+        return self.jd + self.tt_utc_seconds / 86400
+
+    @property
+    def jde_tt(self) -> float:
+        return self.jde
+
+    @property
+    def jd_ut1(self) -> float:
+        return self.jd + self.ut1_utc_seconds / 86400
     
     def format_utc_offset(self) -> str:
         '''String formatting for UTC Offsets.'''
@@ -482,7 +504,10 @@ class DateTimeInfo:
             "utc_offset_display": self.format_utc_offset(),
             "julian_day": self.jd,
             "delta_t_seconds": self.deltaT,
+            "tt_minus_utc_seconds": self.tt_utc_seconds,
+            "ut1_minus_utc_seconds": self.ut1_utc_seconds,
             "julian_ephemeris_day": self.jde,
+            "julian_day_ut1": self.jd_ut1,
             "hijri": None if self.hijri is None else self.hijri.to_dict(),
         }
 

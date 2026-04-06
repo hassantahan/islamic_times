@@ -73,8 +73,26 @@ def test_datetimeinfo_properties() -> None:
     assert info.timezone is not None
     assert math.isclose(info.utc_offset, -5.0, abs_tol=1e-12)
     assert math.isclose(info.jde, 2460000.5 + 69.0 / 86400.0, rel_tol=0.0, abs_tol=1e-12)
+    assert math.isclose(info.jd_ut1, 2460000.5, rel_tol=0.0, abs_tol=1e-12)
     assert info.format_utc_offset() == "UTC-05:00"
     assert "Time & Date" in str(info)
+
+
+def test_datetimeinfo_timescale_properties() -> None:
+    dt = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    info = DateTimeInfo(
+        date=dt,
+        jd=2460000.5,
+        deltaT=69.09,
+        tt_minus_utc=69.184,
+        ut1_minus_utc=0.094,
+        hijri=IslamicDateInfo(1446, 7, 1),
+    )
+
+    assert math.isclose(info.tt_utc_seconds, 69.184, rel_tol=0.0, abs_tol=1e-12)
+    assert math.isclose(info.ut1_utc_seconds, 0.094, rel_tol=0.0, abs_tol=1e-12)
+    assert math.isclose(info.jde_tt, 2460000.5 + 69.184 / 86400.0, rel_tol=0.0, abs_tol=1e-12)
+    assert math.isclose(info.jd_ut1, 2460000.5 + 0.094 / 86400.0, rel_tol=0.0, abs_tol=1e-12)
 
 
 def test_prayer_and_prayertimes_string_output() -> None:
@@ -200,6 +218,9 @@ def test_datetimeinfo_to_dict_contract() -> None:
     assert payload["date_iso"] == dt.isoformat()
     assert payload["julian_day"] == pytest.approx(2460000.5)
     assert payload["delta_t_seconds"] == pytest.approx(69.0)
+    assert payload["tt_minus_utc_seconds"] == pytest.approx(69.0)
+    assert payload["ut1_minus_utc_seconds"] == pytest.approx(0.0)
+    assert payload["julian_day_ut1"] == pytest.approx(2460000.5)
     assert isinstance(payload["hijri"], dict)
 
 

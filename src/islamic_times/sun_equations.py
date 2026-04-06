@@ -282,7 +282,15 @@ def sunpos(observer_date: DateTimeInfo, observer: ObserverInfo) -> Sun:
     refraction correction.
     """
     import islamic_times.astro_core as fast_astro
-    the_sun: Sun = fast_astro.compute_sun(observer_date.jde, observer_date.deltaT, observer.latitude.decimal, observer.longitude.decimal, observer.elevation.value, observer.temperature, observer.pressure)
+    the_sun: Sun = fast_astro.compute_sun(
+        observer_date.jde_tt,
+        observer_date.jd_ut1,
+        observer.latitude.decimal,
+        observer.longitude.decimal,
+        observer.elevation.value,
+        observer.temperature,
+        observer.pressure,
+    )
 
     return the_sun
 

@@ -245,18 +245,17 @@ double oblique_eq(double t) {
 /*
  * Populate the SunResult struct for one observer/time.
  * Units:
- *   - jde: Julian Ephemeris Day
- *   - deltaT: seconds
+ *   - jde: Julian Ephemeris Day (TT)
+ *   - jd_ut1: Julian Day (UT1)
  *   - latitude/longitude: degrees
  *   - elevation: metres
  *   - temperature: Celsius (currently reserved for future solar refraction model)
  *   - pressure: kPa (currently reserved for future solar refraction model)
  */
-void compute_sun_result(double jde, double deltaT, double local_latitude, double local_longitude,
+void compute_sun_result(double jde, double jd_ut1, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure,
                         SunResult* result) {
     // Compute time variable
-    double jd = jde - deltaT / SECONDS_IN_DAY;
     result->t = (jde - J2000) / JULIAN_MILLENNIUM;
     double t = result->t;
     double t2 = t * t;
@@ -333,7 +332,7 @@ void compute_sun_result(double jde, double deltaT, double local_latitude, double
 
     // Hour Angles
     double gst, gha, lha;
-    double gmst = greenwich_mean_sidereal_time(jd);
+    double gmst = greenwich_mean_sidereal_time(jd_ut1);
     compute_gha_lha(result->true_obliquity, dp, gmst, local_longitude, app_ra, &gst, &gha, &lha);
     result->greenwich_hour_angle = gha;
     result->local_hour_angle = lha;
@@ -441,7 +440,7 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
     }
 
     double jde = PyFloat_AsDouble(args[0]);
-    double deltaT = PyFloat_AsDouble(args[1]);
+    double time_arg = PyFloat_AsDouble(args[1]);
     double latitude = PyFloat_AsDouble(args[2]);
     double longitude = PyFloat_AsDouble(args[3]);
     double elevation = PyFloat_AsDouble(args[4]);
@@ -451,7 +450,8 @@ PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs
     if (PyErr_Occurred()) return NULL;
 
     SunResult result;
-    compute_sun_result(jde, deltaT, latitude, longitude, elevation, temperature, pressure, &result);
+    double jd_ut1 = (time_arg > 100000.0) ? time_arg : (jde - time_arg / SECONDS_IN_DAY);
+    compute_sun_result(jde, jd_ut1, latitude, longitude, elevation, temperature, pressure, &result);
 
     AstroCoreState* state = (AstroCoreState*)PyModule_GetState(self);
     if (!state) {
@@ -531,21 +531,27 @@ int find_sun_transit(datetime date, double utc_offset, double local_latitude, do
                     double elevation, double temperature, double pressure, datetime* sun_event) {
 
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
-    double new_deltaT = delta_t_approx(date.year, date.month);
+    double new_tt_utc;
+    double new_ut1_utc;
+    double new_deltaT;
+    resolve_time_scales_for_jd(new_jd, &new_tt_utc, &new_ut1_utc, &new_deltaT);
 
     SunResult sun_params[3];
     for (int i = 0; i < 3; i++) {
-        datetime temp_date;
-        jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
-        double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
-        double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
-        compute_sun_result(t_jde, t_deltaT, 
+        double day_jd_utc = new_jd + i - 1;
+        double t_tt_utc;
+        double t_ut1_utc;
+        double t_deltaT;
+        resolve_time_scales_for_jd(day_jd_utc, &t_tt_utc, &t_ut1_utc, &t_deltaT);
+        double t_jde = day_jd_utc + t_tt_utc / SECONDS_IN_DAY;
+        double t_jd_ut1 = day_jd_utc + t_ut1_utc / SECONDS_IN_DAY;
+        compute_sun_result(t_jde, t_jd_ut1,
             local_latitude, local_longitude, elevation, temperature, pressure, 
             &sun_params[i]
         );
     }
     
-    double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double sidereal_time = greenwich_mean_sidereal_time(new_jd + new_ut1_utc / SECONDS_IN_DAY);
     double right_ascension_deg[3] = {
         sun_params[0].apparent_right_ascension,
         sun_params[1].apparent_right_ascension,
@@ -603,15 +609,21 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
     
     double lat_rad = RADIANS(local_latitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
-    double new_deltaT = delta_t_approx(date.year, date.month);
+    double new_tt_utc;
+    double new_ut1_utc;
+    double new_deltaT;
+    resolve_time_scales_for_jd(new_jd, &new_tt_utc, &new_ut1_utc, &new_deltaT);
 
     SunResult sun_params[3];
     for (int i = 0; i < 3; i++) {
-        datetime temp_date;
-        jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
-        double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
-        double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
-        compute_sun_result(t_jde, t_deltaT, 
+        double day_jd_utc = new_jd + i - 1;
+        double t_tt_utc;
+        double t_ut1_utc;
+        double t_deltaT;
+        resolve_time_scales_for_jd(day_jd_utc, &t_tt_utc, &t_ut1_utc, &t_deltaT);
+        double t_jde = day_jd_utc + t_tt_utc / SECONDS_IN_DAY;
+        double t_jd_ut1 = day_jd_utc + t_ut1_utc / SECONDS_IN_DAY;
+        compute_sun_result(t_jde, t_jd_ut1,
             local_latitude, local_longitude, elevation, temperature, pressure, 
             &sun_params[i]
         );
@@ -634,7 +646,7 @@ int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, d
         return -1;
     }
     
-    double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double sidereal_time = greenwich_mean_sidereal_time(new_jd + new_ut1_utc / SECONDS_IN_DAY);
     double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
 
     double m_event;
@@ -746,15 +758,21 @@ int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_
 
     double lat_rad = RADIANS(local_latitude);
     double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
-    double new_deltaT = delta_t_approx(date.year, date.month);
+    double new_tt_utc;
+    double new_ut1_utc;
+    double new_deltaT;
+    resolve_time_scales_for_jd(new_jd, &new_tt_utc, &new_ut1_utc, &new_deltaT);
 
     SunResult sun_params[3];
     for (int i = 0; i < 3; i++) {
-        datetime temp_date;
-        jd_to_gregorian(new_jd + i - 1, utc_offset, &temp_date);
-        double t_deltaT = delta_t_approx(temp_date.year, temp_date.month);
-        double t_jde = (new_jd + i - 1) + t_deltaT / SECONDS_IN_DAY;
-        compute_sun_result(t_jde, t_deltaT, 
+        double day_jd_utc = new_jd + i - 1;
+        double t_tt_utc;
+        double t_ut1_utc;
+        double t_deltaT;
+        resolve_time_scales_for_jd(day_jd_utc, &t_tt_utc, &t_ut1_utc, &t_deltaT);
+        double t_jde = day_jd_utc + t_tt_utc / SECONDS_IN_DAY;
+        double t_jd_ut1 = day_jd_utc + t_ut1_utc / SECONDS_IN_DAY;
+        compute_sun_result(t_jde, t_jd_ut1,
             local_latitude, local_longitude, elevation, temperature, pressure, 
             &sun_params[i]
         );
@@ -779,7 +797,7 @@ int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_
         return -1;
     }
     
-    double sidereal_time = greenwich_mean_sidereal_time(new_jd);
+    double sidereal_time = greenwich_mean_sidereal_time(new_jd + new_ut1_utc / SECONDS_IN_DAY);
     double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
 
     double m_event;

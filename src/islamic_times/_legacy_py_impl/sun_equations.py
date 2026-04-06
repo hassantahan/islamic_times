@@ -62,7 +62,19 @@ def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_
     for i in range(3):
         ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
         delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-        sun_params.append(active.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer))
+        sun_params.append(
+            active.sunpos(
+                replace(
+                    observer_date,
+                    date=ymd_temp,
+                    jd=(new_jd + i - 1),
+                    deltaT=delT_temp,
+                    tt_minus_utc=None,
+                    ut1_minus_utc=None,
+                ),
+                observer,
+            )
+        )
 
     h_zero: Angle = Angle(-angle.decimal)
     cosH_zero: float = (math.sin(h_zero.radians) - math.sin(observer.latitude.radians) * math.sin(sun_params[1].apparent_declination.radians)) / (

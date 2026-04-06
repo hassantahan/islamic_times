@@ -52,8 +52,8 @@ typedef struct {
 
 /* Compute fundamental arguments and periodic nutation terms for the Moon. */
 MoonNutationResult moon_nutation(double jde);
-/* Populate lunar state for a given JDE and observer configuration. */
-void compute_moon_result(double jde, double deltaT, double local_latitude, double local_longitude,
+/* Populate lunar state for a given TT ephemeris day and UT1 day. */
+void compute_moon_result(double jde, double jd_ut1, double local_latitude, double local_longitude,
     double elevation, double temperature, double pressure, 
     double deltaPsi, double ecliptic, 
     MoonResult* result);
