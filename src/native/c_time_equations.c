@@ -169,8 +169,32 @@ double fraction_of_day_jd(double jd, double utc_offset) {
    fall back to the NASA eclipse polynomial set.
    ================================ */
 
-static double delta_t_polynomial_approx(int year, int month) {
-    double y = year + (month - 0.5) / 12.0;
+#define FUTURE_DELTA_T_SMOOTHING_DECAY_YEARS 20.0
+#define FUTURE_DELTA_T_CONSTRAINT_RAMP_YEARS 3.0
+#define HUBER_DELTA_T_Q_MS2_PER_YEAR 0.058
+#define HUBER_DELTA_T_M_YEARS 2500.0
+#define HUBER_DELTA_T_BASE_YEAR 2005.0
+#define USNO_DELTA_T_TAIL_SLOPE_POINTS 4
+
+static double decimal_year_from_datetime(datetime date) {
+    int doy = day_of_year(date.year, date.month, date.day);
+    int days_this_year = is_leap_year(date.year) ? 366 : 365;
+    if (doy < 1 || days_this_year <= 0) {
+        return (double)date.year;
+    }
+    return (double)date.year + (((double)(doy - 1)) + fraction_of_day_datetime(date)) / (double)days_this_year;
+}
+
+static double decimal_year_from_jd(double jd_utc) {
+    datetime date;
+    if (jd_to_gregorian(jd_utc, 0.0, &date) != 0) {
+        return 2000.0;
+    }
+    return decimal_year_from_datetime(date);
+}
+
+static double delta_t_polynomial_for_decimal_year(double y) {
+    int year = (int)floor(y);
     double u, t, dt;
 
     if (year < -500) {
@@ -240,6 +264,110 @@ static double delta_t_polynomial_approx(int year, int month) {
     return dt;
 }
 
+static double delta_t_polynomial_approx(int year, int month) {
+    double y = year + (month - 0.5) / 12.0;
+    return delta_t_polynomial_for_decimal_year(y);
+}
+
+static double delta_t_polynomial_slope_seconds_per_year(double decimal_year) {
+    const double half_step_years = 1.0 / 365.25;
+    return (
+        delta_t_polynomial_for_decimal_year(decimal_year + half_step_years)
+        - delta_t_polynomial_for_decimal_year(decimal_year - half_step_years)
+    ) / (2.0 * half_step_years);
+}
+
+static double huber_delta_t_standard_error_seconds(double decimal_year) {
+    double n = decimal_year - HUBER_DELTA_T_BASE_YEAR;
+    if (n <= 0.0) {
+        return 0.0;
+    }
+
+    double variance_term = (n * HUBER_DELTA_T_Q_MS2_PER_YEAR / 3.0) * (1.0 + n / HUBER_DELTA_T_M_YEARS);
+    if (variance_term <= 0.0) {
+        return 0.0;
+    }
+
+    return 365.25 * n * sqrt(variance_term) / 1000.0;
+}
+
+static double usno_delta_t_boundary_jd_utc(void) {
+    return USNO_DELTA_T_TABLE[USNO_DELTA_T_TABLE_LEN - 1].mjd + 2400000.5;
+}
+
+static double estimate_usno_delta_t_tail_slope_seconds_per_year(void) {
+    int point_count = USNO_DELTA_T_TAIL_SLOPE_POINTS;
+    if (point_count > USNO_DELTA_T_TABLE_LEN) {
+        point_count = USNO_DELTA_T_TABLE_LEN;
+    }
+    if (point_count < 2) {
+        return 0.0;
+    }
+
+    int start_index = USNO_DELTA_T_TABLE_LEN - point_count;
+    double sum_x = 0.0;
+    double sum_y = 0.0;
+    double sum_xx = 0.0;
+    double sum_xy = 0.0;
+
+    for (int i = start_index; i < USNO_DELTA_T_TABLE_LEN; ++i) {
+        double jd_utc = USNO_DELTA_T_TABLE[i].mjd + 2400000.5;
+        double x = decimal_year_from_jd(jd_utc);
+        double y = USNO_DELTA_T_TABLE[i].delta_t_seconds;
+
+        sum_x += x;
+        sum_y += y;
+        sum_xx += x * x;
+        sum_xy += x * y;
+    }
+
+    double count = (double)point_count;
+    double denominator = count * sum_xx - sum_x * sum_x;
+    if (fabs(denominator) < 1e-12) {
+        return 0.0;
+    }
+    return (count * sum_xy - sum_x * sum_y) / denominator;
+}
+
+static double delta_t_future_smoothed_for_jd(double jd_utc) {
+    double boundary_jd = usno_delta_t_boundary_jd_utc();
+    if (jd_utc <= boundary_jd) {
+        return USNO_DELTA_T_TABLE[USNO_DELTA_T_TABLE_LEN - 1].delta_t_seconds;
+    }
+
+    double decimal_year = decimal_year_from_jd(jd_utc);
+    double boundary_decimal_year = decimal_year_from_jd(boundary_jd);
+    double delta_years = decimal_year - boundary_decimal_year;
+
+    double baseline = delta_t_polynomial_for_decimal_year(decimal_year);
+    double baseline_boundary = delta_t_polynomial_for_decimal_year(boundary_decimal_year);
+    double boundary_delta_t = USNO_DELTA_T_TABLE[USNO_DELTA_T_TABLE_LEN - 1].delta_t_seconds;
+    double boundary_offset = boundary_delta_t - baseline_boundary;
+
+    double baseline_slope = delta_t_polynomial_slope_seconds_per_year(boundary_decimal_year);
+    double table_slope = estimate_usno_delta_t_tail_slope_seconds_per_year();
+    double tau = FUTURE_DELTA_T_SMOOTHING_DECAY_YEARS;
+
+    double raw_correction = (
+        boundary_offset + (table_slope - baseline_slope + boundary_offset / tau) * delta_years
+    ) * exp(-delta_years / tau);
+
+    double sigma = huber_delta_t_standard_error_seconds(decimal_year);
+    double sigma_boundary = huber_delta_t_standard_error_seconds(boundary_decimal_year);
+    double envelope = sigma;
+    if (fabs(boundary_offset) > sigma_boundary) {
+        envelope += (fabs(boundary_offset) - sigma_boundary) * exp(-delta_years / tau);
+    }
+
+    if (fabs(raw_correction) > envelope) {
+        double limited_correction = copysign(envelope, raw_correction);
+        double ramp_weight = 1.0 - exp(-delta_years / FUTURE_DELTA_T_CONSTRAINT_RAMP_YEARS);
+        raw_correction += ramp_weight * (limited_correction - raw_correction);
+    }
+
+    return baseline + raw_correction;
+}
+
 static int interpolate_usno_delta_t(double mjd_utc, double* delta_t_seconds) {
     if (USNO_DELTA_T_TABLE_LEN <= 0) {
         return 0;
@@ -299,11 +427,15 @@ double delta_t_for_jd(double jd_utc) {
         return delta_t_seconds;
     }
 
+    if (USNO_DELTA_T_TABLE_LEN > 0 && jd_utc > usno_delta_t_boundary_jd_utc()) {
+        return delta_t_future_smoothed_for_jd(jd_utc);
+    }
+
     datetime date;
     if (jd_to_gregorian(jd_utc, 0.0, &date) != 0) {
         return delta_t_polynomial_approx(2000, 1);
     }
-    return delta_t_polynomial_approx(date.year, date.month);
+    return delta_t_polynomial_for_decimal_year(decimal_year_from_datetime(date));
 }
 
 double ut1_minus_utc_for_jd(double jd_utc) {
