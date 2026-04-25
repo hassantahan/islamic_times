@@ -237,6 +237,11 @@ double oblique_eq(double t) {
     return eps;
 }
 
+static double standard_atmospheric_refraction(double true_altitude) {
+    double refraction_altitude = true_altitude < -1.0 ? -1.0 : true_altitude;
+    return 0.017 / tan(RADIANS(refraction_altitude + 10.3 / (refraction_altitude + 5.11)));
+}
+
 
 /* ================================
    Core calculation: full solar result
@@ -249,8 +254,8 @@ double oblique_eq(double t) {
  *   - jd_ut1: Julian Day (UT1)
  *   - latitude/longitude: degrees
  *   - elevation: metres
- *   - temperature: Celsius (currently reserved for future solar refraction model)
- *   - pressure: kPa (currently reserved for future solar refraction model)
+ *   - temperature: Celsius (currently reserved for API compatibility)
+ *   - pressure: kPa (currently reserved for API compatibility)
  */
 void compute_sun_result(double jde, double jd_ut1, double local_latitude, double local_longitude,
                         double elevation, double temperature, double pressure,
@@ -308,23 +313,21 @@ void compute_sun_result(double jde, double jd_ut1, double local_latitude, double
     // Compute omega
     double omega = 125.04452 - 19341.36261 * t + 0.020708 * t2 + t3 / 45000.0;
     result->omega = omega;
-    double omega_rad = RADIANS(omega);
     
-    // Apparent longitude
-    double app_long = true_long - 0.00569 - 0.00478 * sin(omega_rad);
+    // Apparent longitude using the full nutation term plus aberration.
+    double app_long = true_long + dp - 20.4898 / (3600.0 * geo_dist);
     result->apparent_longitude = app_long;
     
 
     // True equatorial coordinates
     double ra, dec;
-    compute_equitorial_coordinates(app_long, result->true_obliquity, 0, &ra, &dec);
+    compute_equitorial_coordinates(true_long, result->true_obliquity, 0, &ra, &dec);
     result->true_right_ascension = ra;
     result->true_declination = dec;
     
     // Apparent equatorial coordinates
-    double epsilon_corr = result->true_obliquity + 0.00256 * cos(omega_rad); // obliquity correction
     double app_ra, app_dec;
-    compute_equitorial_coordinates(app_long, epsilon_corr, 0, &app_ra, &app_dec);
+    compute_equitorial_coordinates(app_long, result->true_obliquity, 0, &app_ra, &app_dec);
 
     result->apparent_right_ascension = app_ra;
     result->apparent_declination = app_dec;
@@ -360,11 +363,11 @@ void compute_sun_result(double jde, double jd_ut1, double local_latitude, double
     result->true_altitude = true_alt;
     result->true_azimuth = true_az;
 
-    // Apparent altitude currently aliases true altitude. Weather inputs are
-    // retained in the signature for API compatibility and future modeling.
+    // Standard apparent altitude correction. Local weather inputs remain in
+    // the signature for API compatibility but are not applied by this model.
     (void)temperature;
     (void)pressure;
-    result->apparent_altitude = result->true_altitude;
+    result->apparent_altitude = result->true_altitude + standard_atmospheric_refraction(result->true_altitude);
 }
 
 

@@ -39,8 +39,9 @@ typedef struct {
 } SunResult;
 
 /* Populate solar state for a given TT ephemeris day and UT1 day.
- * NOTE: temperature/pressure are currently reserved for future solar
- * refraction modeling and are not applied to apparent solar altitude.
+ * NOTE: apparent_altitude includes standard atmospheric refraction. The
+ * temperature/pressure parameters are retained for API compatibility but are
+ * not currently applied as weather scaling factors.
  */
 void compute_sun_result(double jde, double jd_ut1, double local_latitude, double local_longitude,
     double elevation, double temperature, double pressure,

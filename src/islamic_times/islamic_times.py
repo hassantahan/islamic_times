@@ -351,7 +351,7 @@ class ITLocation:
             sunrise=self._safe_sun_event(self.observer_dateinfo, self.observer_info, "rise"),
             sun_transit=se.find_sun_transit(self.observer_dateinfo, self.observer_info),
             sunset=self._safe_sun_event(self.observer_dateinfo, self.observer_info, "set"),
-            apparent_altitude=self.sun_params.true_altitude,
+            apparent_altitude=self.sun_params.apparent_altitude,
             true_azimuth=self.sun_params.true_azimuth,
             geocentric_distance=self.sun_params.geocentric_distance,
             apparent_declination=self.sun_params.apparent_declination,

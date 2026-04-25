@@ -277,9 +277,9 @@ def sunpos(observer_date: DateTimeInfo, observer: ObserverInfo) -> Sun:
     -----
     The implementation delegates to the native extension
     ``islamic_times.astro_core.compute_sun``.
-    Temperature and pressure are currently forwarded for API compatibility;
-    the active solar apparent-altitude path does not apply weather-based
-    refraction correction.
+    ``apparent_altitude`` includes standard atmospheric refraction. Temperature
+    and pressure are currently forwarded for API compatibility but are not used
+    as weather scaling factors.
     """
     import islamic_times.astro_core as fast_astro
     the_sun: Sun = fast_astro.compute_sun(
@@ -341,8 +341,9 @@ def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> dat
 
     Notes
     -----
-    Weather fields are accepted for cross-body API parity but are not currently
-    used by the active solar apparent-altitude correction path.
+    Weather fields are accepted for cross-body API parity. Solar transit
+    solving uses equatorial coordinates, so atmospheric refraction is not part
+    of the transit calculation.
     """
     import islamic_times.astro_core as fast_astro
     sun_transit_dt: datetime = fast_astro.find_sun_transit(observer_date.jd, observer_date.deltaT, 
@@ -415,8 +416,9 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
 
     Notes
     -----
-    Weather fields are currently accepted for API consistency; solar event
-    solving does not yet apply weather-based apparent-altitude correction.
+    Solar event solving uses the explicit geometric target altitude supplied by
+    ``angle``. This avoids double-counting standard refraction for conventional
+    sunrise/sunset angles such as 5/6 degrees.
     """
     import islamic_times.astro_core as fast_astro
 

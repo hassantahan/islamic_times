@@ -5,8 +5,9 @@ import math
 
 import pytest
 
+from islamic_times import sun_equations as se
 from islamic_times.islamic_times import ITLocation
-from islamic_times.it_dataclasses import ObserverInfo, PrayerTimes, Visibilities
+from islamic_times.it_dataclasses import Angle, ObserverInfo, PrayerTimes, Visibilities
 
 
 def test_public_api_smoke() -> None:
@@ -84,6 +85,78 @@ def test_itlocation_uses_modern_timescales_for_toronto_reference_case() -> None:
 
 def _bennett_refraction_lift(altitude_deg: float) -> float:
     return 0.017 / math.tan(math.radians(altitude_deg + 10.3 / (altitude_deg + 5.11)))
+
+
+def test_sun_refraction_clamps_below_minus_one_degree_and_suninfo_uses_apparent() -> None:
+    location = ITLocation(
+        latitude=43.651070,
+        longitude=-79.347015,
+        elevation=150.0,
+        temperature=10.0,
+        pressure=101.325,
+        date=datetime(2026, 4, 6, 4, 0, 0, tzinfo=timezone.utc),
+        method="ISNA",
+        find_local_tz=False,
+    )
+
+    true_altitude = location.sun_params.true_altitude.decimal
+    apparent_altitude = location.sun_params.apparent_altitude.decimal
+
+    assert true_altitude < -1.0
+    assert apparent_altitude - true_altitude == pytest.approx(_bennett_refraction_lift(-1.0), abs=1e-9)
+    assert location.sun().apparent_altitude.decimal == pytest.approx(apparent_altitude, abs=1e-12)
+
+
+def test_sun_refraction_uses_true_altitude_above_minus_one_degree() -> None:
+    location = ITLocation(
+        latitude=43.651070,
+        longitude=-79.347015,
+        elevation=150.0,
+        temperature=10.0,
+        pressure=101.325,
+        date=datetime(2026, 4, 6, 10, 50, 0, tzinfo=timezone.utc),
+        method="ISNA",
+        find_local_tz=False,
+    )
+
+    true_altitude = location.sun_params.true_altitude.decimal
+    apparent_altitude = location.sun_params.apparent_altitude.decimal
+
+    assert true_altitude > -1.0
+    assert apparent_altitude - true_altitude == pytest.approx(_bennett_refraction_lift(true_altitude), abs=1e-9)
+
+
+def test_custom_solar_angle_event_uses_geometric_altitude_target() -> None:
+    location = ITLocation(
+        latitude=43.651070,
+        longitude=-79.347015,
+        elevation=150.0,
+        temperature=10.0,
+        pressure=101.325,
+        date=datetime(2026, 4, 6, 12, 0, 0, tzinfo=timezone.utc),
+        method="ISNA",
+        find_local_tz=False,
+    )
+
+    event_dt = se.find_proper_suntime(
+        location.observer_dateinfo,
+        location.observer_info,
+        "rise",
+        Angle(12.0),
+    )
+    event_location = ITLocation(
+        latitude=43.651070,
+        longitude=-79.347015,
+        elevation=150.0,
+        temperature=10.0,
+        pressure=101.325,
+        date=event_dt,
+        method="ISNA",
+        find_local_tz=False,
+    )
+
+    assert event_location.sun_params.true_altitude.decimal == pytest.approx(-12.0, abs=0.03)
+    assert event_location.sun_params.apparent_altitude.decimal > event_location.sun_params.true_altitude.decimal
 
 
 @pytest.mark.parametrize(
