@@ -87,6 +87,20 @@ python -m islamic_times.mapper generate \
   --total_months 1
 ```
 
+To view a CSV export directory directly:
+
+```bash
+python -m islamic_times.mapper export-csv \
+  --date 2025-04-27T00:00:00 \
+  --map_region WORLD \
+  --map_mode category \
+  --resolution 300 \
+  --days_to_generate 3 \
+  --criterion 1 \
+  --total_months 1 \
+  --csv_path /path/to/export_dir
+```
+
 Below is an example of a generated visibility map for the new moon crescent on **2025-04-27 (Dhū al-Qaʿdah 1446)** using the Yallop criterion:
 
 ![2025-04-27 Dhū al-Qaʿdah 1446—Yallop](https://github.com/hassantahan/islamic_times/blob/master/2025-04-27%20Dh%C5%AB%20al-Qa%CA%BFdah%201446%E2%80%94Yallop.jpg?raw=true)

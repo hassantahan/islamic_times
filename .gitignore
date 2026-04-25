@@ -39,8 +39,11 @@ venv/
 .idea/
 *.swp
 
-# Generated map outputs
+# Generated outputs
 test_maps/
+cache/
+*.csv
+*.json
 
 # AI Agent Directories and Rule sets not in .agents/ or AGENTS.md
 .claude/
@@ -50,6 +53,7 @@ test_maps/
 .github/agents/
 
 .clinerules
+.codex
 .cursorrules
 .roorules
 
