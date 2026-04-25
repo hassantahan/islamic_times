@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from islamic_times.it_dataclasses import (
+    PUBLIC_SCHEMA_VERSION,
     Angle,
     DateTimeInfo,
     Distance,
@@ -21,7 +22,6 @@ from islamic_times.it_dataclasses import (
     RightAscension,
     SunInfo,
     Visibilities,
-    PUBLIC_SCHEMA_VERSION,
 )
 
 

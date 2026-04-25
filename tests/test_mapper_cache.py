@@ -125,7 +125,9 @@ def test_render_maps_from_cache_uses_cached_tensors(monkeypatch: Any, tmp_path: 
             self.states_path = states_path
             self.places_path = places_path
 
-        def get_clipped(self, region: str, cities: list[str], bbox: tuple[float, float, float, float]) -> tuple[Any, Any]:
+        def get_clipped(
+            self, region: str, cities: list[str], bbox: tuple[float, float, float, float]
+        ) -> tuple[Any, Any]:
             rendered["region"] = region
             rendered["bbox"] = bbox
             return SimpleNamespace(), SimpleNamespace()

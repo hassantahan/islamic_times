@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
 import islamic_times.astro_core as fast_astro
 import numpy as np
+import pytest
+
 from islamic_times.islamic_times import ITLocation
-from islamic_times.it_dataclasses import BatchVisibilities, PUBLIC_SCHEMA_VERSION
+from islamic_times.it_dataclasses import PUBLIC_SCHEMA_VERSION, BatchVisibilities
 
 
 def test_batch_visibilities_raw_returns_typed_matrix() -> None:

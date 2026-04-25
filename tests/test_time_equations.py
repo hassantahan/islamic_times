@@ -3,8 +3,8 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta, timezone
 
-import pytz
 import pytest
+import pytz
 
 from islamic_times import time_equations as te
 from islamic_times._legacy_py_impl import time_equations as legacy_te
