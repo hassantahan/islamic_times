@@ -7,7 +7,7 @@
 
 #define MAX_VISIBILITY_DAYS 366
 
-/* Shared visibility-score kernels used by Odeh/Yallop classification paths. */
+/* Shared visibility-score kernels used by Odeh/Yallop/Shaukat classification paths. */
 
 double yallop_odeh(double sun_az, double sun_alt, double moon_az, double moon_alt, double moon_pi, int criterion) {
     double daz_deg = fabs(sun_az - moon_az);
@@ -48,7 +48,7 @@ const char* classify_visibility(double q, int criterion) {
             return "C: Crescent is visible by optical aid only.";
         else
             return "D: Crescent is not visible even by optical aid.";
-    } else {
+    } else if (criterion == 1) {
         if (q > 0.216)
             return "A: Easily visible.";
         else if (q > -0.014)
@@ -62,6 +62,17 @@ const char* classify_visibility(double q, int criterion) {
         else
             return "F: Not visible; below the Danjon limit.";
     }
+
+    if (q > 0.27)
+        return "A: Easily visible";
+    else if (q > -0.024)
+        return "B: Visible under perfect conditions.";
+    else if (q > -0.212)
+        return "C: Optical aid needed to find the moon.";
+    else if (q > -0.48)
+        return "D: Visible with optical aid only.";
+    else
+        return "F: Not visible.";
 }
 
 /* ================================
@@ -114,9 +125,6 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
     for (int i = start; i < days; i++) {
         // Per-day temporal context.
         double test_jd_new_moon = jd_new_moon + i;
-        datetime test_ymd_new_moon = add_days(new_moon_dt, i);
-        double test_deltaT_new_moon = delta_t_approx(test_ymd_new_moon.year, test_ymd_new_moon.month);
-
         // Sunset and moonset calculations, reusing nutation buffers.
         double deltaPsi[3]; double true_obliquity[3]; // To store the nutations and avoid unnecessary computations
         datetime test_nm_sunset = find_proper_suntime_w_nutation(test_jd_new_moon, utc_offset, lat, lon, elev, temp, press, 
@@ -169,12 +177,16 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
         double best_time_jd = test_nm_sunset_jd + 4.0 / 9.0 * lag_days;
         
         // Compute sun/moon state at the selected best time.
-        double best_time_jde = best_time_jd + test_deltaT_new_moon / SECONDS_IN_DAY;
+        double best_time_tt_utc;
+        double best_time_ut1_utc;
+        resolve_time_scales_for_jd(best_time_jd, &best_time_tt_utc, &best_time_ut1_utc, NULL);
+        double best_time_jde = best_time_jd + best_time_tt_utc / SECONDS_IN_DAY;
+        double best_time_jd_ut1 = best_time_jd + best_time_ut1_utc / SECONDS_IN_DAY;
         SunResult nm_sun_params;
-        compute_sun_result(best_time_jde, test_deltaT_new_moon, lat, lon, elev, temp, press, &nm_sun_params);
+        compute_sun_result(best_time_jde, best_time_jd_ut1, lat, lon, elev, temp, press, &nm_sun_params);
 
         MoonResult nm_moon_params;
-        compute_moon_result(best_time_jde, test_deltaT_new_moon, lat, lon, elev, temp, press, 
+        compute_moon_result(best_time_jde, best_time_jd_ut1, lat, lon, elev, temp, press, 
             nm_sun_params.nutation_longitude, nm_sun_params.true_obliquity, &nm_moon_params);
         
         // Compute criterion-specific q-value.
@@ -186,12 +198,14 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
                                           criterion);
                 break;
             case 1:
-                // Yallop uses geocentric horizontal coordinates
+            case 2:
+                // Yallop and Shaukat use geocentric horizontal coordinates
                 {
                     double sun_geo_alt, sun_geo_az, moon_geo_alt, moon_geo_az;
                     geocentric_horizontal_coordinates(lat, nm_sun_params.apparent_declination, nm_sun_params.local_hour_angle, &sun_geo_alt, &sun_geo_az);
                     geocentric_horizontal_coordinates(lat, nm_moon_params.declination, nm_moon_params.local_hour_angle, &moon_geo_alt, &moon_geo_az);
-                    results[i].q_value = yallop_odeh(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, criterion);
+                    // q-value kernel is intentionally shared with Yallop.
+                    results[i].q_value = yallop_odeh(sun_geo_az, sun_geo_alt, moon_geo_az, moon_geo_alt, nm_moon_params.eh_parallax, 1);
                 }
                 break;
             default:
@@ -210,6 +224,7 @@ void compute_visibilities(datetime new_moon_dt, double utc_offset, double lat, d
  *  0:-999, 1:-998, 2:-997, 3:-996, 4:-995,
  *  criterion 0: 5:D, 6:C, 7:B, 8:A
  *  criterion 1: 5:F, 6:E, 7:D, 8:C, 9:B, 10:A
+ *  criterion 2: 5:F, 6:D, 7:C, 8:B, 9:A
  */
 static uint8_t classify_visibility_code(double q, int criterion) {
     if (q == -999.0) return 0;
@@ -225,11 +240,19 @@ static uint8_t classify_visibility_code(double q, int criterion) {
         return 5;
     }
 
-    if (q > 0.216) return 10;
-    if (q > -0.014) return 9;
-    if (q > -0.160) return 8;
-    if (q > -0.232) return 7;
-    if (q > -0.293) return 6;
+    if (criterion == 1) {
+        if (q > 0.216) return 10;
+        if (q > -0.014) return 9;
+        if (q > -0.160) return 8;
+        if (q > -0.232) return 7;
+        if (q > -0.293) return 6;
+        return 5;
+    }
+
+    if (q > 0.27) return 9;
+    if (q > -0.024) return 8;
+    if (q > -0.212) return 7;
+    if (q > -0.48) return 6;
     return 5;
 }
 
@@ -248,8 +271,8 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
         PyErr_Format(PyExc_ValueError, "'days' must be in the range [1, %d].", MAX_VISIBILITY_DAYS);
         return NULL;
     }
-    if (criterion < 0 || criterion > 1) {
-        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh) or 1 (Yallop). Criterion 2 (Shaukat) is not implemented.");
+    if (criterion < 0 || criterion > 2) {
+        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh), 1 (Yallop), or 2 (Shaukat).");
         return NULL;
     }
 
@@ -309,7 +332,12 @@ PyObject* py_compute_visibilities(PyObject* self, PyObject* args) {
     free(c_results);
 
     // Build Visibilities dataclass instance.
-    const char* criterion_name = (criterion == 0) ? "Odeh" : "Yallop";
+    const char* criterion_name = "Shaukat";
+    if (criterion == 0) {
+        criterion_name = "Odeh";
+    } else if (criterion == 1) {
+        criterion_name = "Yallop";
+    }
     PyObject* py_criterion = PyUnicode_FromString(criterion_name);
     if (!py_criterion) {
         Py_DECREF(py_dates);
@@ -371,8 +399,8 @@ static PyObject* compute_visibilities_batch_impl(
         PyErr_Format(PyExc_ValueError, "'days' must be in the range [1, %d].", MAX_VISIBILITY_DAYS);
         return NULL;
     }
-    if (criterion < 0 || criterion > 1) {
-        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh) or 1 (Yallop). Criterion 2 (Shaukat) is not implemented.");
+    if (criterion < 0 || criterion > 2) {
+        PyErr_SetString(PyExc_ValueError, "'criterion' must be 0 (Odeh), 1 (Yallop), or 2 (Shaukat).");
         return NULL;
     }
     if (type != 'r' && type != 'c' && type != 'i') {

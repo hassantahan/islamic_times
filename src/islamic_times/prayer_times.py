@@ -54,7 +54,22 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
     PrayerMethod(name="Shia Ithna Ashari, Leva Research Institute, Qom (Jafari)",
         keys=('JAFARI', 'JAAFARI', 'SHIA', 'SHIA ITHNA ASHARI', 'LEVA', 'LEVA RESEARCH INSTITUTE', 'QOM', 'QUM', 'LRI', 'SIA', 'SIALRI'), 
         fajr_angle=Angle(16), isha_angle=Angle(14), maghrib_angle=Angle(4), midnight_type=1
-    )
+    ),
+    PrayerMethod(
+        name="Muslims of France", 
+        keys=('FRANCE',), 
+        fajr_angle=Angle(12), isha_angle=Angle(12)
+    ),
+    PrayerMethod(
+        name="Spiritual Administration of Muslims of Russia", 
+        keys=('RUSSIA',), 
+        fajr_angle=Angle(16), isha_angle=Angle(15)
+    ),
+    PrayerMethod(
+        name="Islamic Religious Council of Singapore", 
+        keys=('SINGAPORE',), 
+        fajr_angle=Angle(20), isha_angle=Angle(18)
+    ),
 ]
 
 
@@ -162,10 +177,14 @@ def find_tomorrow_time(observer_date: DateTimeInfo, observer: ObserverInfo, angl
         Event datetime in observer-local timezone.
     """
     new_date: datetime = observer_date.date + timedelta(days=num_days) 
+    new_jd = observer_date.jd + num_days
+    tt_minus_utc, ut1_minus_utc, delta_t = fast_astro.resolve_time_scales(new_jd)
     tomorrow_date: DateTimeInfo = replace(observer_date, 
                                             date=new_date,
-                                            jd=observer_date.jd + num_days,
-                                            deltaT=fast_astro.delta_t_approx(new_date.year, new_date.month))
+                                            jd=new_jd,
+                                            deltaT=delta_t,
+                                            tt_minus_utc=tt_minus_utc,
+                                            ut1_minus_utc=ut1_minus_utc)
     tomorrow_standard_time = safe_sun_time(tomorrow_date, observer, rise_or_set, angle)
 
     return tomorrow_standard_time
@@ -508,7 +527,9 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     Returns
     -------
     PrayerTimes
-        Structured prayer output dataclass.
+        Structured prayer output dataclass. When a high-latitude fallback path
+        is used, ``extreme_latitude_applied``/``extreme_latitude_rule``/
+        ``extreme_latitude_reason`` are populated.
 
     Notes
     -----
@@ -582,12 +603,20 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
         ("Midnight", _to_prayer_value(midnight_dt)),
     ]
     prayer_list: List[Prayer] = [Prayer(name, _to_legacy_time(value), method) for name, value in prayer_values]
+    extreme_latitude_applied = False
+    extreme_latitude_rule: str | None = None
+    extreme_latitude_reason: str | None = None
 
     # Deal with locations at extreme latitudes
     if abs(observer.latitude.decimal) > 46.5: # 90 - obliquity (23.5) - max fajr angle (20)
         if any(value.status == PrayerStatus.MISSING_EVENT for _, value in prayer_values):
             warnings.warn("Extreme latitude warning. Prayer times at this latitude are not well established.")
             prayer_list = extreme_latitudes(observer_date, observer, prayer_list, sun_info.apparent_declination)
+            extreme_latitude_applied = True
+            extreme_latitude_rule = method.extreme_lats
+            extreme_latitude_reason = (
+                "One or more required solar events were unavailable for standard-angle solving at this latitude/date."
+            )
 
     return PrayerTimes(
         method=method,
@@ -599,4 +628,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
         maghrib=prayer_list[5],
         isha=prayer_list[6],
         midnight=prayer_list[7],
+        extreme_latitude_applied=extreme_latitude_applied,
+        extreme_latitude_rule=extreme_latitude_rule,
+        extreme_latitude_reason=extreme_latitude_reason,
     )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from islamic_times.islamic_times import ITLocation
@@ -16,6 +18,31 @@ def test_set_prayer_method_rejects_invalid_asr_type(toronto_observer_kwargs: dic
     location = ITLocation(**toronto_observer_kwargs)
     with pytest.raises(ValueError, match="'asr_type' must be either 0 or 1"):
         location.set_prayer_method("ISNA", asr_type=2)
+
+
+@pytest.mark.parametrize(
+    ("method_key", "name_contains"),
+    [
+        ("FRANCE", "Muslims of France"),
+        ("RUSSIA", "Spiritual Administration of Muslims of Russia"),
+        ("SINGAPORE", "Islamic Religious Council of Singapore"),
+    ],
+)
+def test_set_prayer_method_supports_new_country_profiles(
+    toronto_observer_kwargs: dict[str, object], method_key: str, name_contains: str
+) -> None:
+    location = ITLocation(**toronto_observer_kwargs)
+    location.set_prayer_method(method_key, asr_type=0)
+    assert name_contains in location.prayer_times().method.name
+
+
+@pytest.mark.parametrize("bad_method_key", ["F", "R", "S"])
+def test_set_prayer_method_rejects_single_letter_regression(
+    toronto_observer_kwargs: dict[str, object], bad_method_key: str
+) -> None:
+    location = ITLocation(**toronto_observer_kwargs)
+    with pytest.raises(ValueError, match="Invalid prayer method"):
+        location.set_prayer_method(bad_method_key)
 
 
 def test_set_custom_prayer_angles_updates_method_to_custom(toronto_observer_kwargs: dict[str, object]) -> None:
@@ -80,6 +107,23 @@ def test_set_extreme_latitude_rule_validates_input(toronto_observer_kwargs: dict
     assert location.prayer_times().method.extreme_lats == "ANGLEBASED"
 
 
+def test_prayer_times_expose_extreme_latitude_fallback_metadata() -> None:
+    location = ITLocation(
+        latitude=69.6492,
+        longitude=18.9553,
+        elevation=0.0,
+        date=datetime(2025, 12, 15, 12, 0, 0, tzinfo=timezone.utc),
+        find_local_tz=False,
+    )
+    location.set_extreme_latitude_rule("ANGLEBASED")
+    prayer_times = location.prayer_times()
+
+    assert prayer_times.extreme_latitude_applied is True
+    assert prayer_times.extreme_latitude_rule == "ANGLEBASED"
+    assert prayer_times.extreme_latitude_reason is not None
+    assert "solar events" in prayer_times.extreme_latitude_reason.lower()
+
+
 def test_mecca_returns_typed_result(toronto_observer_kwargs: dict[str, object]) -> None:
     location = ITLocation(**toronto_observer_kwargs)
     mecca = location.mecca()
@@ -104,11 +148,15 @@ def test_moonphases_returns_four_named_events(toronto_observer_kwargs: dict[str,
     assert [name for name, _ in phases] == ["New Moon", "First Quarter", "Full Moon", "Last Quarter"]
 
 
-def test_visibilities_valid_small_input(toronto_observer_kwargs: dict[str, object]) -> None:
+@pytest.mark.parametrize(("criterion", "criterion_name"), [(1, "Yallop"), (2, "Shaukat")])
+def test_visibilities_valid_small_input(
+    toronto_observer_kwargs: dict[str, object], criterion: int, criterion_name: str
+) -> None:
     location = ITLocation(**toronto_observer_kwargs)
-    visibilities = location.visibilities(days=1, criterion=1)
+    visibilities = location.visibilities(days=1, criterion=criterion)
 
     assert isinstance(visibilities, Visibilities)
+    assert visibilities.criterion == criterion_name
     assert len(visibilities.dates) == 1
 
 
@@ -118,7 +166,7 @@ def test_visibilities_rejects_invalid_days_and_criterion(toronto_observer_kwargs
     with pytest.raises(ValueError, match="'days' must be greater than 0"):
         location.visibilities(days=0, criterion=1)
 
-    with pytest.raises(ValueError, match="'criterion' must be either 0 or 1"):
+    with pytest.raises(ValueError, match="'criterion' must be 0, 1, or 2"):
         location.visibilities(days=1, criterion=3)
 
     with pytest.raises(TypeError, match="'criterion' must be of type `int`"):

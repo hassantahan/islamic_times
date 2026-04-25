@@ -14,11 +14,12 @@ References:
 
 import islamic_times.astro_core as fast_astro
 from numbers import Number
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Sequence, Tuple
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone, tzinfo
 from islamic_times.it_dataclasses import (
     Angle,
+    BatchVisibilities,
     DateTimeInfo,
     Distance,
     DistanceUnits,
@@ -156,16 +157,13 @@ class ITLocation:
 
         # Check if find_local_tz is either 0, 1, or a bool value
         find_local_tz_flag = self._resolve_find_local_tz(find_local_tz)
+        self._find_local_tz = find_local_tz_flag
 
-        # Determine UTC Offset
-        tz = self.get_timezone(find_local_tz_flag, date)
-        tz_offset = tz.utcoffset(date)
-        if tz_offset is None:
-            raise ValueError("Could not determine UTC offset for the provided date and timezone.")
-        self.utc_offset = tz_offset.total_seconds() / 3600
-        date = date.replace(tzinfo=tz)
+        # Normalize user date into observer timezone context.
+        date = self._normalize_observer_datetime(date)
 
         self.observer_dateinfo = self._build_observer_dateinfo(date)
+        self.utc_offset = self.observer_dateinfo.utc_offset
 
         # Autocalculation for astronomical parameters
         self.auto_calculate = auto_calculate
@@ -244,14 +242,29 @@ class ITLocation:
             raise ValueError("Input datetime must include timezone information.")
 
         jd = fast_astro.gregorian_to_jd(date, utc_offset.total_seconds() / 3600)
-        delta_t = fast_astro.delta_t_approx(date.year, date.month)
+        tt_minus_utc, ut1_minus_utc, delta_t = fast_astro.resolve_time_scales(jd)
         islamic_dates = te.gregorian_to_hijri(date.year, date.month, date.day)
         return DateTimeInfo(
             date=date,
             hijri=IslamicDateInfo(*islamic_dates),
             jd=jd,
             deltaT=delta_t,
+            tt_minus_utc=tt_minus_utc,
+            ut1_minus_utc=ut1_minus_utc,
         )
+
+    def _normalize_observer_datetime(self, date: datetime) -> datetime:
+        """Return datetime normalized to current observer timezone semantics."""
+        if not isinstance(date, datetime):
+            raise TypeError(f"'date' must be of type `datetime`, but got `{type(date).__name__}`.")
+
+        tz = self.get_timezone(self._find_local_tz, date)
+        if self._find_local_tz:
+            return te.localize_or_convert_datetime(date, tz)
+
+        if date.tzinfo is None:
+            return date.replace(tzinfo=tz)
+        return date.astimezone(tz)
 
     def get_timezone(self, find_local_tz: bool, date: datetime) -> timezone | tzinfo:
         """Resolve timezone from either coordinates or supplied datetime context.
@@ -271,8 +284,7 @@ class ITLocation:
         # Find UTC Offset According to Lat/Long datetime
         # This is very computationally expensive
         if find_local_tz:
-            tz_name, utc_offset = te.find_utc_offset(self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, date)
-            return timezone(offset=timedelta(hours=utc_offset), name=tz_name)
+            return te.find_timezone(self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, date)
         if date.tzinfo is None or date.tzinfo == timezone.utc:
             return timezone.utc
         return date.tzinfo
@@ -301,10 +313,16 @@ class ITLocation:
             raise TypeError(f"'new_date' must be of type `datetime`, but got `{type(new_date).__name__}`.")
 
         # If TZ is not specified in new datetime, but a TZ is specified in old datetime, preserve the previous TZ.
-        if new_date.tzinfo is None and self.observer_dateinfo.date.tzinfo is not None:
+        if (
+            new_date.tzinfo is None
+            and self.observer_dateinfo.date.tzinfo is not None
+            and not self._find_local_tz
+        ):
             new_date = new_date.replace(tzinfo=self.observer_dateinfo.date.tzinfo)
 
+        new_date = self._normalize_observer_datetime(new_date)
         self.observer_dateinfo = self._build_observer_dateinfo(new_date)
+        self.utc_offset = self.observer_dateinfo.utc_offset
 
         if self.auto_calculate:
             self.calculate_astro()
@@ -333,7 +351,7 @@ class ITLocation:
             sunrise=self._safe_sun_event(self.observer_dateinfo, self.observer_info, "rise"),
             sun_transit=se.find_sun_transit(self.observer_dateinfo, self.observer_info),
             sunset=self._safe_sun_event(self.observer_dateinfo, self.observer_info, "set"),
-            apparent_altitude=self.sun_params.true_altitude,
+            apparent_altitude=self.sun_params.apparent_altitude,
             true_azimuth=self.sun_params.true_azimuth,
             geocentric_distance=self.sun_params.geocentric_distance,
             apparent_declination=self.sun_params.apparent_declination,
@@ -657,7 +675,8 @@ class ITLocation:
         days : int, default=3
             Number of consecutive days to evaluate from the nearest new moon.
         criterion : int, default=1
-            Visibility classifier: ``0`` (Odeh) or ``1`` (Yallop/HMNAO TN 69).
+            Visibility classifier: ``0`` (Odeh), ``1`` (Yallop/HMNAO TN 69),
+            or ``2`` (Shaukat; Yallop q-values with Shaukat thresholds).
 
         Returns
         -------
@@ -675,8 +694,8 @@ class ITLocation:
         if not isinstance(criterion, int) or isinstance(criterion, bool):
             raise TypeError(f"'criterion' must be of type `int`, but got `{type(criterion).__name__}`.")
 
-        if criterion not in (0, 1):
-            raise ValueError(f"'criterion' must be either 0 or 1. Invalid value: {criterion}.")
+        if criterion not in (0, 1, 2):
+            raise ValueError(f"'criterion' must be 0, 1, or 2. Invalid value: {criterion}.")
 
         visibilities: Visibilities = fast_astro.compute_visibilities(self.observer_dateinfo.date, self.observer_dateinfo.utc_offset, 
                                               self.observer_info.latitude.decimal, self.observer_info.longitude.decimal, 
@@ -685,3 +704,157 @@ class ITLocation:
                                               days, criterion)
 
         return visibilities
+
+    @staticmethod
+    def _normalize_batch_coordinates(name: str, values: Sequence[float]) -> tuple[float, ...]:
+        """Validate and normalize batch latitude/longitude sequences."""
+        if isinstance(values, (str, bytes)):
+            raise TypeError(f"'{name}' must be a sequence of numeric values.")
+        try:
+            seq = tuple(values)
+        except TypeError as exc:
+            raise TypeError(f"'{name}' must be a sequence of numeric values.") from exc
+
+        if not seq:
+            raise ValueError(f"'{name}' must contain at least one value.")
+
+        normalized: list[float] = []
+        for idx, value in enumerate(seq):
+            if not isinstance(value, Number) or isinstance(value, bool):
+                raise TypeError(
+                    f"All '{name}' values must be numeric. Invalid element at index {idx}: {type(value).__name__}."
+                )
+            normalized.append(float(value))
+        return tuple(normalized)
+
+    @staticmethod
+    def batch_visibilities(
+        latitudes: Sequence[float],
+        longitudes: Sequence[float],
+        date: datetime,
+        *,
+        days: int = 3,
+        criterion: int = 1,
+        utc_offset: float = 0.0,
+        elevation: float = 0.0,
+        temperature: float = 10.0,
+        pressure: float = 101.325,
+        output: Literal["raw", "classification", "code"] = "raw",
+    ) -> BatchVisibilities:
+        """Compute visibility values for multiple coordinates in one call.
+
+        Parameters
+        ----------
+        latitudes : Sequence[float]
+            Latitude sequence (decimal degrees) for each location.
+        longitudes : Sequence[float]
+            Longitude sequence (decimal degrees) for each location. Must match
+            ``latitudes`` length.
+        date : datetime
+            Reference datetime used for new-moon anchoring.
+        days : int, default=3
+            Number of consecutive days per location.
+        criterion : int, default=1
+            Visibility classifier: ``0`` (Odeh), ``1`` (Yallop), ``2`` (Shaukat).
+        utc_offset : float, default=0.0
+            UTC offset in hours used by native batch kernels.
+        elevation : float, default=0.0
+            Elevation in meters used by native batch kernels.
+        temperature : float, default=10.0
+            Temperature in Celsius used by native batch kernels.
+        pressure : float, default=101.325
+            Pressure in kPa used by native batch kernels.
+        output : {"raw", "classification", "code"}, default="raw"
+            Output value mode:
+            - ``raw`` -> q-values (float),
+            - ``classification`` -> category labels (str),
+            - ``code`` -> compact category codes (int).
+
+        Returns
+        -------
+        BatchVisibilities
+            Batch result with deterministic shape ``(locations, days)``.
+        """
+        if not isinstance(date, datetime):
+            raise TypeError(f"'date' must be of type `datetime`, but got `{type(date).__name__}`.")
+
+        if not isinstance(days, int) or isinstance(days, bool):
+            raise TypeError(f"'days' must be of type `int`, but got `{type(days).__name__}`.")
+        if days < 1:
+            raise ValueError(f"'days' must be greater than 0. Invalid value: {days}.")
+
+        if not isinstance(criterion, int) or isinstance(criterion, bool):
+            raise TypeError(f"'criterion' must be of type `int`, but got `{type(criterion).__name__}`.")
+        if criterion not in (0, 1, 2):
+            raise ValueError(f"'criterion' must be 0, 1, or 2. Invalid value: {criterion}.")
+
+        for field_name, value in {
+            "utc_offset": utc_offset,
+            "elevation": elevation,
+            "temperature": temperature,
+            "pressure": pressure,
+        }.items():
+            if not isinstance(value, Number) or isinstance(value, bool):
+                raise TypeError(f"'{field_name}' must be numeric, but got `{type(value).__name__}`.")
+
+        if output not in ("raw", "classification", "code"):
+            raise ValueError(
+                f"'output' must be one of 'raw', 'classification', or 'code'. Invalid value: {output!r}."
+            )
+
+        lat_tuple = ITLocation._normalize_batch_coordinates("latitudes", latitudes)
+        lon_tuple = ITLocation._normalize_batch_coordinates("longitudes", longitudes)
+        if len(lat_tuple) != len(lon_tuple):
+            raise ValueError("'latitudes' and 'longitudes' must have the same length.")
+
+        import numpy as np
+
+        lat_arr = np.ascontiguousarray(lat_tuple, dtype=np.float64)
+        lon_arr = np.ascontiguousarray(lon_tuple, dtype=np.float64)
+
+        if output == "code":
+            values = fast_astro.compute_visibilities_batch_codes(
+                lat_arr,
+                lon_arr,
+                date,
+                days,
+                criterion,
+                float(utc_offset),
+                float(elevation),
+                float(temperature),
+                float(pressure),
+            ).reshape(len(lat_tuple), days)
+        else:
+            value_type = "r" if output == "raw" else "c"
+            values = fast_astro.compute_visibilities_batch(
+                lat_arr,
+                lon_arr,
+                date,
+                days,
+                criterion,
+                float(utc_offset),
+                float(elevation),
+                float(temperature),
+                float(pressure),
+                value_type,
+            ).reshape(len(lat_tuple), days)
+
+        if output == "classification":
+            matrix: tuple[tuple[float | str | int, ...], ...] = tuple(
+                tuple(str(cell) for cell in row) for row in values.tolist()
+            )
+        elif output == "code":
+            matrix = tuple(tuple(int(cell) for cell in row) for row in values.tolist())
+        else:
+            matrix = tuple(tuple(float(cell) for cell in row) for row in values.tolist())
+
+        criterion_name = {0: "Odeh", 1: "Yallop", 2: "Shaukat"}[criterion]
+        return BatchVisibilities(
+            criterion=criterion_name,
+            output=output,
+            date=date,
+            days=days,
+            latitudes=lat_tuple,
+            longitudes=lon_tuple,
+            values=matrix,
+        )

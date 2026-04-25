@@ -4,8 +4,10 @@ import math
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import pytz
 
 from islamic_times import time_equations as te
+from islamic_times._legacy_py_impl import time_equations as legacy_te
 from islamic_times.it_dataclasses import Angle
 
 
@@ -61,6 +63,59 @@ def test_delta_t_approx_branches_return_float(year: int, month: int) -> None:
     assert isinstance(delta_t, float)
 
 
+def test_delta_t_approx_uses_modern_usno_values_for_2026() -> None:
+    with pytest.warns(DeprecationWarning):
+        delta_t = te.delta_t_approx(2026, 3)
+    assert delta_t == pytest.approx(69.0939, abs=0.02)
+
+
+def test_resolve_time_scales_matches_toronto_reference_timestamp() -> None:
+    dt_utc = datetime(2026, 3, 19, 23, 58, 0, tzinfo=timezone.utc)
+    with pytest.warns(DeprecationWarning):
+        jd = te.gregorian_to_jd(dt_utc, zone=0)
+    tt_minus_utc, ut1_minus_utc, delta_t = te.resolve_time_scales(jd)
+
+    assert tt_minus_utc == pytest.approx(69.184, abs=1e-6)
+    assert delta_t == pytest.approx(69.0928431609, abs=0.02)
+    assert ut1_minus_utc == pytest.approx(0.0911568391, abs=0.02)
+
+
+def _huber_standard_error_seconds(decimal_year: float) -> float:
+    n = decimal_year - 2005.0
+    if n <= 0.0:
+        return 0.0
+    return 365.25 * n * math.sqrt((n * 0.058 / 3.0) * (1.0 + n / 2500.0)) / 1000.0
+
+
+def test_future_delta_t_splice_stays_continuous_after_usno_table_end() -> None:
+    before_dt = datetime(2033, 10, 1, 0, 0, 0, tzinfo=timezone.utc)
+    after_dt = datetime(2033, 10, 2, 0, 0, 0, tzinfo=timezone.utc)
+
+    with pytest.warns(DeprecationWarning):
+        before_jd = te.gregorian_to_jd(before_dt, zone=0)
+    with pytest.warns(DeprecationWarning):
+        after_jd = te.gregorian_to_jd(after_dt, zone=0)
+
+    _, before_ut1_utc, before_delta_t = te.resolve_time_scales(before_jd)
+    _, after_ut1_utc, after_delta_t = te.resolve_time_scales(after_jd)
+
+    assert abs(after_delta_t - before_delta_t) < 1.0
+    assert abs(after_ut1_utc - before_ut1_utc) < 1.0
+
+
+@pytest.mark.parametrize("year,month", [(2050, 1), (2090, 1)])
+def test_future_delta_t_smoothing_stays_within_huber_envelope(year: int, month: int) -> None:
+    with pytest.warns(DeprecationWarning):
+        smoothed_delta_t = te.delta_t_approx(year, month)
+    polynomial_delta_t = legacy_te.delta_t_approx(year, month)
+
+    decimal_year = year + (month - 0.5) / 12.0
+    huber_sigma = _huber_standard_error_seconds(decimal_year)
+
+    assert smoothed_delta_t < polynomial_delta_t
+    assert abs(smoothed_delta_t - polynomial_delta_t) <= huber_sigma
+
+
 def test_find_utc_offset_returns_timezone_and_offset() -> None:
     tz_name, offset_hours = te.find_utc_offset(43.65107, -79.347015, datetime(2025, 1, 15))
     assert isinstance(tz_name, str)
@@ -105,6 +160,33 @@ def test_find_utc_offset_caches_timezone_resolution(monkeypatch: pytest.MonkeyPa
 
     assert first == second
     assert finder.calls == 1
+
+
+def test_find_timezone_name_returns_iana_identifier() -> None:
+    tz_name = te.find_timezone_name(43.65107, -79.347015, datetime(2025, 6, 1))
+    assert isinstance(tz_name, str)
+    assert "/" in tz_name
+
+
+def test_localize_or_convert_datetime_rejects_nonexistent_local_time() -> None:
+    tz = pytz.timezone("America/Toronto")
+    with pytest.raises(ValueError, match="does not exist"):
+        te.localize_or_convert_datetime(datetime(2025, 3, 9, 2, 30, 0), tz)
+
+
+def test_localize_or_convert_datetime_rejects_ambiguous_local_time() -> None:
+    tz = pytz.timezone("America/Toronto")
+    with pytest.raises(ValueError, match="ambiguous"):
+        te.localize_or_convert_datetime(datetime(2025, 11, 2, 1, 30, 0), tz)
+
+
+def test_localize_or_convert_datetime_converts_aware_datetimes() -> None:
+    tz = pytz.timezone("America/Toronto")
+    converted = te.localize_or_convert_datetime(datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc), tz)
+
+    assert converted.hour == 7
+    assert converted.utcoffset() is not None
+    assert converted.utcoffset().total_seconds() / 3600.0 == pytest.approx(-5.0)
 
 
 def test_time_midpoint_happy_path() -> None:

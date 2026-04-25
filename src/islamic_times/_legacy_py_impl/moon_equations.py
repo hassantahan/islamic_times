@@ -75,9 +75,33 @@ def moonrise_or_moonset(observer_date: DateTimeInfo, observer: ObserverInfo, ris
     for i in range(3):
         ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
         delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-        sun_params = se.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer)
+        sun_params = se.sunpos(
+            replace(
+                observer_date,
+                date=ymd_temp,
+                jd=(new_jd + i - 1),
+                deltaT=delT_temp,
+                tt_minus_utc=None,
+                ut1_minus_utc=None,
+            ),
+            observer,
+        )
         delPsi = sun_params.nutation[0]
-        moon_params.append(active.moonpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer, delPsi, sun_params.true_obliquity))
+        moon_params.append(
+            active.moonpos(
+                replace(
+                    observer_date,
+                    date=ymd_temp,
+                    jd=(new_jd + i - 1),
+                    deltaT=delT_temp,
+                    tt_minus_utc=None,
+                    ut1_minus_utc=None,
+                ),
+                observer,
+                delPsi,
+                sun_params.true_obliquity,
+            )
+        )
 
     h_zero: Angle = Angle(0.7275 * moon_params[1].eh_parallax.decimal - 0.566667)
     cosH_zero: float = (math.sin(h_zero.radians) - math.sin(observer.latitude.radians) * math.sin(moon_params[1].declination.radians)) / (
@@ -178,6 +202,17 @@ def classify_visibility(q: float, criterion: int = 1) -> str:
             return "D: Crescent is not visible even by optical aid."
         raise ValueError("Invalid q value. Must be a float.")
 
+    if criterion == 2:
+        if q > 0.27:
+            return "A: Easily visible"
+        if q > -0.024:
+            return "B: Visible under perfect conditions."
+        if q > -0.212:
+            return "C: Optical aid needed to find the moon."
+        if q > -0.48:
+            return "D: Visible with optical aid only."
+        return "F: Not visible."
+
     if q > 0.216:
         return "A: Easily visible."
     if 0.216 >= q > -0.014:
@@ -191,4 +226,3 @@ def classify_visibility(q: float, criterion: int = 1) -> str:
     if -0.293 >= q:
         return "F: Not visible; below the Danjon limit."
     raise ValueError("Invalid q value. Must be a float.")
-

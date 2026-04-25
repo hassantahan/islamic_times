@@ -11,7 +11,7 @@ import numpy as np
 
 from islamic_times import calculation_equations as ce
 from islamic_times import time_equations as te
-from islamic_times.it_dataclasses import Angle, DateTimeInfo, ObserverInfo, RightAscension, Sun
+from islamic_times.it_dataclasses import Angle, DateTimeInfo, ObserverInfo, RightAscension
 from islamic_times import sun_equations as active
 
 
@@ -58,11 +58,23 @@ def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_
     new_jd = te.gregorian_to_jd(observer_date.date) - te.fraction_of_day(observer_date.date)
     new_deltaT = te.delta_t_approx(ymd.year, ymd.month)
 
-    sun_params: List[Sun] = []
+    sun_params: List[active.Sun] = []
     for i in range(3):
         ymd_temp = te.jd_to_gregorian(new_jd + i - 1, observer_date.utc_offset)
         delT_temp = te.delta_t_approx(ymd_temp.year, ymd_temp.month)
-        sun_params.append(active.sunpos(replace(observer_date, date=ymd_temp, jd=(new_jd + i - 1), deltaT=delT_temp), observer))
+        sun_params.append(
+            active.sunpos(
+                replace(
+                    observer_date,
+                    date=ymd_temp,
+                    jd=(new_jd + i - 1),
+                    deltaT=delT_temp,
+                    tt_minus_utc=None,
+                    ut1_minus_utc=None,
+                ),
+                observer,
+            )
+        )
 
     h_zero: Angle = Angle(-angle.decimal)
     cosH_zero: float = (math.sin(h_zero.radians) - math.sin(observer.latitude.radians) * math.sin(sun_params[1].apparent_declination.radians)) / (

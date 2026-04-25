@@ -3,7 +3,10 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from islamic_times.it_dataclasses import (
+    PUBLIC_SCHEMA_VERSION,
     Angle,
     DateTimeInfo,
     Distance,
@@ -70,8 +73,26 @@ def test_datetimeinfo_properties() -> None:
     assert info.timezone is not None
     assert math.isclose(info.utc_offset, -5.0, abs_tol=1e-12)
     assert math.isclose(info.jde, 2460000.5 + 69.0 / 86400.0, rel_tol=0.0, abs_tol=1e-12)
+    assert math.isclose(info.jd_ut1, 2460000.5, rel_tol=0.0, abs_tol=1e-12)
     assert info.format_utc_offset() == "UTC-05:00"
     assert "Time & Date" in str(info)
+
+
+def test_datetimeinfo_timescale_properties() -> None:
+    dt = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    info = DateTimeInfo(
+        date=dt,
+        jd=2460000.5,
+        deltaT=69.09,
+        tt_minus_utc=69.184,
+        ut1_minus_utc=0.094,
+        hijri=IslamicDateInfo(1446, 7, 1),
+    )
+
+    assert math.isclose(info.tt_utc_seconds, 69.184, rel_tol=0.0, abs_tol=1e-12)
+    assert math.isclose(info.ut1_utc_seconds, 0.094, rel_tol=0.0, abs_tol=1e-12)
+    assert math.isclose(info.jde_tt, 2460000.5 + 69.184 / 86400.0, rel_tol=0.0, abs_tol=1e-12)
+    assert math.isclose(info.jd_ut1, 2460000.5 + 0.094 / 86400.0, rel_tol=0.0, abs_tol=1e-12)
 
 
 def test_prayer_and_prayertimes_string_output() -> None:
@@ -103,6 +124,30 @@ def test_prayer_and_prayertimes_string_output() -> None:
     assert prayers[0].time_str.endswith("01-06-2025")
     assert "Prayer Times at Observer Timezone" in str(prayer_times)
     assert "Midnight" in str(prayer_times)
+
+
+def test_prayer_times_string_includes_extreme_latitude_metadata() -> None:
+    method = PrayerMethod(name="Test", fajr_angle=Angle(18), isha_angle=Angle(17))
+    now = datetime(2025, 6, 1, 12, 0, 0)
+    prayer = Prayer("Fajr", now, method)
+    prayer_times = PrayerTimes(
+        method=method,
+        fajr=prayer,
+        sunrise=Prayer("Sunrise", now, method),
+        zuhr=Prayer("Ẓuhr", now, method),
+        asr=Prayer("ʿAṣr", now, method),
+        sunset=Prayer("Sunset", now, method),
+        maghrib=Prayer("Maghrib", now, method),
+        isha=Prayer("ʿIshāʾ", now, method),
+        midnight=Prayer("Midnight", now, method),
+        extreme_latitude_applied=True,
+        extreme_latitude_rule="ANGLEBASED",
+        extreme_latitude_reason="One or more required solar events were unavailable.",
+    )
+
+    rendered = str(prayer_times)
+    assert "Extreme Latitude" in rendered
+    assert "ANGLEBASED" in rendered
 
 
 def test_mecca_sun_moon_and_visibility_strings() -> None:
@@ -161,3 +206,111 @@ def test_visibilities_str_with_zero_q_should_include_context_lines() -> None:
     rendered = str(vis)
     assert "Visibility of New Moon Crescent" in rendered
     assert "Criterion" in rendered
+
+
+def test_datetimeinfo_to_dict_contract() -> None:
+    dt = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    info = DateTimeInfo(date=dt, jd=2460000.5, deltaT=69.0, hijri=IslamicDateInfo(1446, 7, 1))
+    payload = info.to_dict()
+
+    assert payload["schema_version"] == PUBLIC_SCHEMA_VERSION
+    assert payload["type"] == "DateTimeInfo"
+    assert payload["date_iso"] == dt.isoformat()
+    assert payload["julian_day"] == pytest.approx(2460000.5)
+    assert payload["delta_t_seconds"] == pytest.approx(69.0)
+    assert payload["tt_minus_utc_seconds"] == pytest.approx(69.0)
+    assert payload["ut1_minus_utc_seconds"] == pytest.approx(0.0)
+    assert payload["julian_day_ut1"] == pytest.approx(2460000.5)
+    assert isinstance(payload["hijri"], dict)
+
+
+def test_prayertimes_to_dict_contract() -> None:
+    method = PrayerMethod(name="Test", fajr_angle=Angle(18), isha_angle=Angle(17))
+    now = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    prayer_times = PrayerTimes(
+        method=method,
+        fajr=Prayer("Fajr", now, method),
+        sunrise=Prayer("Sunrise", now, method),
+        zuhr=Prayer("Ẓuhr", now, method),
+        asr=Prayer("ʿAṣr", now, method),
+        sunset=Prayer("Sunset", now, method),
+        maghrib=Prayer("Maghrib", now, method),
+        isha=Prayer("ʿIshāʾ", now, method),
+        midnight=Prayer("Midnight", now, method),
+        extreme_latitude_applied=True,
+        extreme_latitude_rule="ANGLEBASED",
+        extreme_latitude_reason="Fallback reason.",
+    )
+    payload = prayer_times.to_dict()
+
+    assert payload["schema_version"] == PUBLIC_SCHEMA_VERSION
+    assert payload["type"] == "PrayerTimes"
+    assert payload["method"]["name"] == "Test"
+    assert sorted(payload["prayers"].keys()) == [
+        "asr",
+        "fajr",
+        "isha",
+        "maghrib",
+        "midnight",
+        "sunrise",
+        "sunset",
+        "zuhr",
+    ]
+    assert payload["extreme_latitude"]["applied"] is True
+    assert payload["extreme_latitude"]["rule"] == "ANGLEBASED"
+
+
+def test_visibility_and_astro_dataclasses_to_dict_contract() -> None:
+    now = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    mecca = MeccaInfo(distance=Distance(1000, DistanceUnits.KILOMETRE), angle=Angle(45), cardinal="NE")
+    mecca_payload = mecca.to_dict()
+    assert mecca_payload["schema_version"] == PUBLIC_SCHEMA_VERSION
+    assert mecca_payload["type"] == "MeccaInfo"
+    assert mecca_payload["cardinal"] == "NE"
+
+    sun = SunInfo(
+        sunrise=now,
+        sun_transit=now,
+        sunset=now,
+        apparent_altitude=Angle(10),
+        true_azimuth=Angle(180),
+        geocentric_distance=Distance(1, DistanceUnits.AU),
+        apparent_declination=Angle(20),
+        apparent_right_ascension=RightAscension(6),
+        greenwich_hour_angle=Angle(30),
+        local_hour_angle=Angle(40),
+    )
+    sun_payload = sun.to_dict()
+    assert sun_payload["type"] == "SunInfo"
+    assert sun_payload["sunrise"]["kind"] == "datetime"
+
+    moon = MoonInfo(
+        moonrise=now,
+        moon_transit=now,
+        moonset="Moonset does not exist.",
+        illumination=0.5,
+        apparent_altitude=Angle(12),
+        true_azimuth=Angle(200),
+        geocentric_distance=Distance(384400, DistanceUnits.KILOMETRE),
+        parallax=Angle(1),
+        topocentric_declination=Angle(5),
+        topocentric_right_ascension=RightAscension(7),
+        greenwich_hour_angle=Angle(20),
+        local_hour_angle=Angle(25),
+    )
+    moon_payload = moon.to_dict()
+    assert moon_payload["type"] == "MoonInfo"
+    assert moon_payload["moonset"]["kind"] == "message"
+
+    vis = Visibilities(
+        criterion="Yallop",
+        dates=(now, now + timedelta(days=1)),
+        q_values=(0.1234, -0.5678),
+        classifications=("A: Easily visible.", "F: Not visible."),
+    )
+    vis_payload = vis.to_dict()
+    assert vis_payload["schema_version"] == PUBLIC_SCHEMA_VERSION
+    assert vis_payload["type"] == "Visibilities"
+    assert vis_payload["criterion"] == "Yallop"
+    assert len(vis_payload["entries"]) == 2
