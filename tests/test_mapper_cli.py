@@ -204,3 +204,28 @@ def test_render_cache_command_loads_and_renders(monkeypatch: pytest.MonkeyPatch)
     assert called["master_path"] == "maps_cached/"
     assert called["save_logs"] is True
     assert called["perf_report_path"] == "mapper_logs/cache_render.json"
+
+
+def test_benchmark_preserves_leading_flags_and_uses_explicit_conjunction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        mapper_cli, "generate_maps", lambda cfg, perf_report_path: calls.append((cfg, perf_report_path)),
+    )
+    assert mapper_cli.main([
+        "--criterion", "2", "--category-compute", "dense", "benchmark",
+        "--conjunction", "2025-04-27T19:31:04Z", "--master-path", "bench-test",
+    ]) == 0
+    config, report = calls[0]
+    assert config.compute.criterion == 2
+    assert not config.compute.adaptive_category
+    assert config.conjunction_utc.isoformat() == "2025-04-27T19:31:04+00:00"
+    assert report.replace("\\", "/") == "bench-test/benchmark.json"
+
+
+def test_mapper_rejects_naive_conjunction(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as error:
+        mapper_cli.main(["generate", "--conjunction", "2025-04-27T19:31:04"])
+    assert error.value.code == 2
+    assert "timezone-aware" in capsys.readouterr().err

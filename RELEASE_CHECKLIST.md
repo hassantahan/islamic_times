@@ -5,6 +5,8 @@
 3. Verify core install and optional mapping install paths:
    - `pip install islamic_times`
    - `pip install "islamic_times[map]"`
-4. Confirm wheel and sdist builds succeed in GitHub Actions.
+4. Run the wheel workflow manually on the release branch. Verify that each
+   platform produces CPython 3.10 through 3.13 wheels and that a clean install
+   from the wheel and sdist imports the native extension.
 5. Create and push tag `vX.Y.Z` to trigger publish workflow.
 6. Verify package artifacts and metadata on PyPI.

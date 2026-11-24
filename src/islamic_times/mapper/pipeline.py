@@ -6,7 +6,7 @@ import gc
 import json
 import os
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from multiprocessing import Pool
 from pathlib import Path
@@ -120,7 +120,15 @@ def _resolve_islamic_month_bucket(new_moon_date: datetime) -> tuple[int, str]:
 
 
 def _next_new_moon_date(date: datetime, month_index: int) -> datetime:
+    """Resolve the legacy nearest conjunction for a month in the requested run."""
     return fast_astro.next_phases_of_moon_utc(date + timedelta(days=month_index * AVERAGE_LUNAR_MONTH_DAYS))[0]
+
+
+def _map_conjunction(config: MapperConfig, month_index: int) -> datetime:
+    """Use the supplied first conjunction or the mapper's normal date search."""
+    if config.conjunction_utc is not None and month_index == 0:
+        return config.conjunction_utc
+    return _next_new_moon_date(config.conjunction_utc or config.date, month_index)
 
 
 def _build_perf_payload(result: MapRunResult) -> Dict[str, Any]:
@@ -134,6 +142,7 @@ def _build_perf_payload(result: MapRunResult) -> Dict[str, Any]:
             "master_path": result.config.master_path,
             "compute": asdict(result.config.compute),
             "render": asdict(result.config.render),
+            "conjunction_utc": result.config.conjunction_utc.isoformat() if result.config.conjunction_utc else None,
         },
         "total_time_s": result.total_time_s,
         "aggregate_timings_s": result.aggregate_timings_s,
@@ -164,10 +173,12 @@ def _config_payload(config: MapperConfig) -> Dict[str, Any]:
         "places_path": config.places_path,
         "compute": asdict(config.compute),
         "render": asdict(config.render),
+        "conjunction_utc": config.conjunction_utc.isoformat() if config.conjunction_utc else None,
     }
 
 
 def _config_from_payload(payload: Dict[str, Any]) -> MapperConfig:
+    conjunction = payload.get("conjunction_utc")
     return MapperConfig(
         date=datetime.fromisoformat(str(payload["date"])),
         total_months=int(payload.get("total_months", 1)),
@@ -179,6 +190,7 @@ def _config_from_payload(payload: Dict[str, Any]) -> MapperConfig:
         places_path=str(payload.get("places_path", "map_shp_files/combined_points.shp")),
         compute=ComputeConfig(**dict(payload.get("compute", {}))),
         render=RenderConfig(**dict(payload.get("render", {}))),
+        conjunction_utc=datetime.fromisoformat(str(conjunction)) if conjunction else None,
     )
 
 
@@ -205,7 +217,7 @@ def build_visibility_cache(config: MapperConfig) -> VisibilityCache:
     months: list[CachedMonthVisibility] = []
     try:
         for month_idx in range(config.total_months):
-            new_moon_date = _next_new_moon_date(config.date, month_idx)
+            new_moon_date = _map_conjunction(config, month_idx)
             islamic_year, islamic_month_name = _resolve_islamic_month_bucket(new_moon_date)
             visibilities, compute_profile = compute_visibility_volume(
                 lon_centers,
@@ -378,17 +390,11 @@ def render_maps_from_cache(
     require_mapper_dependencies()
     output_root = Path(master_path) if master_path is not None else cache.config.output_root
     log_enabled = cache.config.save_logs if save_logs is None else bool(save_logs)
-    result_config = MapperConfig(
-        date=cache.config.date,
+    result_config = replace(
+        cache.config,
         total_months=len(cache.months),
-        map_region=cache.config.map_region,
-        resolution=cache.config.resolution,
         master_path=str(output_root),
         save_logs=log_enabled,
-        states_path=cache.config.states_path,
-        places_path=cache.config.places_path,
-        compute=cache.config.compute,
-        render=cache.config.render,
     )
 
     start_total = perf_counter()
@@ -515,7 +521,7 @@ def generate_maps(config: MapperConfig, perf_report_path: str | None = None) -> 
         try:
             for month_idx in range(config.total_months):
                 timer = StageTimer()
-                new_moon_date = _next_new_moon_date(config.date, month_idx)
+                new_moon_date = _map_conjunction(config, month_idx)
                 islamic_year, islamic_month_name = _resolve_islamic_month_bucket(new_moon_date)
                 out_dir = config.output_root / config.map_region.replace("_", " ").title() / str(islamic_year)
 

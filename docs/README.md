@@ -16,3 +16,4 @@ This directory is for public, repository-shipped documentation.
 
 - `README.md` (project overview and usage)
 - `CONTRIBUTING.md` (contributor workflow)
+- [Calculation APIs](calculations.md)

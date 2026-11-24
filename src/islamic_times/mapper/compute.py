@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
+from itertools import chain
 from multiprocessing import Pool, cpu_count
 from time import perf_counter
-from typing import Any
+from typing import Any, Iterable
 
 import numpy as np
 
@@ -159,9 +161,11 @@ def _compute_chunk_category_adaptive(
     new_moon_date: Any,
     cfg: ComputeConfig,
 ) -> np.ndarray:
+    """Subdivide nonuniform blocks and reuse samples already computed by their parents."""
     ny = len(lat_chunk)
     nx = len(lon_centers)
     output = np.empty((ny, nx, cfg.days_to_generate), dtype=np.uint8)
+    sampled = np.zeros((ny, nx), dtype=bool)
     stack: list[tuple[int, int, int, int, int]] = [(0, ny, 0, nx, 0)]
 
     while stack:
@@ -177,25 +181,28 @@ def _compute_chunk_category_adaptive(
             or height < 2
             or width < 2
         ):
-            output[y0:y1, x0:x1, :] = _compute_category_block(
-                lat_chunk[y0:y1], lon_centers[x0:x1], new_moon_date, cfg
+            rows, cols = np.nonzero(~sampled[y0:y1, x0:x1])
+            rows += y0
+            cols += x0
+            output[rows, cols] = _compute_category_points(
+                lat_chunk[rows], lon_centers[cols], new_moon_date, cfg
             )
             continue
 
         probe_rows, probe_cols = _build_probe_indices(y0, y1, x0, x1)
-        probe_codes = _compute_category_points(lat_chunk[probe_rows], lon_centers[probe_cols], new_moon_date, cfg)
+        missing = ~sampled[probe_rows, probe_cols]
+        rows, cols = probe_rows[missing], probe_cols[missing]
+        output[rows, cols] = _compute_category_points(
+            lat_chunk[rows], lon_centers[cols], new_moon_date, cfg
+        )
+        sampled[rows, cols] = True
+        probe_codes = output[probe_rows, probe_cols]
         if _is_uniform_probe(probe_codes):
             output[y0:y1, x0:x1, :] = probe_codes[0]
             continue
 
         y_mid = y0 + (height // 2)
         x_mid = x0 + (width // 2)
-        if y_mid <= y0 or y_mid >= y1 or x_mid <= x0 or x_mid >= x1:
-            output[y0:y1, x0:x1, :] = _compute_category_block(
-                lat_chunk[y0:y1], lon_centers[x0:x1], new_moon_date, cfg
-            )
-            continue
-
         next_depth = depth + 1
         stack.append((y0, y_mid, x0, x_mid, next_depth))
         stack.append((y0, y_mid, x_mid, x1, next_depth))
@@ -290,18 +297,21 @@ def _compute_chunk_profiled_task(
 
 
 def _assemble_volume_from_results(
-    chunk_results: list[tuple[int, int, np.ndarray, float]],
+    chunk_results: Iterable[tuple[int, int, np.ndarray, float]],
     total_rows: int,
     lon_count: int,
     days: int,
     chunk_count: int,
 ) -> tuple[np.ndarray, tuple[float, ...]]:
-    if not chunk_results:
+    """Place each completed chunk into the final tensor and retain only its timing."""
+    chunks = iter(chunk_results)
+    first = next(chunks, None)
+    if first is None:
         raise ValueError("No chunk results were produced.")
 
-    volume = np.empty((total_rows, lon_count, days), dtype=chunk_results[0][2].dtype)
+    volume = np.empty((total_rows, lon_count, days), dtype=first[2].dtype)
     chunk_elapsed: list[float] = [0.0] * chunk_count
-    for chunk_idx, row_start, output, elapsed in chunk_results:
+    for chunk_idx, row_start, output, elapsed in chain((first,), chunks):
         row_end = row_start + output.shape[0]
         volume[row_start:row_end, :, :] = output
         chunk_elapsed[chunk_idx] = float(elapsed)
@@ -363,21 +373,19 @@ def compute_visibility_volume(
         (chunk_idx, row_start, lat_centers[row_start:row_end], lon_centers, new_moon_date, cfg, mode)
         for chunk_idx, (row_start, row_end) in enumerate(chunk_ranges)
     ]
-    if pool is not None:
-        chunk_results = list(pool.imap_unordered(_compute_chunk_profiled_task, tasks))
-    elif effective_workers > 1:
-        with Pool(effective_workers) as local_pool:
-            chunk_results = list(local_pool.imap_unordered(_compute_chunk_profiled_task, tasks))
-    else:
-        chunk_results = [_compute_chunk_profiled_task(task) for task in tasks]
-
-    volume, chunk_elapsed_s = _assemble_volume_from_results(
-        chunk_results=chunk_results,
-        total_rows=total_rows,
-        lon_count=len(lon_centers),
-        days=cfg.days_to_generate,
-        chunk_count=len(chunk_ranges),
-    )
+    manager = Pool(effective_workers) if pool is None and effective_workers > 1 else nullcontext(pool)
+    with manager as compute_pool:
+        if compute_pool is None:
+            chunk_results = map(_compute_chunk_profiled_task, tasks)
+        else:
+            chunk_results = compute_pool.imap_unordered(_compute_chunk_profiled_task, tasks)
+        volume, chunk_elapsed_s = _assemble_volume_from_results(
+            chunk_results=chunk_results,
+            total_rows=total_rows,
+            lon_count=len(lon_centers),
+            days=cfg.days_to_generate,
+            chunk_count=len(chunk_ranges),
+        )
     if not return_profile:
         return volume
 

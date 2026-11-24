@@ -220,9 +220,9 @@ void sun_nutation(double jde, double* deltaPsi, double* deltaEpsilon) {
 
 /*
  * Compute mean obliquity of the ecliptic in degrees.
- * Input t is Julian millennia from J2000.
+ * Input t is Julian centuries of TT from J2000.
  */
-double oblique_eq(double t) {
+static double oblique_eq(double t) {
     // See Jean Meeus, Astronomical Algorithms, Chapter 22.
     double u = t / 10.0;
     double eps = 23.0 + 26.0 / 60.0 + (21.448 / 3600.0);
@@ -235,6 +235,12 @@ double oblique_eq(double t) {
     }
 
     return eps;
+}
+
+PyObject* py_mean_obliquity(PyObject* self, PyObject* args) {
+    double jde;
+    if (!PyArg_ParseTuple(args, "d", &jde)) return NULL;
+    return PyFloat_FromDouble(oblique_eq((jde - J2000) / JULIAN_CENTURY));
 }
 
 static double standard_atmospheric_refraction(double true_altitude) {

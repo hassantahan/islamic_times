@@ -29,7 +29,7 @@ jobs:
           python -m build --sdist --outdir dist
 
       - name: Build wheels with cibuildwheel
-        uses: pypa/cibuildwheel@v2.16
+        uses: pypa/cibuildwheel@v2.23.3
         env:
           CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
           CIBW_SKIP: "pp*"
@@ -48,6 +48,15 @@ jobs:
           os.makedirs("dist", exist_ok=True)
           for wheel in glob.glob("wheelhouse/*.whl"):
               shutil.copy2(wheel, "dist")
+
+      - name: Check wheel coverage
+        shell: python
+        run: |
+          from pathlib import Path
+          wheels = list(Path("dist").glob("*.whl"))
+          for tag in ("cp310", "cp311", "cp312", "cp313"):
+              if not any(f"-{tag}-" in wheel.name for wheel in wheels):
+                  raise SystemExit(f"No wheel was built for {tag}")
 
       - name: Upload built distributions
         uses: actions/upload-artifact@v4

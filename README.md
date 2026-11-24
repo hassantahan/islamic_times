@@ -9,6 +9,8 @@ It provides prayer times, Hijri date conversion, Qibla direction, and new moon c
 - `ITLocation` public API for observer-centric calculations.
 - Built-in prayer method presets plus custom angle support.
 - Crescent visibility computation with Odeh (2006), Yallop (1997), and Shaukat (n.d.) criteria.
+- Solar-only prayer schedules, chronological lunar phases, and detailed crescent forecasts.
+- Two-way tabular Hijri civil-date conversion.
 - Optional map-generation pipeline (`islamic_times.mapper`) for visibility maps.
 
 ## Installation
@@ -72,6 +74,9 @@ Visibility of New Moon Crescent:
         21:55:34 28-05-2025:    +2.036  A: Easily visible.
 ```
 
+See the [calculation API guide](docs/calculations.md) for date ranges, event statuses,
+civil Hijri dates, lunar phases, and explicit conjunction forecasts.
+
 ## Mapper CLI (Optional)
 
 Install mapper dependencies first (`pip install "islamic_times[map]"`), then run:
@@ -86,6 +91,13 @@ python -m islamic_times.mapper generate \
   --criterion 1 \
   --total_months 1
 ```
+
+`islamic-times-map` and `python -m islamic_times.mapper` accept the same commands.
+Use `--conjunction 2025-04-27T19:31:04+00:00` to anchor a map to the same UTC
+conjunction as a local forecast. Category maps use adaptive sampling by default.
+Pass `--category-compute dense` to evaluate every cell.
+The `benchmark` command writes a timing report to `benchmark.json` under the
+map output directory. `--perf-report` overrides that path.
 
 To view a CSV export directory directly:
 

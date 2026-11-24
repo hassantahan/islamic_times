@@ -55,6 +55,7 @@ datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double lat
 
 /* Python wrappers exposed by astro_core. */
 PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs);
+PyObject* py_mean_obliquity(PyObject* self, PyObject* args);
 PyObject* py_find_sun_transit(PyObject* self, PyObject* args);
 PyObject* py_find_proper_suntime(PyObject* self, PyObject* args);
 

@@ -1151,22 +1151,11 @@ PyObject* py_find_proper_moontime(PyObject* self, PyObject* args) {
 
 
 /* ================================
-   Calculate next moon phases
+   Lunar phase times
    ================================ */
 
-void next_phases_of_moon_utc(datetime date, datetime phases[4]) {
-    int day = day_of_year(date.year, date.month, date.day);
-    int p_sign = (date.year - 2000 > 0) ? 1 : ((date.year - 2000 < 0) ? -1 : 1);
-
-    double k_temp = ((fabs((double)(date.year - 2000)) +
-                        p_sign * ((double)day) / TROPICAL_YEAR) * 12.3685);
-    double k_array[4];
-    k_array[0] = p_sign * round(k_temp);
-    k_array[1] = p_sign * (round(k_temp - 0.25) + 0.25);
-    k_array[2] = p_sign * (round(k_temp - 0.50) + 0.50);
-    k_array[3] = p_sign * (round(k_temp - 0.75) + 0.75);
-
-    // Loop over each phase (New Moon, First Quarter, Full Moon, Last Quarter)
+/* Apply Meeus's phase corrections to the supplied lunation indices. */
+static void moon_phases_for_k(const double k_array[4], datetime phases[4]) {
     for (int p = 0; p < 4; p++) {
         double k = k_array[p];
         double t  = k / 1236.85;
@@ -1255,40 +1244,67 @@ void next_phases_of_moon_utc(datetime date, datetime phases[4]) {
     }
 }
 
+void next_phases_of_moon_utc(datetime date, datetime phases[4]) {
+    /* Retain the legacy nearest-of-each-phase selection. */
+    int day = day_of_year(date.year, date.month, date.day);
+    int sign = date.year < 2000 ? -1 : 1;
+    double k = (fabs((double)(date.year - 2000)) + sign * (double)day / TROPICAL_YEAR) * 12.3685;
+    double indices[4];
+    for (int i = 0; i < 4; i++) {
+        double fraction = i / 4.0;
+        indices[i] = sign * (round(k - fraction) + fraction);
+    }
+    moon_phases_for_k(indices, phases);
+}
+
+static PyObject* moon_phases_to_tuple(const datetime phases[4]) {
+    PyObject* result = PyTuple_New(4);
+    if (!result) return NULL;
+
+    for (int i = 0; i < 4; i++) {
+        PyObject* phase = datetime_to_pydatetime(phases[i]);
+        if (!phase) {
+            Py_DECREF(result);
+            return NULL;
+        }
+        PyTuple_SET_ITEM(result, i, phase);
+    }
+    return result;
+}
+
 PyObject* py_next_phases_of_moon_utc(PyObject* self, PyObject* args) {
     ENSURE_PYDATETIME();
-    PyObject *input_datetime;
-
+    PyObject* input_datetime;
     if (!PyArg_ParseTuple(args, "O!", PyDateTimeAPI->DateTimeType, &input_datetime)) {
         return NULL;
     }
 
     datetime date;
+    datetime phases[4];
     fill_in_datetime_values(&date, input_datetime);
+    next_phases_of_moon_utc(date, phases);
+    return moon_phases_to_tuple(phases);
+}
 
-    // Call method
-    datetime moon_phases[4];
-    next_phases_of_moon_utc(date, moon_phases);
-
-    // Convert to Python datetime
-    PyObject* py_moon_phases[4];
-    for (int i = 0; i < 4; i++) {
-        py_moon_phases[i] = datetime_to_pydatetime(moon_phases[i]);
-        if (!py_moon_phases[i]) {
-            for (int j = 0; j < i; j++) {
-                Py_DECREF(py_moon_phases[j]);
-            }
-            return NULL;
-        }
+/* Return all four phases from one lunation, in chronological order. */
+PyObject* py_moon_phases_for_lunation(PyObject* self, PyObject* args) {
+    ENSURE_PYDATETIME();
+    PyObject* reference;
+    int month_offset;
+    if (!PyArg_ParseTuple(args, "O!i", PyDateTimeAPI->DateTimeType, &reference, &month_offset)) {
+        return NULL;
+    }
+    if (month_offset < -125000 || month_offset > 125000) {
+        PyErr_SetString(PyExc_ValueError, "Lunation offset exceeds the representable calendar range.");
+        return NULL;
     }
 
-    // Create Python tuple
-    PyObject* result = PyTuple_New(4);
-    if (!result) return NULL;
-
-    for (int i = 0; i < 4; i++) {
-        PyTuple_SET_ITEM(result, i, py_moon_phases[i]);  // Steals reference
-    }
-
-    return result;
+    datetime date;
+    datetime phases[4];
+    fill_in_datetime_values(&date, reference);
+    double jd = gregorian_to_jd(date, 0);
+    double k = floor((jd - 2451550.09766) / 29.530588861) + month_offset;
+    double indices[4] = {k, k + 0.25, k + 0.5, k + 0.75};
+    moon_phases_for_k(indices, phases);
+    return moon_phases_to_tuple(phases);
 }

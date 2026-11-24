@@ -18,8 +18,8 @@ Contents:
 
 
 import math
-from typing import Tuple, ClassVar, Any
-from datetime import datetime
+from typing import Tuple, ClassVar, Any, Literal
+from datetime import date, datetime, timezone
 from dataclasses import dataclass
 
 
@@ -524,7 +524,9 @@ class PrayerMethod:
         maghrib_angle (Angle): Maghrib angle (if applicable).
         asr_type (int): Asr shadow factor type.
         midnight_type (int): Midnight definition type.
-        extreme_lats (str): The method on how to deal with prayer times at extreme latitudes. Default is Nearest Latitude method.
+        extreme_lats (str): High-latitude fallback rule. Defaults to ``ANGLEBASED``.
+        isha_offset_minutes (int | None): Fixed minutes after Maghrib, if used.
+        ramadan_isha_offset_minutes (int | None): Ramadan override for the fixed interval.
     """
     name: str
     fajr_angle: Angle
@@ -534,6 +536,8 @@ class PrayerMethod:
     asr_type: int = 0
     midnight_type: int = 0
     extreme_lats: str = 'ANGLEBASED'
+    isha_offset_minutes: int | None = None
+    ramadan_isha_offset_minutes: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize prayer-method configuration with explicit units."""
@@ -548,6 +552,8 @@ class PrayerMethod:
             "asr_type": self.asr_type,
             "midnight_type": self.midnight_type,
             "extreme_lats": self.extreme_lats,
+            "isha_offset_minutes": self.isha_offset_minutes,
+            "ramadan_isha_offset_minutes": self.ramadan_isha_offset_minutes,
         }
 
 @dataclass(frozen=True, slots=True)
@@ -559,10 +565,24 @@ class Prayer:
         name (str): Name of the prayer.
         time (datetime | str | float): Time of the prayer or status.
         method (PrayerMethod): The method used for calculation.
+        fallback_rule (str | None): Rule used to estimate this event.
     """
     name: str
     time: datetime | str | float
     method: PrayerMethod
+    fallback_rule: str | None = None
+
+    @property
+    def when(self) -> datetime | None:
+        """Return the event datetime when available."""
+        return self.time if isinstance(self.time, datetime) else None
+
+    @property
+    def status(self) -> Literal["calculated", "estimated", "unavailable"]:
+        """Describe the provenance or availability of this event."""
+        if self.when is None:
+            return "unavailable"
+        return "calculated" if self.fallback_rule is None else "estimated"
 
     @property
     def time_str(self) -> str:
@@ -584,6 +604,8 @@ class Prayer:
             "time": _serialize_time_value(self.time),
             "time_display": self.time_str,
             "method_name": self.method.name,
+            "status": self.status,
+            "fallback_rule": self.fallback_rule,
         }
 
 @dataclass(frozen=True, slots=True)
@@ -658,6 +680,25 @@ class PrayerTimes:
                 "reason": self.extreme_latitude_reason,
             },
         }
+
+@dataclass(frozen=True, slots=True)
+class PrayerDay:
+    """A prayer schedule for one observer-local Gregorian civil date."""
+
+    date: date
+    hijri: IslamicDateInfo
+    prayers: PrayerTimes
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the civil date and the day's prayer schedule."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "PrayerDay",
+            "date": self.date.isoformat(),
+            "hijri": self.hijri.to_dict(),
+            "prayers": self.prayers.to_dict(),
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class MeccaInfo:
@@ -875,6 +916,61 @@ class Visibilities:
             "type": "Visibilities",
             "criterion": self.criterion,
             "entries": entries,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CrescentEvening:
+    """Observer-local events and model result for one evening."""
+
+    date: date
+    status: Literal[
+        "evaluated", "moonset_before_conjunction", "moonset_before_sunset",
+        "no_sunset_or_moonset", "no_sunset", "no_moonset", "best_time_before_conjunction",
+    ]
+    sunset: datetime | None
+    moonset: datetime | None
+    best_time: datetime | None
+    score: float | None
+    classification: str
+
+    @property
+    def lag_minutes(self) -> float | None:
+        """Return the signed elapsed time between sunset and moonset."""
+        if self.sunset is None or self.moonset is None:
+            return None
+        return (self.moonset.astimezone(timezone.utc) - self.sunset.astimezone(timezone.utc)).total_seconds() / 60
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the evening with ISO timestamps and a nullable score."""
+        return {
+            "date": self.date.isoformat(),
+            "status": self.status,
+            "sunset": self.sunset.isoformat() if self.sunset is not None else None,
+            "moonset": self.moonset.isoformat() if self.moonset is not None else None,
+            "best_time": self.best_time.isoformat() if self.best_time is not None else None,
+            "lag_minutes": self.lag_minutes,
+            "score": self.score,
+            "classification": self.classification,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CrescentForecast:
+    """Crescent visibility for one explicit conjunction and observer."""
+
+    conjunction: datetime
+    criterion: str
+    evenings: tuple[CrescentEvening, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the conjunction and forecast nights in chronological order."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "CrescentForecast",
+            "conjunction": self.conjunction.isoformat(),
+            "criterion": self.criterion,
+            "evenings": [evening.to_dict() for evening in self.evenings],
         }
 
 
