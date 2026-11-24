@@ -16,7 +16,7 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from math import isfinite
 from numbers import Number
-from typing import Dict, List, Literal, Optional, Sequence, Tuple
+from typing import List, Literal, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
 import islamic_times.astro_core as fast_astro
@@ -42,26 +42,9 @@ from islamic_times import moon_equations as me
 from islamic_times import prayer_times as pt
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
+from islamic_times.prayer_profiles import MosqueProfile
 
 
-def _build_prayer_method_alias_map() -> tuple[Dict[str, PrayerMethod], tuple[str, ...]]:
-    """Build constant-time prayer-method alias lookup tables."""
-    alias_map: Dict[str, PrayerMethod] = {}
-    primary_keys: List[str] = []
-
-    for method in pt.prayer_method_catalog():
-        method_keys = method.keys or ()
-        if method_keys:
-            primary_keys.append(method_keys[0])
-        for key in method_keys:
-            normalized_key = key.upper()
-            if normalized_key not in alias_map:
-                alias_map[normalized_key] = method
-
-    return alias_map, tuple(primary_keys)
-
-
-_PRAYER_METHOD_ALIAS_MAP, _PRAYER_METHOD_PRIMARY_KEYS = _build_prayer_method_alias_map()
 _PHASE_NAMES = ("New Moon", "First Quarter", "Full Moon", "Last Quarter")
 _CRESCENT_STATUS = {
     -999: "moonset_before_conjunction",
@@ -377,7 +360,16 @@ class ITLocation:
         # Astronomical parameters have been calculated so the flag is set to False
         self._mark_astro_dirty(False)
 
-    # Prayer Time Calculations
+    def _prayers_for(
+        self, context: DateTimeInfo, sun: SunInfo, profile: MosqueProfile | None = None,
+    ) -> PrayerTimes:
+        """Calculate the selected method and then apply any local offsets."""
+        if profile is not None and not isinstance(profile, MosqueProfile):
+            raise TypeError("'profile' must be a MosqueProfile.")
+        method: PrayerMethod = self.method if profile is None else profile.method
+        prayers = pt.calculate_prayer_times(context, self.observer_info, sun, method)
+        return prayers if profile is None else profile._apply_offsets(prayers)
+
     def calculate_prayer_times(self) -> None:
         """Compute prayer times from current observer, astronomy, and method state.
 
@@ -392,13 +384,13 @@ class ITLocation:
             "Call `calculate_astro()` first.",
         )
 
-        self.times_of_prayer: PrayerTimes = pt.calculate_prayer_times(self.observer_dateinfo, self.observer_info, self.sun_info, self.method)
+        self.times_of_prayer = self._prayers_for(self.observer_dateinfo, self.sun_info)
 
         # Prayers have been calculated so the flag is set to False
         self._mark_prayers_dirty(False)
 
     def prayer_schedule(
-        self, start: date, end: date, *, time_zone: str | tzinfo | None = None,
+        self, start: date, end: date, *, time_zone: str | tzinfo | None = None, profile: MosqueProfile | None = None,
     ) -> tuple[PrayerDay, ...]:
         """Calculate an inclusive civil-date range using this observer and prayer method.
 
@@ -408,6 +400,9 @@ class ITLocation:
             First and last observer-local civil dates.
         time_zone : str or tzinfo, optional
             IANA name or timezone object. Defaults to the observer's timezone.
+        profile : MosqueProfile, optional
+            Calculation settings and minute offsets for the entire schedule.
+            Defaults to the observer's current calculation method.
 
         Returns
         -------
@@ -436,7 +431,7 @@ class ITLocation:
             context = te.observer_datetime_info(local_noon)
             assert context.hijri is not None
             _, sun = self._solar_state(context)
-            prayers = pt.calculate_prayer_times(context, self.observer_info, sun, self.method)
+            prayers = self._prayers_for(context, sun, profile)
             result.append(PrayerDay(day, context.hijri, prayers))
         return tuple(result)
 
@@ -458,12 +453,7 @@ class ITLocation:
             Raised for unknown method aliases or invalid ``asr_type`` values.
         """
 
-        method_key = method_key.strip().upper()
-        method = _PRAYER_METHOD_ALIAS_MAP.get(method_key)
-        if method is None:
-            valid_options = list(_PRAYER_METHOD_PRIMARY_KEYS)
-            raise ValueError(
-                f"Invalid prayer method '{method_key}'. Valid options are: {', '.join(valid_options)}")
+        method = pt.get_prayer_method(method_key)
 
         if asr_type not in (0, 1):
             raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
@@ -581,13 +571,15 @@ class ITLocation:
         ValueError
             Raised when ``rule`` is not a supported option.
         """
-        EXTREME_LATITUDE_RULES: List[str] = ['NONE', 'NEARESTLAT', 'MIDDLENIGHT', 'ONESEVENTH', 'ANGLEBASED']
         
         if not isinstance(rule, str):
             raise TypeError("'rule' must be a string type.")
         normalized_rule = rule.strip().upper()
-        if normalized_rule not in EXTREME_LATITUDE_RULES:
-            raise ValueError(f'The value of {rule} for \'rule\' is not a valid rule. Please select from among the following: {EXTREME_LATITUDE_RULES}')
+        if normalized_rule not in pt.HIGH_LATITUDE_RULES:
+            raise ValueError(
+                f"The value of {rule} for 'rule' is not a valid rule. "
+                f"Please select from among the following: {list(pt.HIGH_LATITUDE_RULES)}"
+            )
         
         self.method = replace(self.method, extreme_lats=normalized_rule)
 
@@ -618,14 +610,25 @@ class ITLocation:
         return self.observer_dateinfo
 
     # Return prayer times
-    def prayer_times(self) -> PrayerTimes:
-        """Return cached prayer-time output dataclass.
+    def prayer_times(self, *, profile: MosqueProfile | None = None) -> PrayerTimes:
+        """Return prayer times for this observer's current date.
+
+        Parameters
+        ----------
+        profile : MosqueProfile, optional
+            Calculate with this method and local offsets using the current
+            solar state. A profile leaves the observer's settings and cached
+            prayer times intact. Without a profile, return the cached times.
 
         Raises
         ------
         ValueError
-            Raised when prayer results are stale and ``auto_calculate`` is off.
+            If the requested calculation state is stale in manual mode.
         """
+        if profile is not None:
+            self._ensure_state_ready("astro", "Call calculate_astro() before calculating a profile in manual mode.")
+            return self._prayers_for(self.observer_dateinfo, self.sun_info, profile)
+
 
         self._ensure_state_ready(
             "prayers",

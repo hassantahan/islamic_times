@@ -9,6 +9,8 @@
 - Validate custom prayer angles before applying any of the requested changes.
 - Added date-range prayer schedules, a prayer method catalog, two-way tabular
   Hijri conversion, chronological lunar phases, and explicit conjunction forecasts.
+- Added reusable mosque profiles with JSON round-tripping and per-prayer minute
+  adjustments, plus CSV and iCalendar prayer schedule exports.
 - Reused adaptive map samples, reduced working memory for native visibility
   batches, and assembled multiprocessing results as chunks complete.
 - Added the `islamic-times-map` command, an explicit conjunction option, and a

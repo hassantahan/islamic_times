@@ -41,6 +41,66 @@ The Makkah preset exposes its ordinary 90-minute and Ramadan 120-minute
 ʿIshāʾ intervals as method metadata. They are applied to a resolved Maghrib.
 An explicit custom ʿIshāʾ angle switches the method to angle-based calculation.
 
+## Mosque profiles and calendar export
+
+```python
+import json
+from datetime import date, datetime
+from pathlib import Path
+
+from islamic_times.islamic_times import ITLocation
+from islamic_times.prayer_calendar import prayer_schedule_to_csv, prayer_schedule_to_ics
+from islamic_times.prayer_profiles import MosqueProfile
+
+profile = MosqueProfile.from_preset(
+    "Local mosque",
+    "ISNA",
+    offset_minutes={"fajr": -2, "zuhr": 5, "maghrib": 3},
+)
+profile_file = Path("mosque-profile.json")
+profile_file.write_text(json.dumps(profile.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+profile = MosqueProfile.from_dict(json.loads(profile_file.read_text(encoding="utf-8")))
+
+location = ITLocation(
+    latitude=43.65,
+    longitude=-79.38,
+    date=datetime(2026, 3, 1),
+    auto_calculate=False,
+)
+schedule = location.prayer_schedule(
+    date(2026, 3, 1),
+    date(2026, 3, 31),
+    time_zone="America/Toronto",
+    profile=profile,
+)
+Path("prayer-times.csv").write_bytes(prayer_schedule_to_csv(schedule).encode("utf-8"))
+calendar = prayer_schedule_to_ics(schedule, calendar_name=profile.name, calendar_id="local-mosque-toronto")
+Path("prayer-times.ics").write_bytes(calendar.encode("utf-8"))
+```
+
+Profiles can also wrap a custom `PrayerMethod`, such as the
+`method` returned by `location.prayer_times()` after configuring an observer.
+Use the same profile across locations and date ranges. For a single day,
+`location.prayer_times(profile=profile)` uses the observer's current astronomy.
+When `auto_calculate=False`, call `location.calculate_astro()` first for that
+single-day calculation.
+
+Offsets are signed whole minutes for `fajr`, `zuhr`, `asr`, `maghrib`, and
+`isha`. Each offset is applied independently after the base timetable is
+calculated. A time can cross midnight or a timezone transition. Each adjusted
+prayer exposes its `offset_minutes` alongside its calculation status.
+
+CSV includes Gregorian and Hijri dates, local ISO timestamps with UTC offsets,
+and the keys of estimated events. An empty time field indicates that an event
+is unavailable. The row's date identifies the original timetable day and the
+timestamp includes the adjusted event's actual date.
+
+iCalendar includes each available daily prayer at its actual UTC instant.
+Estimated prayers carry the fallback rule in their descriptions. Use the same
+`calendar_id` when exporting revisions of a timetable to preserve event IDs.
+The exported text uses CRLF line endings for compatibility with
+[RFC 5545](https://www.rfc-editor.org/rfc/rfc5545.html).
+
 ## Civil Hijri conversion
 
 ```python

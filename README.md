@@ -10,6 +10,7 @@ It provides prayer times, Hijri date conversion, Qibla direction, and new moon c
 - Built-in prayer method presets plus custom angle support.
 - Crescent visibility computation with Odeh (2006), Yallop (1997), and Shaukat (n.d.) criteria.
 - Solar-only prayer schedules, chronological lunar phases, and detailed crescent forecasts.
+- Reusable mosque profiles with per-prayer offsets and CSV or iCalendar schedule export.
 - Two-way tabular Hijri civil-date conversion.
 - Optional map-generation pipeline (`islamic_times.mapper`) for visibility maps.
 

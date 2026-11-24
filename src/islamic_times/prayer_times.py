@@ -73,10 +73,36 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
     ),
 ]
 
+HIGH_LATITUDE_RULES = ("NONE", "NEARESTLAT", "MIDDLENIGHT", "ONESEVENTH", "ANGLEBASED")
+
 
 def prayer_method_catalog() -> tuple[PrayerMethod, ...]:
     """Return the supported presets in display order, including their accepted aliases."""
     return tuple(DEFAULT_PRAYER_METHODS)
+
+
+def _build_prayer_method_alias_map() -> dict[str, PrayerMethod]:
+    """Index the preset catalog by case-insensitive aliases."""
+    aliases: dict[str, PrayerMethod] = {}
+    for method in prayer_method_catalog():
+        for key in method.keys or ():
+            aliases.setdefault(key.upper(), method)
+    return aliases
+
+
+_PRAYER_METHOD_ALIASES = _build_prayer_method_alias_map()
+
+
+def get_prayer_method(method_key: str) -> PrayerMethod:
+    """Return the immutable preset matching a primary key or alias."""
+    if not isinstance(method_key, str):
+        raise TypeError("'method_key' must be a string.")
+    key = method_key.strip().upper()
+    method = _PRAYER_METHOD_ALIASES.get(key)
+    if method is None:
+        valid_options = ", ".join(method.keys[0] for method in prayer_method_catalog() if method.keys)
+        raise ValueError(f"Invalid prayer method '{key}'. Valid options are: {valid_options}")
+    return method
 
 
 @dataclass(frozen=True, slots=True)

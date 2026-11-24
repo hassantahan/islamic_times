@@ -24,6 +24,8 @@ from dataclasses import dataclass
 
 
 PUBLIC_SCHEMA_VERSION: str = "1.0"
+PRAYER_KEYS = ("fajr", "zuhr", "asr", "maghrib", "isha")
+PRAYER_EVENT_KEYS = ("fajr", "sunrise", "zuhr", "asr", "sunset", "maghrib", "isha", "midnight")
 
 
 def _serialize_time_value(value: datetime | str | float) -> dict[str, Any]:
@@ -566,11 +568,13 @@ class Prayer:
         time (datetime | str | float): Time of the prayer or status.
         method (PrayerMethod): The method used for calculation.
         fallback_rule (str | None): Rule used to estimate this event.
+        offset_minutes (int): Mosque adjustment applied to the calculated time.
     """
     name: str
     time: datetime | str | float
     method: PrayerMethod
     fallback_rule: str | None = None
+    offset_minutes: int = 0
 
     @property
     def when(self) -> datetime | None:
@@ -597,7 +601,7 @@ class Prayer:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize a prayer event and its underlying method context."""
-        return {
+        result = {
             "schema_version": PUBLIC_SCHEMA_VERSION,
             "type": "Prayer",
             "name": self.name,
@@ -607,6 +611,9 @@ class Prayer:
             "status": self.status,
             "fallback_rule": self.fallback_rule,
         }
+        if self.offset_minutes:
+            result["offset_minutes"] = self.offset_minutes
+        return result
 
 @dataclass(frozen=True, slots=True)
 class PrayerTimes:
@@ -626,6 +633,7 @@ class PrayerTimes:
         extreme_latitude_applied (bool): Whether an extreme-latitude fallback was applied.
         extreme_latitude_rule (str | None): Rule used when fallback was applied.
         extreme_latitude_reason (str | None): Human-readable reason for fallback activation.
+        mosque_profile_name (str | None): Local profile applied to these prayer times.
     """
 
     method: PrayerMethod
@@ -640,6 +648,7 @@ class PrayerTimes:
     extreme_latitude_applied: bool = False
     extreme_latitude_rule: str | None = None
     extreme_latitude_reason: str | None = None
+    mosque_profile_name: str | None = None
 
     def __str__(self):
         extreme_line = ""
@@ -660,26 +669,20 @@ class PrayerTimes:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize full prayer-time output as a stable API payload."""
-        return {
+        result = {
             "schema_version": PUBLIC_SCHEMA_VERSION,
             "type": "PrayerTimes",
             "method": self.method.to_dict(),
-            "prayers": {
-                "fajr": self.fajr.to_dict(),
-                "sunrise": self.sunrise.to_dict(),
-                "zuhr": self.zuhr.to_dict(),
-                "asr": self.asr.to_dict(),
-                "sunset": self.sunset.to_dict(),
-                "maghrib": self.maghrib.to_dict(),
-                "isha": self.isha.to_dict(),
-                "midnight": self.midnight.to_dict(),
-            },
+            "prayers": {key: getattr(self, key).to_dict() for key in PRAYER_EVENT_KEYS},
             "extreme_latitude": {
                 "applied": self.extreme_latitude_applied,
                 "rule": self.extreme_latitude_rule,
                 "reason": self.extreme_latitude_reason,
             },
         }
+        if self.mosque_profile_name is not None:
+            result["mosque_profile_name"] = self.mosque_profile_name
+        return result
 
 @dataclass(frozen=True, slots=True)
 class PrayerDay:
