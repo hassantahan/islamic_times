@@ -12,12 +12,14 @@ References:
   - Prayer times calculation methods (https://praytimes.org/docs/calculation)
 """
 
-import islamic_times.astro_core as fast_astro
-from numbers import Number
-from typing import Dict, List, Literal, Optional, Sequence, Tuple
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
+from math import isfinite
+from numbers import Number
+from typing import Dict, List, Literal, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
+
+import islamic_times.astro_core as fast_astro
 from islamic_times.it_dataclasses import (
     Angle,
     BatchVisibilities,
@@ -400,9 +402,22 @@ class ITLocation:
     ) -> tuple[PrayerDay, ...]:
         """Calculate an inclusive civil-date range using this observer and prayer method.
 
-        Dates are interpreted in the current observer timezone unless ``time_zone``
-        supplies a timezone object or IANA name. Each day uses its own offset.
-        The calculation uses solar events only and leaves the observer state intact.
+        Parameters
+        ----------
+        start, end : date
+            First and last observer-local civil dates.
+        time_zone : str or tzinfo, optional
+            IANA name or timezone object. Defaults to the observer's timezone.
+
+        Returns
+        -------
+        tuple[PrayerDay, ...]
+            One entry per date in ascending order, with each day's UTC offset.
+
+        Notes
+        -----
+        Each day is evaluated from local noon using solar events only. The
+        observer's current date and cached results are preserved.
         """
         for day in (start, end):
             if not isinstance(day, date) or isinstance(day, datetime):
@@ -460,28 +475,26 @@ class ITLocation:
 
         self._refresh_prayers()
     
-    # Helper function to validate and set angle
-    def __validate_and_set(self, attribute_name: str, value: Optional[float]) -> None:
-        """Validate an optional angle input and update method configuration."""
-        if value is None:
-            return
-
+    @staticmethod
+    def _validated_prayer_angle(attribute_name: str, value: float) -> Angle:
+        """Convert a finite positive degree value to an angle."""
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             raise ValueError(f"{attribute_name} must be a number. Invalid value: {value}")
+        try:
+            degrees = float(value)
+        except OverflowError:
+            raise ValueError(f"{attribute_name} must be finite.") from None
+        if not isfinite(degrees) or degrees <= 0:
+            raise ValueError(f"{attribute_name} must be greater than 0 and finite. Invalid value: {value}")
+        return Angle(degrees)
 
-        if value <= 0:
-            raise ValueError(f"{attribute_name} must be greater than 0. Invalid value: {value}")
-
-        self.method = replace(self.method, **{attribute_name: Angle(float(value))})
-
-    # Alows user to set their own solar hour angles for prayer time calculations.
     def set_custom_prayer_angles(
         self,
         fajr_angle: Optional[float] = None,
         maghrib_angle: Optional[float] = None,
         isha_angle: Optional[float] = None,
     ) -> None:
-        """Override default solar angles used by prayer-time computations.
+        """Override selected twilight angles in one validated update.
 
         Parameters
         ----------
@@ -490,23 +503,25 @@ class ITLocation:
         maghrib_angle : float, optional
             Maghrib angle in degrees below the horizon.
         isha_angle : float, optional
-            ʿIshāʾ angle in degrees below the horizon.
+            ʿIshāʾ angle in degrees below the horizon. Providing an angle
+            replaces any fixed ʿIshāʾ interval in the active method.
 
         Raises
         ------
         ValueError
-            Raised when a provided value is non-numeric or not strictly positive.
+            If a provided angle is non-numeric, non-finite, or non-positive.
         """
-
-        # Validate and set each angle
-        self.__validate_and_set('fajr_angle', fajr_angle)
-        self.__validate_and_set('maghrib_angle', maghrib_angle)
-        self.__validate_and_set('isha_angle', isha_angle)
-
+        angles = {
+            name: self._validated_prayer_angle(name, value)
+            for name, value in (
+                ("fajr_angle", fajr_angle), ("maghrib_angle", maghrib_angle), ("isha_angle", isha_angle),
+            )
+            if value is not None
+        }
+        method = self.method
         if isha_angle is not None:
-            self.method = replace(self.method, isha_offset_minutes=None, ramadan_isha_offset_minutes=None)
-        self.method = replace(self.method, name="Custom")
-
+            method = replace(method, isha_offset_minutes=None, ramadan_isha_offset_minutes=None)
+        self.method = replace(method, name="Custom", **angles)
         self._refresh_prayers()
     
     # Separated from angles since it is defined by shadow ratio
@@ -524,14 +539,9 @@ class ITLocation:
             Raised when ``asr_type`` is not ``0`` or ``1``.
         """
 
-        if asr_type in (0, 1):
-            self.method = replace(self.method, asr_type=asr_type)
-        else:
-            raise ValueError(f"'asr_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {asr_type}")
-
-        # Method is now custom
-        self.method = replace(self.method, name="Custom")
-
+        if asr_type not in (0, 1):
+            raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
+        self.method = replace(self.method, name="Custom", asr_type=asr_type)
         self._refresh_prayers()
 
     # Set to either 0 (sunset to sunrise; the majority method) or 1 (sunset to fajr, the 'Jaʿfarī' method)
@@ -550,14 +560,9 @@ class ITLocation:
             Raised when ``midnight_type`` is not ``0`` or ``1``.
         """
 
-        if midnight_type in (0, 1):
-           self.method = replace(self.method, midnight_type=midnight_type)
-        else:
-            raise ValueError(f"'midnight_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {midnight_type}")
-
-        # Method is now custom
-        self.method = replace(self.method, name="Custom")
-
+        if midnight_type not in (0, 1):
+            raise ValueError(f"'midnight_type' must be either 0 or 1. Invalid value: {midnight_type}")
+        self.method = replace(self.method, name="Custom", midnight_type=midnight_type)
         self._refresh_prayers()
         
     def set_extreme_latitude_rule(self, rule: str = 'ANGLEBASED') -> None:
@@ -688,8 +693,18 @@ class ITLocation:
     ) -> tuple[tuple[str, datetime], ...]:
         """Return chronological lunar phases strictly after an aware instant.
 
-        The observer datetime is the default boundary. Each returned datetime
-        is converted to the observer timezone using the offset at that event.
+        Parameters
+        ----------
+        count : int, default=4
+            Positive number of principal phase events to return.
+        after : datetime, optional
+            Timezone-aware exclusive boundary. Defaults to the observer datetime.
+
+        Returns
+        -------
+        tuple[tuple[str, datetime], ...]
+            Phase names and timestamps. Each timestamp uses the observer
+            timezone's offset at the event.
         """
         if type(count) is not int:
             raise TypeError("'count' must be an integer.")
@@ -758,10 +773,21 @@ class ITLocation:
     ) -> CrescentForecast:
         """Evaluate evenings from an explicit timezone-aware new-moon conjunction.
 
-        The first evening is the conjunction's civil date in the observer's
-        timezone. Events use their respective dates and timezone offsets.
-        Criterion indices are 0 (Odeh), 1 (Yallop), and 2 (Shaukat).
-        Evenings without an observation window have a status and no score.
+        Parameters
+        ----------
+        conjunction : datetime
+            Timezone-aware new-moon instant. The first evening is its local
+            civil date at the observer.
+        days : int, default=3
+            Number of consecutive evenings in the range 1 through 366.
+        criterion : int, default=1
+            Visibility criterion: 0 (Odeh), 1 (Yallop), or 2 (Shaukat).
+
+        Returns
+        -------
+        CrescentForecast
+            UTC conjunction and observer-local event times. Evenings without
+            an observation window have a status and a null score.
         """
         if not isinstance(conjunction, datetime) or conjunction.utcoffset() is None:
             raise ValueError("'conjunction' must be a timezone-aware datetime.")

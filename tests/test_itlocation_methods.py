@@ -68,6 +68,18 @@ def test_set_custom_prayer_angles_negative_value_should_raise(toronto_observer_k
         location.set_custom_prayer_angles(fajr_angle=-5.0)
 
 
+@pytest.mark.parametrize("invalid_angle", [-1.0, float("nan"), float("inf")])
+def test_rejected_custom_angles_leave_method_and_schedule_consistent(
+    toronto_observer_kwargs: dict[str, object], invalid_angle: float,
+) -> None:
+    location = ITLocation(**toronto_observer_kwargs)
+    original = location.prayer_times()
+    with pytest.raises(ValueError, match="isha_angle"):
+        location.set_custom_prayer_angles(fajr_angle=17.0, isha_angle=invalid_angle)
+    assert location.method is original.method
+    assert location.prayer_times() is original
+
+
 def test_set_asr_type_updates_method(toronto_observer_kwargs: dict[str, object]) -> None:
     location = ITLocation(**toronto_observer_kwargs)
     location.set_asr_type(1)

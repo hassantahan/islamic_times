@@ -6,6 +6,7 @@
   elapsed time across timezone offset changes.
 - Fixed the Makkah preset at polar latitudes and exposed which prayer times were
   estimated by a high-latitude rule.
+- Validate custom prayer angles before applying any of the requested changes.
 - Added date-range prayer schedules, a prayer method catalog, two-way tabular
   Hijri conversion, chronological lunar phases, and explicit conjunction forecasts.
 - Reused adaptive map samples, reduced working memory for native visibility

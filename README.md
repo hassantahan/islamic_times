@@ -51,27 +51,27 @@ print(loc.mecca())
 print(loc.visibilities(days=3, criterion=1))
 ```
 
-Output:
+### Example output
 
-```bash
+```text
 Prayer Times at Observer Timezone
         Method:                 Islamic Society of North America (ISNA)
-        Fajr:                   03:52:33 01-06-2025
-        Sunrise:                05:38:36 01-06-2025
-        Ẓuhr:                   13:15:10 01-06-2025
-        ʿAṣr:                   17:20:03 01-06-2025
-        Sunset:                 20:52:27 01-06-2025
-        Maghrib:                20:53:27 01-06-2025
-        ʿIshāʾ:                 22:38:55 01-06-2025
-        Midnight:               01:15:17 02-06-2025
+        Fajr:                   05:37:25 01-04-2025
+        Sunrise:                06:58:25 01-04-2025
+        Ẓuhr:                   13:22:00 01-04-2025
+        ʿAṣr:                   16:56:52 01-04-2025
+        Sunset:                 19:44:35 01-04-2025
+        Maghrib:                19:45:35 01-04-2025
+        ʿIshāʾ:                 21:05:54 01-04-2025
+        Midnight:               01:20:37 02-04-2025
 Mecca
         Distance:               10,505 km               (6,528 mi)
         Direction:              NE                      (+054.611°              (+054° 36′ 40.23″))
 Visibility of New Moon Crescent:
         Criterion:              Yallop
-        20:53:45 26-05-2025:    -999.0  Moonset before the new moon.
-        21:25:40 27-05-2025:    +0.414  A: Easily visible.
-        21:55:34 28-05-2025:    +2.036  A: Easily visible.
+        19:58:24 29-03-2025:    -0.308  F: Not visible; below the Danjon limit.
+        20:36:15 30-03-2025:    +1.683  A: Easily visible.
+        21:14:37 31-03-2025:    +3.966  A: Easily visible.
 ```
 
 See the [calculation API guide](docs/calculations.md) for date ranges, event statuses,
