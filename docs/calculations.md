@@ -101,6 +101,26 @@ Estimated prayers carry the fallback rule in their descriptions. Use the same
 The exported text uses CRLF line endings for compatibility with
 [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545.html).
 
+## Faḍīlah windows for Ẓuhr and ʿAṣr
+
+`observer.sistani_daylight_fadilah()` returns the available preferred windows
+for the observer’s current date. Each result includes `start`, `preferred_by`
+and `end`, with timezone-aware datetimes. These windows are separate from
+the daily timetable and its mosque profile offsets.
+
+Legal noon is the elapsed-time midpoint between sunrise and sunset. The
+calculation uses the observer’s geometric solar position to estimate the
+shadow at legal noon and finds when the afternoon shadow grows by 2/7, 4/7
+and 6/7 of the height of a vertical object. Ẓuhr runs from noon to the 4/7
+crossing, preferably by 2/7. ʿAṣr runs from the 2/7 to the 6/7 crossing,
+preferably by 4/7.
+
+The calculation covers ordinary conditions with a level horizon. A window
+is omitted if the underlying sunrise, sunset or shadow crossing is unavailable.
+The rules are from Sayyid Sistani’s office.
+[Legal noon, rulings 953–954](https://www.sistani.org/persian/book/26575/6319/).
+[Preferred windows, rulings 966–967](https://www.sistani.org/persian/book/26575/6324/).
+
 ## Civil Hijri conversion
 
 ```python

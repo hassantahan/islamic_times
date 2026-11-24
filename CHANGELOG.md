@@ -11,6 +11,8 @@
   Hijri conversion, chronological lunar phases, and explicit conjunction forecasts.
 - Added reusable mosque profiles with JSON round-tripping and per-prayer minute
   adjustments, plus CSV and iCalendar prayer schedule exports.
+- Added estimated Ẓuhr and ʿAṣr faḍīlah windows based on Sayyid Sistani’s
+  ordinary daylight shadow rules.
 - Reused adaptive map samples, reduced working memory for native visibility
   batches, and assembled multiprocessing results as chunks complete.
 - Added the `islamic-times-map` command, an explicit conjunction option, and a

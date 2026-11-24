@@ -42,6 +42,7 @@ from islamic_times import moon_equations as me
 from islamic_times import prayer_times as pt
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
+from islamic_times.prayer_fadilah import FadilahWindow, calculate_sistani_daylight_fadilah
 from islamic_times.prayer_profiles import MosqueProfile
 
 
@@ -388,6 +389,27 @@ class ITLocation:
 
         # Prayers have been calculated so the flag is set to False
         self._mark_prayers_dirty(False)
+
+    def sistani_daylight_fadilah(self) -> dict[str, FadilahWindow]:
+        """Return Sayyid Sistani's ordinary Ẓuhr and ʿAṣr preferred windows.
+
+        Returns
+        -------
+        dict[str, FadilahWindow]
+            Available windows for the observer's current date, with local
+            start, earlier recommended limit, and end.
+
+        Raises
+        ------
+        ValueError
+            Raised when astronomy is stale while auto-calculation is off.
+
+        Notes
+        -----
+        These estimates use the observer's actual solar events and are
+        independent of the selected prayer method or mosque profile offsets.
+        """
+        return calculate_sistani_daylight_fadilah(self.observer_info, self.sun())
 
     def prayer_schedule(
         self, start: date, end: date, *, time_zone: str | tzinfo | None = None, profile: MosqueProfile | None = None,
