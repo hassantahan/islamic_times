@@ -126,8 +126,10 @@ def _method_from_dict(payload: object) -> PrayerMethod:
         angles[key] = Angle(value)
 
     asr_type, midnight_type = payload.get("asr_type"), payload.get("midnight_type")
-    if any(not isinstance(rule, int) or rule not in (0, 1) for rule in (asr_type, midnight_type)):
-        raise ValueError("Prayer method asr_type and midnight_type must each be 0 or 1.")
+    if not isinstance(asr_type, int) or asr_type not in (0, 1, 2):
+        raise ValueError("Prayer method asr_type must be 0, 1, or 2.")
+    if not isinstance(midnight_type, int) or midnight_type not in (0, 1):
+        raise ValueError("Prayer method midnight_type must be 0 or 1.")
     extreme_lats = payload.get("extreme_lats")
     if extreme_lats not in HIGH_LATITUDE_RULES:
         raise ValueError("Unknown high-latitude rule in the prayer method.")

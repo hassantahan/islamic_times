@@ -16,7 +16,10 @@ from typing import List
 from islamic_times import astro_core
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
-from islamic_times.it_dataclasses import Angle, DateTimeInfo, ObserverInfo, Prayer, PrayerMethod, PrayerTimes, SunInfo
+from islamic_times.it_dataclasses import (
+    Angle, AsrConvention, DateTimeInfo, ObserverInfo, Prayer, PrayerMethod, PrayerTimes, SunInfo,
+)
+from islamic_times.prayer_fadilah import calculate_sistani_daylight_fadilah
 
 # Prayer method profiles based on:
 # https://praytimes.org/docs/calculation
@@ -50,11 +53,13 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
     PrayerMethod(
         name="Institute of Geophysics, University of Tehran (Tehran)", 
         keys=('TEHRAN', 'UNIVERSITY OF TEHRAN', 'INSTITUTE OF GEOPHYSICS', 'UOT', 'IOG', 'IOGUOT', 'UOTIOG', 'IGUT', 'UTIG'), 
-        fajr_angle=Angle(17.7), isha_angle=Angle(14), maghrib_angle=Angle(4.5), midnight_type=1
+        fajr_angle=Angle(17.7), isha_angle=Angle(14), maghrib_angle=Angle(4.5), midnight_type=1,
+        asr_type=AsrConvention.SISTANI_PREFERRED,
     ),
     PrayerMethod(name="Shia Ithna Ashari, Leva Research Institute, Qom (Jafari)",
         keys=('JAFARI', 'JAAFARI', 'SHIA', 'SHIA ITHNA ASHARI', 'LEVA', 'LEVA RESEARCH INSTITUTE', 'QOM', 'QUM', 'LRI', 'SIA', 'SIALRI'), 
-        fajr_angle=Angle(16), isha_angle=Angle(14), maghrib_angle=Angle(4), midnight_type=1
+        fajr_angle=Angle(16), isha_angle=Angle(14), maghrib_angle=Angle(4), midnight_type=1,
+        asr_type=AsrConvention.SISTANI_PREFERRED,
     ),
     PrayerMethod(
         name="Muslims of France", 
@@ -209,7 +214,8 @@ def asr_time(noon: datetime, lat: Angle, dec: Angle, ts: int = 0) -> datetime:
     ArithmeticError
         Raised if the required shadow condition is not reachable.
     """
-    # Convert shadow factor from 0/1 to 1/2 for actual calculation
+    if ts not in (AsrConvention.STANDARD, AsrConvention.HANAFI):
+        raise ValueError("The shadow-factor calculation requires the standard or Ḥanafī convention.")
     shadow_factor = ts + 1
     
     # Calculate noon shadow length
@@ -416,7 +422,7 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
             next_target = find_tomorrow_time(observer_date, polar_obs_ex, midnight_angle)
             out[IDX_MIDNIGHT] = replace(out[IDX_MIDNIGHT], time=te.time_midpoint(sunset, next_target))
 
-            if out[IDX_ASR].when is None:
+            if method.asr_type != AsrConvention.SISTANI_PREFERRED and out[IDX_ASR].when is None:
                 asr = asr_time(_require_time(out[IDX_ZUHR]), polar_obs_ex.latitude, sun_dec, method.asr_type)
                 out[IDX_ASR] = replace(out[IDX_ASR], time=asr)
             
@@ -456,8 +462,9 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
         out[IDX_SUNRISE] = replace(out[IDX_SUNRISE], time=safe_sun_time(observer_date, polar_obs, 'rise', STANDARD_SUN_ANGLE))
         out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=safe_sun_time(observer_date, polar_obs, 'set', STANDARD_SUN_ANGLE))
 
-        asr = asr_time(_require_time(out[IDX_ZUHR]), polar_obs.latitude, sun_dec, method.asr_type)
-        out[IDX_ASR] = replace(out[IDX_ASR], time=asr)
+        if method.asr_type != AsrConvention.SISTANI_PREFERRED:
+            asr = asr_time(_require_time(out[IDX_ZUHR]), polar_obs.latitude, sun_dec, method.asr_type)
+            out[IDX_ASR] = replace(out[IDX_ASR], time=asr)
         
     # Repair day-boundary ordering when polar adjustments invert sunrise/sunset.
     sunset = _require_time(out[IDX_SUNSET])
@@ -529,11 +536,16 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     except ArithmeticError:
         fajr_dt = math.inf
     
-    # Calculate ʿAṣr time
-    try:
-        asr_dt = asr_time(sun_info.sun_transit, observer.latitude, sun_info.apparent_declination, method.asr_type)
-    except ArithmeticError as e:
-        asr_dt = str(e)
+    asr_fadilah = None
+    uses_fadilah = method.asr_type == AsrConvention.SISTANI_PREFERRED
+    if uses_fadilah:
+        asr_fadilah = calculate_sistani_daylight_fadilah(observer, sun_info).get("asr")
+        asr_dt = asr_fadilah.start if asr_fadilah else "Preferred ʿAṣr window unavailable."
+    else:
+        try:
+            asr_dt = asr_time(sun_info.sun_transit, observer.latitude, sun_info.apparent_declination, method.asr_type)
+        except ArithmeticError as e:
+            asr_dt = str(e)
     
     # Calculate Maghrib time
     # Only if maghrib is not at sunset
@@ -578,7 +590,7 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
         Prayer("Fajr", fajr_dt, method),
         Prayer("Sunrise", sun_info.sunrise, method),
         Prayer("Ẓuhr", sun_info.sun_transit, method),
-        Prayer("ʿAṣr", asr_dt, method),
+        Prayer("ʿAṣr", asr_dt, method, fadilah=asr_fadilah),
         Prayer("Sunset", sun_info.sunset, method),
         Prayer("Maghrib", maghrib_dt, method),
         Prayer("ʿIshāʾ", isha_dt, method),
@@ -588,7 +600,8 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
     extreme_latitude_reason: str | None = None
 
     # Deal with locations at extreme latitudes
-    if abs(observer.latitude.decimal) > 46.5 and any(prayer.when is None for prayer in prayer_list):
+    fallback_prayers = prayer_list[:3] + prayer_list[4:] if uses_fadilah else prayer_list
+    if abs(observer.latitude.decimal) > 46.5 and any(prayer.when is None for prayer in fallback_prayers):
         warnings.warn("Extreme latitude warning. Prayer times at this latitude are not well established.", stacklevel=2)
         try:
             adjusted = extreme_latitudes(observer_date, observer, prayer_list, sun_info.apparent_declination)

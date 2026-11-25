@@ -82,7 +82,7 @@ class ITLocation:
         pressure: float = 101.325,
         date: Optional[datetime] = None,
         method: str = "JAFARI",
-        asr_type: int = 0,
+        asr_type: int | None = None,
         find_local_tz: bool = False,
         auto_calculate: bool = True,
     ) -> None:
@@ -104,8 +104,9 @@ class ITLocation:
             Observer-local datetime. If ``None``, current UTC time is used.
         method : str, default='JAFARI'
             Prayer method key (for example ``'JAFARI'``, ``'ISNA'``, ``'MWL'``).
-        asr_type : int, default=0
-            ʿAṣr rule selector (``0`` standard, ``1`` Ḥanafī).
+        asr_type : int or None, optional
+            ʿAṣr convention (``0`` standard, ``1`` Ḥanafī, ``2`` Sistani preferred).
+            By default, use the convention of the selected preset.
         find_local_tz : bool | int | float, default=False
             If truthy (or numeric 1), infer timezone from coordinates and date.
         auto_calculate : bool, default=True
@@ -459,15 +460,16 @@ class ITLocation:
 
     # Set the method of calculating prayer times among the available default options
     # The default option (from creation) is the Jaʿfarī method.
-    def set_prayer_method(self, method_key: str = 'JAFARI', asr_type: int = 0) -> None:
+    def set_prayer_method(self, method_key: str = 'JAFARI', asr_type: int | None = None) -> None:
         """Select one of the predefined prayer profiles.
 
         Parameters
         ----------
         method_key : str, default='JAFARI'
             Method alias defined in ``prayer_times.DEFAULT_PRAYER_METHODS``.
-        asr_type : int, default=0
-            ʿAṣr selector (``0`` standard, ``1`` Ḥanafī).
+        asr_type : int or None, optional
+            ʿAṣr convention (``0`` standard, ``1`` Ḥanafī, ``2`` Sistani preferred).
+            By default, use the convention of the selected preset.
 
         Raises
         ------
@@ -477,13 +479,10 @@ class ITLocation:
 
         method = pt.get_prayer_method(method_key)
 
-        if asr_type not in (0, 1):
-            raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
+        if asr_type is not None and asr_type not in (0, 1, 2):
+            raise ValueError(f"'asr_type' must be 0, 1, or 2. Invalid value: {asr_type}")
 
-        if asr_type == 0:
-            self.method = method
-        else:
-            self.method = replace(method, asr_type=asr_type)
+        self.method = method if asr_type is None or asr_type == method.asr_type else replace(method, asr_type=asr_type)
 
         self._refresh_prayers()
     
@@ -548,11 +547,11 @@ class ITLocation:
         Raises
         ------
         ValueError
-            Raised when ``asr_type`` is not ``0`` or ``1``.
+            Raised when ``asr_type`` is not ``0``, ``1``, or ``2``.
         """
 
-        if asr_type not in (0, 1):
-            raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
+        if asr_type not in (0, 1, 2):
+            raise ValueError(f"'asr_type' must be 0, 1, or 2. Invalid value: {asr_type}")
         self.method = replace(self.method, name="Custom", asr_type=asr_type)
         self._refresh_prayers()
 

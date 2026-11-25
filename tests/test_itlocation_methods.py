@@ -16,8 +16,8 @@ def test_set_prayer_method_is_case_insensitive(toronto_observer_kwargs: dict[str
 
 def test_set_prayer_method_rejects_invalid_asr_type(toronto_observer_kwargs: dict[str, object]) -> None:
     location = ITLocation(**toronto_observer_kwargs)
-    with pytest.raises(ValueError, match="'asr_type' must be either 0 or 1"):
-        location.set_prayer_method("ISNA", asr_type=2)
+    with pytest.raises(ValueError, match="'asr_type' must be 0, 1, or 2"):
+        location.set_prayer_method("ISNA", asr_type=3)
 
 
 @pytest.mark.parametrize(
@@ -89,7 +89,7 @@ def test_set_asr_type_updates_method(toronto_observer_kwargs: dict[str, object])
 
 def test_set_asr_type_rejects_invalid_value(toronto_observer_kwargs: dict[str, object]) -> None:
     location = ITLocation(**toronto_observer_kwargs)
-    with pytest.raises(ValueError, match="'asr_type' must be either 0 or 1"):
+    with pytest.raises(ValueError, match="'asr_type' must be 0, 1, or 2"):
         location.set_asr_type(9)
 
 

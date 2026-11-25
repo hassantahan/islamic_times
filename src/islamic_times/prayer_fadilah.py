@@ -1,21 +1,11 @@
 """Preferred daytime prayer windows from Sayyid Sistani's published rulings."""
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from math import inf, isfinite, tan
 
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
-from islamic_times.it_dataclasses import ObserverInfo, SunInfo
-
-
-@dataclass(frozen=True, slots=True)
-class FadilahWindow:
-    """A preferred period and its earlier recommended limit, in local time."""
-
-    start: datetime
-    preferred_by: datetime
-    end: datetime
+from islamic_times.it_dataclasses import FadilahWindow, ObserverInfo, SunInfo
 
 
 def _shadow_ratio(instant: datetime, observer: ObserverInfo) -> float:

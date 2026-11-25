@@ -21,6 +21,7 @@ import math
 from typing import Tuple, ClassVar, Any, Literal
 from datetime import date, datetime, timezone
 from dataclasses import dataclass
+from enum import IntEnum
 
 
 PUBLIC_SCHEMA_VERSION: str = "1.0"
@@ -513,6 +514,31 @@ class DateTimeInfo:
             "hijri": None if self.hijri is None else self.hijri.to_dict(),
         }
 
+class AsrConvention(IntEnum):
+    """Rules for the ʿAṣr entry in a timetable."""
+
+    STANDARD = 0
+    HANAFI = 1
+    SISTANI_PREFERRED = 2
+
+
+@dataclass(frozen=True, slots=True)
+class FadilahWindow:
+    """A preferred period and its earlier recommended limit, in local time."""
+
+    start: datetime
+    preferred_by: datetime
+    end: datetime
+
+    def to_dict(self) -> dict[str, str]:
+        """Serialize the window with local UTC offsets."""
+        return {
+            "start": self.start.isoformat(),
+            "preferred_by": self.preferred_by.isoformat(),
+            "end": self.end.isoformat(),
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class PrayerMethod:
     """
@@ -524,7 +550,7 @@ class PrayerMethod:
         isha_angle (Angle): Isha twilight angle.
         keys (Tuple [str, ...] | None): Optional method identifiers.
         maghrib_angle (Angle): Maghrib angle (if applicable).
-        asr_type (int): Asr shadow factor type.
+        asr_type (int): ʿAṣr convention, as defined by :class:`AsrConvention`.
         midnight_type (int): Midnight definition type.
         extreme_lats (str): High-latitude fallback rule. Defaults to ``ANGLEBASED``.
         isha_offset_minutes (int | None): Fixed minutes after Maghrib, if used.
@@ -569,12 +595,15 @@ class Prayer:
         method (PrayerMethod): The method used for calculation.
         fallback_rule (str | None): Rule used to estimate this event.
         offset_minutes (int): Mosque adjustment applied to the calculated time.
+        fadilah (FadilahWindow | None): Preferred window used for the timetable entry.
+            Its bounds are astronomical estimates before applying mosque offsets.
     """
     name: str
     time: datetime | str | float
     method: PrayerMethod
     fallback_rule: str | None = None
     offset_minutes: int = 0
+    fadilah: FadilahWindow | None = None
 
     @property
     def when(self) -> datetime | None:
@@ -613,6 +642,8 @@ class Prayer:
         }
         if self.offset_minutes:
             result["offset_minutes"] = self.offset_minutes
+        if self.fadilah is not None:
+            result["fadilah"] = self.fadilah.to_dict()
         return result
 
 @dataclass(frozen=True, slots=True)
@@ -655,13 +686,14 @@ class PrayerTimes:
         if self.extreme_latitude_applied:
             reason = self.extreme_latitude_reason or "Extreme latitude fallback applied."
             extreme_line = f"\tExtreme Latitude:\t{self.extreme_latitude_rule} ({reason})\n"
+        asr_note = " (Faḍīlah start)" if self.asr.fadilah is not None and not self.asr.offset_minutes else ""
         return ("Prayer Times at Observer Timezone\n"
                 f"\tMethod:\t\t\t{self.method.name}\n"
                 f"{extreme_line}"
                 f"\t{self.fajr.name}:\t\t\t{self.fajr.time_str}\n"
                 f"\t{self.sunrise.name}:\t\t{self.sunrise.time_str}\n"
                 f"\t{self.zuhr.name}:\t\t\t{self.zuhr.time_str}\n"
-                f"\t{self.asr.name}:\t\t\t{self.asr.time_str}\n"
+                f"\t{self.asr.name}:\t\t\t{self.asr.time_str}{asr_note}\n"
                 f"\t{self.sunset.name}:\t\t\t{self.sunset.time_str}\n"
                 f"\t{self.maghrib.name}:\t\t{self.maghrib.time_str}\n"
                 f"\t{self.isha.name}:\t\t\t{self.isha.time_str}\n"

@@ -60,7 +60,7 @@ def test_init_rejects_unknown_prayer_method(toronto_observer_kwargs: dict[str, o
 def test_init_rejects_invalid_asr_type(toronto_observer_kwargs: dict[str, object]) -> None:
     kwargs = dict(toronto_observer_kwargs)
     kwargs["asr_type"] = 3
-    with pytest.raises(ValueError, match="'asr_type' must be either 0 or 1"):
+    with pytest.raises(ValueError, match="'asr_type' must be 0, 1, or 2"):
         ITLocation(**kwargs)
 
 

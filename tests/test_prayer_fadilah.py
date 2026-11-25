@@ -7,6 +7,9 @@ import pytest
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from islamic_times.islamic_times import ITLocation
+from islamic_times.it_dataclasses import AsrConvention
+from islamic_times.prayer_calendar import prayer_schedule_to_ics
+from islamic_times.prayer_profiles import MosqueProfile
 
 
 @pytest.mark.parametrize(
@@ -48,3 +51,32 @@ def test_polar_day_does_not_use_a_fallback_for_fadilah() -> None:
     with pytest.warns(UserWarning, match="Extreme latitude"):
         observer = ITLocation(latitude=69.65, longitude=18.96, date=local_date)
     assert observer.sistani_daylight_fadilah() == {}
+    assert observer.prayer_times().asr.when is None
+    assert observer.prayer_times().asr.fadilah is None
+
+
+@pytest.mark.parametrize("method", ["JAFARI", "TEHRAN"])
+def test_shia_presets_schedule_preferred_asr_and_allow_explicit_overrides(method: str) -> None:
+    local_date = datetime(2026, 11, 25, 12, tzinfo=ZoneInfo("America/Toronto"))
+    observer = ITLocation(latitude=43.65, longitude=-79.38, date=local_date, method=method)
+    window = observer.sistani_daylight_fadilah()["asr"]
+    asr = observer.prayer_times().asr
+    assert asr.method.asr_type == AsrConvention.SISTANI_PREFERRED
+    assert asr.when == window.start
+    assert asr.fadilah == window
+    assert asr.to_dict()["fadilah"]["end"] == window.end.isoformat()
+
+    profile = MosqueProfile.from_preset("Local", method)
+    restored = MosqueProfile.from_dict(profile.to_dict())
+    day = local_date.date()
+    schedule = observer.prayer_schedule(day, day, profile=restored)
+    assert schedule[0].prayers.asr.fadilah == window
+    assert "preferred ʿAṣr window" in prayer_schedule_to_ics(schedule).replace("\r\n ", "")
+
+    observer.set_prayer_method(method, asr_type=AsrConvention.STANDARD)
+    standard = observer.prayer_times().asr
+    observer.set_asr_type(AsrConvention.HANAFI)
+    hanafi = observer.prayer_times().asr
+    assert window.end < standard.when < hanafi.when
+    assert standard.fadilah is None
+    assert hanafi.fadilah is None

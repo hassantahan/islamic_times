@@ -93,6 +93,8 @@ def _event_lines(
     notes = []
     if profile_name is not None:
         notes.append(f"Mosque profile: {profile_name}")
+    if prayer.fadilah is not None:
+        notes.append("Timed from the start of Sayyid Sistani’s preferred ʿAṣr window.")
     if prayer.fallback_rule is not None:
         notes.append(f"Estimated using {prayer.fallback_rule}.")
     if prayer.offset_minutes:

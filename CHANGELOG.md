@@ -13,6 +13,8 @@
   adjustments, plus CSV and iCalendar prayer schedule exports.
 - Added estimated Ẓuhr and ʿAṣr faḍīlah windows based on Sayyid Sistani’s
   ordinary daylight shadow rules.
+- Jaʿfarī and Tehran use the opening of the preferred ʿAṣr window as the
+  default timetable entry and expose the full window on the prayer result.
 - Reused adaptive map samples, reduced working memory for native visibility
   batches, and assembled multiprocessing results as chunks complete.
 - Added the `islamic-times-map` command, an explicit conjunction option, and a

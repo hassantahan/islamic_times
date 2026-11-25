@@ -103,10 +103,26 @@ The exported text uses CRLF line endings for compatibility with
 
 ## Faḍīlah windows for Ẓuhr and ʿAṣr
 
+`JAFARI` and `TEHRAN` use the start of Sayyid Sistani’s preferred ʿAṣr
+window for the timetable entry. Read `observer.prayer_times().asr.fadilah`
+for the whole window. Under Sistani’s ruling, ʿAṣr can be offered as soon as
+Ẓuhr has been prayed. [Prayer timing, ruling 717](https://www.sistani.org/english/book/48/2209/).
+
+| `asr_type` | Timetable convention | Source |
+| --- | --- | --- |
+| `0` | One object height added to the noon shadow, the Standard convention | [Mālikī, Shāfiʿī, and Ḥanbalī rule](https://islamweb.net/ar/fatwa/print.php?id=117832) |
+| `1` | Two object heights added to the noon shadow, the Ḥanafī convention | [Al-Marghīnānī, al-Hidāyah](https://parallelquran.com/fiqh/al-hidaya/9/) |
+| `2` | Start of Sistani’s preferred window | [Sistani, rulings 966–967](https://www.sistani.org/persian/book/26575/6324/) |
+
+Omit `asr_type` to use the preset. The selector also accepts the corresponding
+`AsrConvention` enum from `islamic_times.it_dataclasses`. CSV and iCalendar use
+the selected entry, with a mosque offset if configured. Serialized mosque profiles
+retain their selected convention. The window bounds always describe the
+astronomical estimate before offsets.
+
 `observer.sistani_daylight_fadilah()` returns the available preferred windows
 for the observer’s current date. Each result includes `start`, `preferred_by`
-and `end`, with timezone-aware datetimes. These windows are separate from
-the daily timetable and its mosque profile offsets.
+and `end`, with timezone-aware datetimes. The accessor works with any prayer preset.
 
 Legal noon is the elapsed-time midpoint between sunrise and sunset. The
 calculation uses the observer’s geometric solar position to estimate the
