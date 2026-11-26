@@ -36,6 +36,9 @@ jobs:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_ARCHS_LINUX: auto
           CIBW_ARCHS_WINDOWS: auto
+          CIBW_ENVIRONMENT_LINUX: >-
+            PIP_CONSTRAINT=/project/.github/linux-wheel-constraints.txt
+            PIP_BUILD_CONSTRAINT=/project/.github/linux-wheel-constraints.txt
           PYTHONUTF8: 1
 
       - name: Move wheels to dist folder
