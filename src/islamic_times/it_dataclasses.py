@@ -18,12 +18,15 @@ Contents:
 
 
 import math
-from typing import Tuple, ClassVar, Any
-from datetime import datetime
+from typing import Tuple, ClassVar, Any, Literal
+from datetime import date, datetime, timezone
 from dataclasses import dataclass
+from enum import IntEnum
 
 
 PUBLIC_SCHEMA_VERSION: str = "1.0"
+PRAYER_KEYS = ("fajr", "zuhr", "asr", "maghrib", "isha")
+PRAYER_EVENT_KEYS = ("fajr", "sunrise", "zuhr", "asr", "sunset", "maghrib", "isha", "midnight")
 
 
 def _serialize_time_value(value: datetime | str | float) -> dict[str, Any]:
@@ -511,6 +514,41 @@ class DateTimeInfo:
             "hijri": None if self.hijri is None else self.hijri.to_dict(),
         }
 
+class AsrConvention(IntEnum):
+    """Rules for the ʿAṣr entry in a timetable."""
+
+    STANDARD = 0
+    HANAFI = 1
+    SISTANI_PREFERRED = 2
+
+
+@dataclass(frozen=True, slots=True)
+class FadilahWindow:
+    """A preferred period in local time, with an earlier target when applicable.
+
+    ``estimated`` flags a modelled sky sign. When only the opening can be
+    timed, ``end`` is None and ``end_sign`` identifies what to observe.
+    """
+
+    start: datetime
+    preferred_by: datetime | None
+    end: datetime | None
+    estimated: bool = False
+    end_sign: str | None = None
+
+    def to_dict(self, *, timespec: str = "auto") -> dict[str, str | bool | None]:
+        """Serialize the window with local UTC offsets."""
+        window: dict[str, str | bool | None] = {"start": self.start.isoformat(timespec=timespec)}
+        if self.preferred_by is not None:
+            window["preferred_by"] = self.preferred_by.isoformat(timespec=timespec)
+        window["end"] = self.end.isoformat(timespec=timespec) if self.end is not None else None
+        if self.end_sign is not None:
+            window["end_sign"] = self.end_sign
+        if self.estimated:
+            window["estimated"] = True
+        return window
+
+
 @dataclass(frozen=True, slots=True)
 class PrayerMethod:
     """
@@ -519,12 +557,21 @@ class PrayerMethod:
     Attributes:
         name (str): Method name.
         fajr_angle (Angle): Fajr twilight angle.
-        isha_angle (Angle): Isha twilight angle.
+        isha_angle (Angle): Twilight angle for angle-based ʿIshāʾ.
         keys (Tuple [str, ...] | None): Optional method identifiers.
         maghrib_angle (Angle): Maghrib angle (if applicable).
-        asr_type (int): Asr shadow factor type.
+        asr_type (int): ʿAṣr convention, as defined by :class:`AsrConvention`.
         midnight_type (int): Midnight definition type.
-        extreme_lats (str): The method on how to deal with prayer times at extreme latitudes. Default is Nearest Latitude method.
+        extreme_lats (str): High-latitude fallback rule. Defaults to ``ANGLEBASED``.
+        isha_offset_minutes (int | None): Fixed minutes after Maghrib, if used.
+        ramadan_isha_offset_minutes (int | None): Ramadan override for the fixed interval.
+        maghrib_offset_minutes (int | None): Minutes after sunset for a sunset-based
+            Maghrib. None retains the historical one-minute convention.
+        use_isha_fadilah (bool): Use the start of Sistani's estimated preferred
+            ʿIshāʾ window in place of a twilight angle or fixed interval.
+        western_redness_model (str): Estimator for the shared evening faḍīlah boundary.
+        fajr_fadilah_end_degrees (float | None): Optional local solar depression
+            for the end of Fajr faḍīlah. None uses civil dawn.
     """
     name: str
     fajr_angle: Angle
@@ -534,6 +581,19 @@ class PrayerMethod:
     asr_type: int = 0
     midnight_type: int = 0
     extreme_lats: str = 'ANGLEBASED'
+    isha_offset_minutes: int | None = None
+    ramadan_isha_offset_minutes: int | None = None
+    maghrib_offset_minutes: int | None = None
+    use_isha_fadilah: bool = False
+    western_redness_model: Literal["seasonal", "solar_descent", "blend"] = "seasonal"
+    fajr_fadilah_end_degrees: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.western_redness_model not in ("seasonal", "solar_descent", "blend"):
+            raise ValueError("western_redness_model must be 'seasonal', 'solar_descent' or 'blend'.")
+        end = self.fajr_fadilah_end_degrees
+        if end is not None and (type(end) not in (int, float) or not 0 < end < self.fajr_angle.decimal):
+            raise ValueError("Fajr faḍīlah end angle must be above 0° and smaller than the Fajr angle.")
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize prayer-method configuration with explicit units."""
@@ -548,6 +608,12 @@ class PrayerMethod:
             "asr_type": self.asr_type,
             "midnight_type": self.midnight_type,
             "extreme_lats": self.extreme_lats,
+            "isha_offset_minutes": self.isha_offset_minutes,
+            "ramadan_isha_offset_minutes": self.ramadan_isha_offset_minutes,
+            "maghrib_offset_minutes": self.maghrib_offset_minutes,
+            "use_isha_fadilah": self.use_isha_fadilah,
+            "western_redness_model": self.western_redness_model,
+            "fajr_fadilah_end_degrees": self.fajr_fadilah_end_degrees,
         }
 
 @dataclass(frozen=True, slots=True)
@@ -559,10 +625,32 @@ class Prayer:
         name (str): Name of the prayer.
         time (datetime | str | float): Time of the prayer or status.
         method (PrayerMethod): The method used for calculation.
+        fallback_rule (str | None): Rule used to estimate this event.
+        offset_minutes (int): Mosque adjustment applied to the calculated time.
+        fadilah (FadilahWindow | None): Preferred window used for the timetable entry.
+            Its bounds are astronomical estimates before applying mosque offsets.
     """
     name: str
     time: datetime | str | float
     method: PrayerMethod
+    fallback_rule: str | None = None
+    offset_minutes: int = 0
+    fadilah: FadilahWindow | None = None
+
+    @property
+    def when(self) -> datetime | None:
+        """Return the event datetime when available."""
+        return self.time if isinstance(self.time, datetime) else None
+
+    @property
+    def status(self) -> Literal["calculated", "estimated", "unavailable"]:
+        """Describe the provenance or availability of this event."""
+        if self.when is None:
+            return "unavailable"
+        # Fajr is timed by dawn even when its preferred *end* uses a local estimate.
+        if self.fallback_rule is not None or (self.name != "Fajr" and self.fadilah is not None and self.fadilah.estimated):
+            return "estimated"
+        return "calculated"
 
     @property
     def time_str(self) -> str:
@@ -577,14 +665,21 @@ class Prayer:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize a prayer event and its underlying method context."""
-        return {
+        result = {
             "schema_version": PUBLIC_SCHEMA_VERSION,
             "type": "Prayer",
             "name": self.name,
             "time": _serialize_time_value(self.time),
             "time_display": self.time_str,
             "method_name": self.method.name,
+            "status": self.status,
+            "fallback_rule": self.fallback_rule,
         }
+        if self.offset_minutes:
+            result["offset_minutes"] = self.offset_minutes
+        if self.fadilah is not None:
+            result["fadilah"] = self.fadilah.to_dict()
+        return result
 
 @dataclass(frozen=True, slots=True)
 class PrayerTimes:
@@ -604,6 +699,7 @@ class PrayerTimes:
         extreme_latitude_applied (bool): Whether an extreme-latitude fallback was applied.
         extreme_latitude_rule (str | None): Rule used when fallback was applied.
         extreme_latitude_reason (str | None): Human-readable reason for fallback activation.
+        mosque_profile_name (str | None): Local profile applied to these prayer times.
     """
 
     method: PrayerMethod
@@ -618,19 +714,21 @@ class PrayerTimes:
     extreme_latitude_applied: bool = False
     extreme_latitude_rule: str | None = None
     extreme_latitude_reason: str | None = None
+    mosque_profile_name: str | None = None
 
     def __str__(self):
         extreme_line = ""
         if self.extreme_latitude_applied:
             reason = self.extreme_latitude_reason or "Extreme latitude fallback applied."
             extreme_line = f"\tExtreme Latitude:\t{self.extreme_latitude_rule} ({reason})\n"
+        asr_note = " (Faḍīlah start)" if self.asr.fadilah is not None and not self.asr.offset_minutes else ""
         return ("Prayer Times at Observer Timezone\n"
                 f"\tMethod:\t\t\t{self.method.name}\n"
                 f"{extreme_line}"
                 f"\t{self.fajr.name}:\t\t\t{self.fajr.time_str}\n"
                 f"\t{self.sunrise.name}:\t\t{self.sunrise.time_str}\n"
                 f"\t{self.zuhr.name}:\t\t\t{self.zuhr.time_str}\n"
-                f"\t{self.asr.name}:\t\t\t{self.asr.time_str}\n"
+                f"\t{self.asr.name}:\t\t\t{self.asr.time_str}{asr_note}\n"
                 f"\t{self.sunset.name}:\t\t\t{self.sunset.time_str}\n"
                 f"\t{self.maghrib.name}:\t\t{self.maghrib.time_str}\n"
                 f"\t{self.isha.name}:\t\t\t{self.isha.time_str}\n"
@@ -638,26 +736,39 @@ class PrayerTimes:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize full prayer-time output as a stable API payload."""
-        return {
+        result = {
             "schema_version": PUBLIC_SCHEMA_VERSION,
             "type": "PrayerTimes",
             "method": self.method.to_dict(),
-            "prayers": {
-                "fajr": self.fajr.to_dict(),
-                "sunrise": self.sunrise.to_dict(),
-                "zuhr": self.zuhr.to_dict(),
-                "asr": self.asr.to_dict(),
-                "sunset": self.sunset.to_dict(),
-                "maghrib": self.maghrib.to_dict(),
-                "isha": self.isha.to_dict(),
-                "midnight": self.midnight.to_dict(),
-            },
+            "prayers": {key: getattr(self, key).to_dict() for key in PRAYER_EVENT_KEYS},
             "extreme_latitude": {
                 "applied": self.extreme_latitude_applied,
                 "rule": self.extreme_latitude_rule,
                 "reason": self.extreme_latitude_reason,
             },
         }
+        if self.mosque_profile_name is not None:
+            result["mosque_profile_name"] = self.mosque_profile_name
+        return result
+
+@dataclass(frozen=True, slots=True)
+class PrayerDay:
+    """A prayer schedule for one observer-local Gregorian civil date."""
+
+    date: date
+    hijri: IslamicDateInfo
+    prayers: PrayerTimes
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the civil date and the day's prayer schedule."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "PrayerDay",
+            "date": self.date.isoformat(),
+            "hijri": self.hijri.to_dict(),
+            "prayers": self.prayers.to_dict(),
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class MeccaInfo:
@@ -875,6 +986,61 @@ class Visibilities:
             "type": "Visibilities",
             "criterion": self.criterion,
             "entries": entries,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CrescentEvening:
+    """Observer-local events and model result for one evening."""
+
+    date: date
+    status: Literal[
+        "evaluated", "moonset_before_conjunction", "moonset_before_sunset",
+        "no_sunset_or_moonset", "no_sunset", "no_moonset", "best_time_before_conjunction",
+    ]
+    sunset: datetime | None
+    moonset: datetime | None
+    best_time: datetime | None
+    score: float | None
+    classification: str
+
+    @property
+    def lag_minutes(self) -> float | None:
+        """Return the signed elapsed time between sunset and moonset."""
+        if self.sunset is None or self.moonset is None:
+            return None
+        return (self.moonset.astimezone(timezone.utc) - self.sunset.astimezone(timezone.utc)).total_seconds() / 60
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the evening with ISO timestamps and a nullable score."""
+        return {
+            "date": self.date.isoformat(),
+            "status": self.status,
+            "sunset": self.sunset.isoformat() if self.sunset is not None else None,
+            "moonset": self.moonset.isoformat() if self.moonset is not None else None,
+            "best_time": self.best_time.isoformat() if self.best_time is not None else None,
+            "lag_minutes": self.lag_minutes,
+            "score": self.score,
+            "classification": self.classification,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CrescentForecast:
+    """Crescent visibility for one explicit conjunction and observer."""
+
+    conjunction: datetime
+    criterion: str
+    evenings: tuple[CrescentEvening, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the conjunction and forecast nights in chronological order."""
+        return {
+            "schema_version": PUBLIC_SCHEMA_VERSION,
+            "type": "CrescentForecast",
+            "conjunction": self.conjunction.isoformat(),
+            "criterion": self.criterion,
+            "evenings": [evening.to_dict() for evening in self.evenings],
         }
 
 

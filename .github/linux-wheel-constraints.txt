@@ -1,0 +1,3 @@
+# NumPy 2.2.6 supports CPython 3.10–3.13 and the GCC in manylinux2014.
+# Linux wheel builds use these headers. The runtime dependency is set in pyproject.toml.
+numpy==2.2.6

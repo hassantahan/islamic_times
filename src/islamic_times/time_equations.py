@@ -11,12 +11,12 @@ calculation layers, including:
 - utility helpers for midpoint and offset formatting.
 """
 
-import math
 import atexit
+from math import floor
 from typing import Tuple, Dict, Optional, Any
 from warnings import warn
-from datetime import datetime, time
-from islamic_times.it_dataclasses import Angle
+from datetime import date, datetime, time, timedelta, timezone
+from islamic_times.it_dataclasses import Angle, DateTimeInfo, IslamicDateInfo
 
 # Constants used in astronomical calculations.
 J2000: float                = 2451545.0
@@ -181,6 +181,125 @@ def find_timezone(lat: float, long: float, day: datetime) -> Any:
     timezone_str = find_timezone_name(lat, long, day)
     return _get_timezone_object(timezone_str)
 
+
+def observer_datetime_info(value: datetime) -> DateTimeInfo:
+    """Build the Julian-date, time-scale, and Hijri context for an aware instant."""
+    from islamic_times import astro_core
+
+    offset = value.utcoffset()
+    if offset is None:
+        raise ValueError("Input datetime must include timezone information.")
+    jd = astro_core.gregorian_to_jd(value, offset.total_seconds() / 3600)
+    tt_utc, ut1_utc, delta_t = resolve_time_scales(jd)
+    return DateTimeInfo(
+        date=value,
+        jd=jd,
+        deltaT=delta_t,
+        tt_minus_utc=tt_utc,
+        ut1_minus_utc=ut1_utc,
+        hijri=IslamicDateInfo(*gregorian_to_hijri(value.year, value.month, value.day)),
+    )
+
+
+def _civil_midnight_offset(midnight: datetime, context: datetime) -> float:
+    """Effective UTC offset at the first instant of a civil date, including clock changes."""
+    offset = context.utcoffset()
+    if offset is None:
+        return 0.0
+    nominal = midnight.replace(tzinfo=timezone.utc)
+    guess = nominal - offset
+    zone = context.tzinfo
+    if (guess.astimezone(zone).replace(tzinfo=None) == midnight
+            and (guess - timedelta(seconds=1)).astimezone(zone).date() < midnight.date()):
+        return offset.total_seconds() / 3600
+
+    # Searching in UTC also handles zones that skip midnight or repeat it.
+    # ZoneInfo and pytz both convert unambiguously in this direction.
+    lo, hi = -86400, 86400
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if (nominal + timedelta(seconds=mid)).astimezone(zone).date() < midnight.date():
+            lo = mid
+        else:
+            hi = mid
+    return -hi / 3600
+
+
+def civil_day_offsets(context: datetime) -> tuple[float, float]:
+    """Return the UTC offsets delimiting the observer's local calendar day."""
+    if context.tzinfo is None or isinstance(context.tzinfo, timezone):
+        offset = context.utcoffset() or timedelta(0)
+        return (offset.total_seconds() / 3600,) * 2
+    midnight = datetime.combine(context.date(), datetime.min.time())
+    return _civil_midnight_offset(midnight, context), _civil_midnight_offset(midnight + timedelta(days=1), context)
+
+
+def local_event_datetime(value: datetime, context: DateTimeInfo) -> datetime:
+    """Convert a native wall time from its solver offset to the observer timezone."""
+    offset = context.date.utcoffset()
+    if offset is None:
+        return value
+    instant = value.replace(tzinfo=timezone(offset)).astimezone(timezone.utc)
+    return instant.astimezone(context.date.tzinfo)
+
+
+def add_elapsed_time(value: datetime, duration: timedelta) -> datetime:
+    """Add elapsed time, including across timezone offset changes."""
+    if value.utcoffset() is None:
+        return value + duration
+    return (value.astimezone(timezone.utc) + duration).astimezone(value.tzinfo)
+
+
+# Tabular Islamic calendar, Friday epoch and 30-year type II leap cycle.
+_CIVIL_HIJRI_EPOCH = date(622, 7, 19)
+
+
+def _hijri_year_start(year: int) -> int:
+    """Return the number of days from the civil Hijri epoch to year start."""
+    return 354 * (year - 1) + (3 + 11 * year) // 30
+
+
+def _hijri_month_start(month: int) -> int:
+    """Return the day index of the first day of a month within a Hijri year."""
+    return 29 * (month - 1) + month // 2
+
+
+def gregorian_to_civil_hijri(value: date) -> IslamicDateInfo:
+    """Convert a Gregorian civil date to the tabular Islamic calendar.
+
+    Uses a midnight day boundary and the type II leap cycle from 1 Muḥarram
+    1 AH (19 July 622 in the proleptic Gregorian calendar).
+    """
+    if not isinstance(value, date) or isinstance(value, datetime):
+        raise TypeError("'value' must be a Gregorian date.")
+    days = (value - _CIVIL_HIJRI_EPOCH).days
+    if days < 0:
+        raise ValueError("'value' must be on or after the civil Hijri epoch.")
+    year = (30 * days + 10646) // 10631
+    day_of_year = days - _hijri_year_start(year)
+    month = 1
+    while month < 12 and day_of_year >= _hijri_month_start(month + 1):
+        month += 1
+    return IslamicDateInfo(year, month, day_of_year - _hijri_month_start(month) + 1)
+
+
+def civil_hijri_to_gregorian(year: int, month: int, day: int) -> date:
+    """Convert a tabular Hijri date to a proleptic Gregorian civil date."""
+    if any(type(part) is not int for part in (year, month, day)):
+        raise TypeError("Hijri year, month, and day must be integers.")
+    if not 1 <= year <= gregorian_to_civil_hijri(date.max).hijri_year or not 1 <= month <= 12:
+        raise ValueError("Hijri year or month is out of range.")
+    year_start = _hijri_year_start(year)
+    month_start = _hijri_month_start(month)
+    if month == 12:
+        month_length = _hijri_year_start(year + 1) - year_start - month_start
+    else:
+        month_length = _hijri_month_start(month + 1) - month_start
+    if not 1 <= day <= month_length:
+        raise ValueError("Hijri day is out of range for the selected month.")
+    ordinal = _CIVIL_HIJRI_EPOCH.toordinal() + year_start + month_start + day - 1
+    return date.fromordinal(ordinal)
+
 def fraction_of_day(date: datetime) -> float:
     """Return elapsed fraction of the civil day for a datetime.
 
@@ -258,9 +377,6 @@ def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
     from islamic_times._legacy_py_impl import time_equations as legacy_te
     return legacy_te.jd_to_gregorian(jd, adjust_for_tz_diff)
 
-# Look to Jean Meeus' "Astronomical Algorithms".
-# Limitation: this civil-date conversion assumes midnight day boundaries.
-# Religious sunset-based day boundaries are handled at higher application layers.
 def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tuple[int, int, int]:
     """Convert Gregorian civil date to Hijri civil date tuple.
 
@@ -271,7 +387,7 @@ def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tupl
     month : int
         Gregorian month.
     day : float
-        Gregorian day value.
+        Gregorian day value. The fractional part is ignored for civil dates.
     zone : int, default 0
         Retained for compatibility. Currently unused.
 
@@ -280,6 +396,15 @@ def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tupl
     tuple[int, int, int]
         Hijri year, month, and day.
     """
+    try:
+        civil_date = date(year, month, 1) + timedelta(days=floor(day) - 1)
+    except (TypeError, ValueError, OverflowError):
+        civil_date = None
+    if civil_date is not None and civil_date >= _CIVIL_HIJRI_EPOCH:
+        hijri = gregorian_to_civil_hijri(civil_date)
+        return hijri.hijri_year, hijri.hijri_month, hijri.hijri_day
+
+    # Retain the legacy Meeus arithmetic for inputs outside the civil calendar.
     x = year
     m = month
 
@@ -299,11 +424,6 @@ def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tupl
             day = 28
         else:
             day = 30
-
-    b = int(365.25 * x) + int(30.6001 * (m + 1)) + day + 1722519 + beta
-    c = int((b - 122.1) / 365.25)
-    d = int(365.25 * c)
-    e = int((b - d) / 30.6001)
 
     if x % 4 == 0:
         w = 1
@@ -493,23 +613,19 @@ def time_midpoint(datetime1: datetime, datetime2: datetime) -> datetime:
     Raises
     ------
     TypeError
-        If either input is not a ``datetime`` instance.
-    ValueError
-        If either value represents a missing event sentinel.
+        If either input is not a datetime or only one input is timezone-aware.
     """
     if type(datetime1) is not datetime or type(datetime2) is not datetime:
         raise TypeError
     
-    if datetime1 == math.inf or datetime2 == math.inf:
-        raise ValueError
+    if datetime1.utcoffset() is None and datetime2.utcoffset() is None:
+        return datetime1 + (datetime2 - datetime1) / 2
+    if datetime1.utcoffset() is None or datetime2.utcoffset() is None:
+        raise TypeError("Both midpoint endpoints must be naive or both timezone-aware.")
 
-    # Calculate the difference
-    difference = datetime2 - datetime1
-
-    # Calculate the midpoint
-    midpoint = datetime1 + difference / 2
-
-    return midpoint
+    start_utc = datetime1.astimezone(timezone.utc)
+    end_utc = datetime2.astimezone(timezone.utc)
+    return (start_utc + (end_utc - start_utc) / 2).astimezone(datetime1.tzinfo)
 
 # Simple way to make the offset look nice
 def format_utc_offset(utc_offset: float) -> str:

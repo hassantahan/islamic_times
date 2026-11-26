@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools>=70",
+    "setuptools>=77",
     "wheel",
     "numpy>=1.22",
     "setuptools_scm[toml]>=7",
@@ -13,13 +13,13 @@ dynamic = ["version"]
 description = "Islamic astronomical calculations, prayer times, Hijri conversion, and crescent visibility."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Hassan Tahan", email = "contact@hassantahan.com" }]
 keywords = ["islamic", "astronomy", "prayer-times", "hijri", "crescent-visibility"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -29,7 +29,11 @@ dependencies = [
     "numpy",
     "pytz",
     "timezonefinder",
+    "tzdata; sys_platform == 'win32'",
 ]
+
+[project.scripts]
+islamic-times-map = "islamic_times.mapper.cli:main"
 
 [project.optional-dependencies]
 map = [

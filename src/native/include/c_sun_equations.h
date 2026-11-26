@@ -49,12 +49,13 @@ void compute_sun_result(double jde, double jd_ut1, double local_latitude, double
 /* Solve local sunrise/sunset for JD reference day and target altitude. */
 datetime find_proper_suntime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
         double temperature, double pressure, double angle_deg, char event);
-/* Variant that reuses/returns nutation arrays for performance. */
-datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double latitude, double longitude, double elevation, 
+/* The midnight offsets bound the civil day. utc_offset sets the output clock. */
+datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double start_offset, double end_offset, double latitude, double longitude, double elevation,
         double temperature, double pressure, double angle_deg, char event, double* deltaPsi, double* true_obliquity);
 
 /* Python wrappers exposed by astro_core. */
 PyObject* py_compute_sun(PyObject* self, PyObject* const* args, Py_ssize_t nargs);
+PyObject* py_mean_obliquity(PyObject* self, PyObject* args);
 PyObject* py_find_sun_transit(PyObject* self, PyObject* args);
 PyObject* py_find_proper_suntime(PyObject* self, PyObject* args);
 

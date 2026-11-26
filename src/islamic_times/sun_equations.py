@@ -351,7 +351,7 @@ def find_sun_transit(observer_date: DateTimeInfo, observer: ObserverInfo) -> dat
                                        observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure, 
                                        observer_date.utc_offset)
                                                                                       
-    return sun_transit_dt.replace(tzinfo=observer_date.date.tzinfo)
+    return te.local_event_datetime(sun_transit_dt, observer_date)
 
 def sunrise_or_sunset(observer_date: DateTimeInfo, observer: ObserverInfo, rise_or_set: str, angle: Angle = Angle(5 / 6)) -> datetime | float:
     """Compute either sunrise or sunset for a reference date.
@@ -441,8 +441,9 @@ def find_proper_suntime(observer_date: DateTimeInfo, observer: ObserverInfo, ris
             observer_date.utc_offset,
             angle.decimal,
             event,
+            te.civil_day_offsets(observer_date.date),
         )
     except ValueError as exc:
         raise ArithmeticError("Sun event does not exist for the given location at the given date & time.") from exc
     
-    return suntime.replace(tzinfo=observer_date.date.tzinfo)
+    return te.local_event_datetime(suntime, observer_date)

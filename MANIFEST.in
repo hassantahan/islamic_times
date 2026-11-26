@@ -2,5 +2,9 @@ include README.md
 include LICENSE
 include CONTRIBUTING.md
 include RELEASE_CHECKLIST.md
+include CHANGELOG.md
+recursive-include docs *.md
+include examples/calibrate_western_redness.py
+include examples/validate_western_redness.py
 recursive-include src/native/include *.h
 recursive-include src/native *.c

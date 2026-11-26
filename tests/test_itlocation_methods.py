@@ -16,8 +16,8 @@ def test_set_prayer_method_is_case_insensitive(toronto_observer_kwargs: dict[str
 
 def test_set_prayer_method_rejects_invalid_asr_type(toronto_observer_kwargs: dict[str, object]) -> None:
     location = ITLocation(**toronto_observer_kwargs)
-    with pytest.raises(ValueError, match="'asr_type' must be either 0 or 1"):
-        location.set_prayer_method("ISNA", asr_type=2)
+    with pytest.raises(ValueError, match="'asr_type' must be 0, 1, or 2"):
+        location.set_prayer_method("ISNA", asr_type=3)
 
 
 @pytest.mark.parametrize(
@@ -68,6 +68,18 @@ def test_set_custom_prayer_angles_negative_value_should_raise(toronto_observer_k
         location.set_custom_prayer_angles(fajr_angle=-5.0)
 
 
+@pytest.mark.parametrize("invalid_angle", [-1.0, float("nan"), float("inf")])
+def test_rejected_custom_angles_leave_method_and_schedule_consistent(
+    toronto_observer_kwargs: dict[str, object], invalid_angle: float,
+) -> None:
+    location = ITLocation(**toronto_observer_kwargs)
+    original = location.prayer_times()
+    with pytest.raises(ValueError, match="isha_angle"):
+        location.set_custom_prayer_angles(fajr_angle=17.0, isha_angle=invalid_angle)
+    assert location.method is original.method
+    assert location.prayer_times() is original
+
+
 def test_set_asr_type_updates_method(toronto_observer_kwargs: dict[str, object]) -> None:
     location = ITLocation(**toronto_observer_kwargs)
     location.set_asr_type(1)
@@ -77,7 +89,7 @@ def test_set_asr_type_updates_method(toronto_observer_kwargs: dict[str, object])
 
 def test_set_asr_type_rejects_invalid_value(toronto_observer_kwargs: dict[str, object]) -> None:
     location = ITLocation(**toronto_observer_kwargs)
-    with pytest.raises(ValueError, match="'asr_type' must be either 0 or 1"):
+    with pytest.raises(ValueError, match="'asr_type' must be 0, 1, or 2"):
         location.set_asr_type(9)
 
 

@@ -357,19 +357,11 @@ def moonpos(observer_date: DateTimeInfo, observer: ObserverInfo, deltaPsi: Angle
 
 	return the_moon
 
-# Known limitation:
-# this wrapper returns the four phases following the nearest new moon event
-# from the native implementation.
-# Chapter 49
 def next_phases_of_moon_utc(date: datetime) -> Tuple[datetime, datetime, datetime, datetime]:
-	"""
-	Calculate the next four phases of the Moon (New Moon, First Quarter, Full Moon, Last Quarter) after a given date. See Chapter 49 of *Astronomical Algorithms* for more information.
+	"""Return the legacy nearest event of each principal phase in phase order.
 
-	Parameters:
-		date (datetime): The date to calculate the next phases from.
-
-	Returns:
-		Tuple ([datetime, datetime, datetime, datetime]): The next four phases of the Moon.
+	The returned UTC datetimes are naive. For chronological upcoming phases,
+	use ``ITLocation.upcoming_moon_phases()``.
 	"""
 	import islamic_times.astro_core as fast_astro
 	return fast_astro.next_phases_of_moon_utc(date)

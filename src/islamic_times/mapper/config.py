@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from multiprocessing import cpu_count
 from pathlib import Path
 
@@ -83,12 +83,17 @@ class MapperConfig:
     places_path: str = "map_shp_files/combined_points.shp"
     compute: ComputeConfig = ComputeConfig()
     render: RenderConfig = RenderConfig()
+    conjunction_utc: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.total_months < 1:
             raise ValueError("'total_months' must be >= 1.")
         if self.resolution < 8:
             raise ValueError("'resolution' must be >= 8.")
+        if self.conjunction_utc is not None:
+            if not isinstance(self.conjunction_utc, datetime) or self.conjunction_utc.utcoffset() is None:
+                raise ValueError("'conjunction_utc' must be a timezone-aware datetime.")
+            object.__setattr__(self, "conjunction_utc", self.conjunction_utc.astimezone(timezone.utc))
         region = self.map_region.upper()
         if region not in REGION_COORDINATES:
             raise ValueError(f"'map_region' must be one of: {sorted(REGION_COORDINATES)}.")

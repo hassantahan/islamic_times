@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timezone
 
 from .config import ComputeConfig, MapperConfig, RenderConfig
 from .pipeline import (
@@ -50,7 +49,7 @@ class MapperArgumentParser(argparse.ArgumentParser):
 
 def _format_method_listing() -> str:
     rows: list[str] = ["Available prayer methods (primary key -> display name):"]
-    for method in pt.DEFAULT_PRAYER_METHODS:
+    for method in pt.prayer_method_catalog():
         primary_key = method.keys[0] if method.keys else method.name.upper()
         rows.append(f"{primary_key:<12} {method.name}")
     return "\n".join(rows)
@@ -70,22 +69,29 @@ def _format_criterion_explanation(criterion: int) -> str:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = MapperArgumentParser(description="Generate new-moon visibility maps")
+    parser = MapperArgumentParser(
+        description="Generate new-moon visibility maps", argument_default=argparse.SUPPRESS,
+    )
     subparsers = parser.add_subparsers(dest="command", required=False)
 
     def add_common_args(target: argparse.ArgumentParser, include_perf_report: bool = True) -> None:
-        target.add_argument("--date", type=str, default=None, help="ISO datetime for month/year (e.g. 2025-01-01T00:00:00)")
-        target.add_argument("--master_path", type=str, default="maps/", help="Directory where maps are written")
-        target.add_argument("--total_months", type=int, default=1)
-        target.add_argument("--map_region", type=str, default="WORLD")
-        target.add_argument("--map_mode", type=str, default="category", choices=("raw", "category"))
-        target.add_argument("--resolution", type=int, default=300)
-        target.add_argument("--days_to_generate", type=int, default=3)
-        target.add_argument("--criterion", type=int, default=1, choices=(0, 1, 2))
-        target.add_argument("--save_logs", action="store_true")
-        target.add_argument("--max_workers", type=int, default=None)
+        target.add_argument("--date", help="ISO reference date for choosing the first lunation")
+        target.add_argument("--conjunction", help="Exact first conjunction as an ISO datetime with UTC offset")
+        target.add_argument("--master_path", "--master-path", help="Directory where maps are written")
+        target.add_argument("--total_months", "--total-months", type=int)
+        target.add_argument("--map_region", "--map-region")
+        target.add_argument("--map_mode", "--map-mode", choices=("raw", "category"))
+        target.add_argument("--resolution", type=int)
+        target.add_argument("--days_to_generate", "--days", type=int)
+        target.add_argument("--criterion", type=int, choices=(0, 1, 2))
+        target.add_argument(
+            "--category-compute", choices=("dense", "adaptive"),
+            help="Category grid solver. Dense evaluates every cell, adaptive samples blocks.",
+        )
+        target.add_argument("--save_logs", "--save-logs", action="store_true")
+        target.add_argument("--max_workers", "--max-workers", type=int)
         if include_perf_report:
-            target.add_argument("--perf_report", type=str, default=None, help="Optional JSON output path for timing report")
+            target.add_argument("--perf_report", "--perf-report", help="JSON output path for timing report")
 
     def add_info_args(target: argparse.ArgumentParser) -> None:
         target.add_argument(
@@ -102,12 +108,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "--explain-criterion",
             type=int,
             choices=(0, 1, 2),
-            default=None,
             help="Print details for one visibility criterion and exit.",
         )
 
-    common = argparse.ArgumentParser(add_help=False)
-    cache_common = argparse.ArgumentParser(add_help=False)
+    common = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
+    cache_common = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
     add_common_args(common)
     add_common_args(cache_common, include_perf_report=False)
     add_common_args(parser)
@@ -118,32 +123,47 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("benchmark", parents=[common], help="Generate outputs and emit benchmark JSON")
     cache_parser = subparsers.add_parser("cache", parents=[cache_common], help="Compute and save visibility cache")
     cache_parser.add_argument(
-        "--cache_path",
+        "--cache_path", "--cache-path",
         type=str,
         required=True,
         help="Output cache directory for the tabular cache.",
     )
     export_csv_parser = subparsers.add_parser("export-csv", parents=[cache_common], help="Compute and save CSV visibility data")
     export_csv_parser.add_argument(
-        "--csv_path",
+        "--csv_path", "--csv-path",
         type=str,
         required=True,
         help="Output directory for the CSV export.",
     )
 
     render_cache_parser = subparsers.add_parser(
-        "render-cache", help="Render maps from precomputed cache without recomputing visibilities"
+        "render-cache", argument_default=argparse.SUPPRESS,
+        help="Render maps from precomputed cache without recomputing visibilities",
     )
     render_cache_parser.add_argument(
-        "--cache_path",
+        "--cache_path", "--cache-path",
         type=str,
         required=True,
         help="Path to cache directory or manifest.json",
     )
-    render_cache_parser.add_argument("--master_path", type=str, default=None, help="Override output directory for rendered maps")
-    render_cache_parser.add_argument("--save_logs", action="store_true")
-    render_cache_parser.add_argument("--perf_report", type=str, default=None, help="Optional JSON output path for timing report")
+    render_cache_parser.add_argument("--master_path", "--master-path", help="Override the output directory")
+    render_cache_parser.add_argument("--save_logs", "--save-logs", action="store_true")
+    render_cache_parser.add_argument("--perf_report", "--perf-report", help="JSON output path for timing report")
+    # Defaults belong to the root parser so a subcommand does not overwrite earlier flags.
+    parser.set_defaults(
+        date=None, conjunction=None, master_path=None, total_months=1, map_region="WORLD",
+        map_mode="category", resolution=300, days_to_generate=3, criterion=1, category_compute=None,
+        save_logs=False, max_workers=None, perf_report=None, list_methods=False, list_criteria=False,
+        explain_criterion=None, command=None,
+    )
     return parser
+
+
+def _parse_iso_datetime(value: str) -> datetime:
+    """Parse an ISO reference date or timestamp, including a UTC Z suffix on Python 3.10."""
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value)
 
 
 def _config_from_args(args: argparse.Namespace) -> MapperConfig:
@@ -151,20 +171,29 @@ def _config_from_args(args: argparse.Namespace) -> MapperConfig:
         raise ValueError(
             f"Invalid criterion '{args.criterion}'. Supported values are 0 (Odeh), 1 (Yallop), and 2 (Shaukat)."
         )
-    date = datetime.fromisoformat(args.date) if args.date else datetime.now()
+    date = _parse_iso_datetime(args.date) if args.date else datetime.now(timezone.utc)
+    if date.utcoffset() is not None:
+        date = date.astimezone(timezone.utc)
+    conjunction = _parse_iso_datetime(args.conjunction) if args.conjunction else None
+    default_compute = ComputeConfig()
     return MapperConfig(
         date=date,
         total_months=args.total_months,
         map_region=args.map_region,
         resolution=args.resolution,
-        master_path=args.master_path,
+        master_path=args.master_path or "maps/",
         save_logs=args.save_logs,
         compute=ComputeConfig(
             days_to_generate=args.days_to_generate,
             criterion=args.criterion,
             max_workers=args.max_workers,
+            adaptive_category=(
+                default_compute.adaptive_category if args.category_compute is None
+                else args.category_compute == "adaptive"
+            ),
         ),
         render=RenderConfig(map_mode=args.map_mode),
+        conjunction_utc=conjunction,
     )
 
 
@@ -182,25 +211,7 @@ def main(argv: list[str] | None = None) -> int:
         print(_format_criterion_explanation(args.explain_criterion))
         return 0
 
-    command = args.command or "generate"
-    if command in ("benchmark", "generate"):
-        cfg = _config_from_args(args)
-        perf_path = args.perf_report if command in ("benchmark", "generate") else None
-        generate_maps(cfg, perf_report_path=perf_path)
-        return 0
-    if command == "cache":
-        cfg = _config_from_args(args)
-        cache = build_visibility_cache(cfg)
-        out_path = save_visibility_cache_tabular(cache, args.cache_path)
-        print(f"Saved cache to {Path(out_path)}")
-        return 0
-    if command == "export-csv":
-        cfg = _config_from_args(args)
-        cache = build_visibility_cache(cfg)
-        out_path = save_visibility_cache_tabular(cache, args.csv_path)
-        print(f"Saved CSV export to {Path(out_path)}")
-        return 0
-    if command == "render-cache":
+    if args.command == "render-cache":
         cache = load_visibility_cache_tabular(args.cache_path)
         render_maps_from_cache(
             cache,
@@ -209,4 +220,19 @@ def main(argv: list[str] | None = None) -> int:
             perf_report_path=args.perf_report,
         )
         return 0
-    raise ValueError(f"Unknown mapper command: {command}")
+
+    try:
+        config = _config_from_args(args)
+    except ValueError as error:
+        parser.error(str(error))
+    if args.command in ("cache", "export-csv"):
+        export_csv = args.command == "export-csv"
+        path = args.csv_path if export_csv else args.cache_path
+        output = save_visibility_cache_tabular(build_visibility_cache(config), path)
+        print(f"Saved {'CSV export' if export_csv else 'cache'} to {output}")
+    else:
+        report = args.perf_report
+        if args.command == "benchmark" and report is None:
+            report = str(config.output_root / "benchmark.json")
+        generate_maps(config, perf_report_path=report)
+    return 0

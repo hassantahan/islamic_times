@@ -12,21 +12,27 @@ References:
   - Prayer times calculation methods (https://praytimes.org/docs/calculation)
 """
 
-import islamic_times.astro_core as fast_astro
-from numbers import Number
-from typing import Dict, List, Literal, Optional, Sequence, Tuple
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import date, datetime, time, timedelta, timezone, tzinfo
+from math import isfinite
+from numbers import Number
+from typing import List, Literal, Optional, Sequence, Tuple
+from zoneinfo import ZoneInfo
+
+import islamic_times.astro_core as fast_astro
 from islamic_times.it_dataclasses import (
     Angle,
     BatchVisibilities,
+    CrescentEvening,
+    CrescentForecast,
     DateTimeInfo,
     Distance,
     DistanceUnits,
-    IslamicDateInfo,
+    FadilahWindow,
     MeccaInfo,
     MoonInfo,
     ObserverInfo,
+    PrayerDay,
     PrayerMethod,
     PrayerTimes,
     SunInfo,
@@ -37,26 +43,19 @@ from islamic_times import moon_equations as me
 from islamic_times import prayer_times as pt
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
+from islamic_times.prayer_fadilah import calculate_sistani_daylight_fadilah
+from islamic_times.prayer_profiles import MosqueProfile
 
 
-def _build_prayer_method_alias_map() -> tuple[Dict[str, PrayerMethod], tuple[str, ...]]:
-    """Build constant-time prayer-method alias lookup tables."""
-    alias_map: Dict[str, PrayerMethod] = {}
-    primary_keys: List[str] = []
-
-    for method in pt.DEFAULT_PRAYER_METHODS:
-        method_keys = method.keys or ()
-        if method_keys:
-            primary_keys.append(method_keys[0])
-        for key in method_keys:
-            normalized_key = key.upper()
-            if normalized_key not in alias_map:
-                alias_map[normalized_key] = method
-
-    return alias_map, tuple(primary_keys)
-
-
-_PRAYER_METHOD_ALIAS_MAP, _PRAYER_METHOD_PRIMARY_KEYS = _build_prayer_method_alias_map()
+_PHASE_NAMES = ("New Moon", "First Quarter", "Full Moon", "Last Quarter")
+_CRESCENT_STATUS = {
+    -999: "moonset_before_conjunction",
+    -998: "moonset_before_sunset",
+    -997: "no_sunset_or_moonset",
+    -996: "no_sunset",
+    -995: "no_moonset",
+    -994: "best_time_before_conjunction",
+}
 
 
 class ITLocation:
@@ -84,7 +83,7 @@ class ITLocation:
         pressure: float = 101.325,
         date: Optional[datetime] = None,
         method: str = "JAFARI",
-        asr_type: int = 0,
+        asr_type: int | None = None,
         find_local_tz: bool = False,
         auto_calculate: bool = True,
     ) -> None:
@@ -106,8 +105,9 @@ class ITLocation:
             Observer-local datetime. If ``None``, current UTC time is used.
         method : str, default='JAFARI'
             Prayer method key (for example ``'JAFARI'``, ``'ISNA'``, ``'MWL'``).
-        asr_type : int, default=0
-            ʿAṣr rule selector (``0`` standard, ``1`` Ḥanafī).
+        asr_type : int or None, optional
+            ʿAṣr convention (``0`` standard, ``1`` Ḥanafī, ``2`` Sistani preferred).
+            By default, use the convention of the selected preset.
         find_local_tz : bool | int | float, default=False
             If truthy (or numeric 1), infer timezone from coordinates and date.
         auto_calculate : bool, default=True
@@ -162,7 +162,7 @@ class ITLocation:
         # Normalize user date into observer timezone context.
         date = self._normalize_observer_datetime(date)
 
-        self.observer_dateinfo = self._build_observer_dateinfo(date)
+        self.observer_dateinfo = te.observer_datetime_info(date)
         self.utc_offset = self.observer_dateinfo.utc_offset
 
         # Autocalculation for astronomical parameters
@@ -235,24 +235,6 @@ class ITLocation:
             return
         raise ValueError(error_message)
 
-    def _build_observer_dateinfo(self, date: datetime) -> DateTimeInfo:
-        """Build DateTimeInfo from a timezone-aware datetime."""
-        utc_offset = date.utcoffset()
-        if utc_offset is None:
-            raise ValueError("Input datetime must include timezone information.")
-
-        jd = fast_astro.gregorian_to_jd(date, utc_offset.total_seconds() / 3600)
-        tt_minus_utc, ut1_minus_utc, delta_t = fast_astro.resolve_time_scales(jd)
-        islamic_dates = te.gregorian_to_hijri(date.year, date.month, date.day)
-        return DateTimeInfo(
-            date=date,
-            hijri=IslamicDateInfo(*islamic_dates),
-            jd=jd,
-            deltaT=delta_t,
-            tt_minus_utc=tt_minus_utc,
-            ut1_minus_utc=ut1_minus_utc,
-        )
-
     def _normalize_observer_datetime(self, date: datetime) -> datetime:
         """Return datetime normalized to current observer timezone semantics."""
         if not isinstance(date, datetime):
@@ -321,7 +303,7 @@ class ITLocation:
             new_date = new_date.replace(tzinfo=self.observer_dateinfo.date.tzinfo)
 
         new_date = self._normalize_observer_datetime(new_date)
-        self.observer_dateinfo = self._build_observer_dateinfo(new_date)
+        self.observer_dateinfo = te.observer_datetime_info(new_date)
         self.utc_offset = self.observer_dateinfo.utc_offset
 
         if self.auto_calculate:
@@ -330,34 +312,28 @@ class ITLocation:
             self._mark_astro_dirty(True)
             self._mark_prayers_dirty(True)
 
-    # Calculates the astronomical variables for the moon and sun
+    def _solar_state(self, context: DateTimeInfo) -> tuple[se.Sun, SunInfo]:
+        """Compute solar positions and civil-day events for the observer."""
+        sun = se.sunpos(context, self.observer_info)
+        info = SunInfo(
+            sunrise=self._safe_sun_event(context, self.observer_info, "rise"),
+            sun_transit=se.find_sun_transit(context, self.observer_info),
+            sunset=self._safe_sun_event(context, self.observer_info, "set"),
+            apparent_altitude=sun.apparent_altitude,
+            true_azimuth=sun.true_azimuth,
+            geocentric_distance=sun.geocentric_distance,
+            apparent_declination=sun.apparent_declination,
+            apparent_right_ascension=sun.apparent_right_ascension,
+            greenwich_hour_angle=sun.greenwich_hour_angle,
+            local_hour_angle=sun.local_hour_angle,
+        )
+        return sun, info
+
     def calculate_astro(self) -> None:
-        """Compute sun/moon astronomy and refresh cached dataclass outputs.
-
-        Notes
-        -----
-        This updates internal ``sun_params``/``moon_params`` and public
-        ``sun_info``/``moon_info`` fields. It also clears the astronomy-dirty
-        flag once complete.
-        """
-
-        # Sun & Moon properties calculations
-        # Get Sun and Moon Objects with their parameters
-        self.sun_params: se.Sun = se.sunpos(self.observer_dateinfo, self.observer_info)
-        self.moon_params: me.Moon = me.moonpos(self.observer_dateinfo, self.observer_info, self.sun_params.nutation[0], self.sun_params.true_obliquity)
-
-        # Important Sun Factors placed SunInfo
-        self.sun_info = SunInfo(
-            sunrise=self._safe_sun_event(self.observer_dateinfo, self.observer_info, "rise"),
-            sun_transit=se.find_sun_transit(self.observer_dateinfo, self.observer_info),
-            sunset=self._safe_sun_event(self.observer_dateinfo, self.observer_info, "set"),
-            apparent_altitude=self.sun_params.apparent_altitude,
-            true_azimuth=self.sun_params.true_azimuth,
-            geocentric_distance=self.sun_params.geocentric_distance,
-            apparent_declination=self.sun_params.apparent_declination,
-            apparent_right_ascension=self.sun_params.apparent_right_ascension,
-            greenwich_hour_angle=self.sun_params.greenwich_hour_angle,
-            local_hour_angle=self.sun_params.local_hour_angle
+        """Refresh the cached solar and lunar positions and events for this observer."""
+        self.sun_params, self.sun_info = self._solar_state(self.observer_dateinfo)
+        self.moon_params = me.moonpos(
+            self.observer_dateinfo, self.observer_info, self.sun_params.nutation[0], self.sun_params.true_obliquity,
         )
 
         illumination: float = me.moon_illumination(self.sun_params.apparent_declination, 
@@ -387,7 +363,16 @@ class ITLocation:
         # Astronomical parameters have been calculated so the flag is set to False
         self._mark_astro_dirty(False)
 
-    # Prayer Time Calculations
+    def _prayers_for(
+        self, context: DateTimeInfo, sun: SunInfo, profile: MosqueProfile | None = None,
+    ) -> PrayerTimes:
+        """Calculate the selected method and then apply any local offsets."""
+        if profile is not None and not isinstance(profile, MosqueProfile):
+            raise TypeError("'profile' must be a MosqueProfile.")
+        method: PrayerMethod = self.method if profile is None else profile.method
+        prayers = pt.calculate_prayer_times(context, self.observer_info, sun, method)
+        return prayers if profile is None else profile._apply_offsets(prayers)
+
     def calculate_prayer_times(self) -> None:
         """Compute prayer times from current observer, astronomy, and method state.
 
@@ -402,22 +387,117 @@ class ITLocation:
             "Call `calculate_astro()` first.",
         )
 
-        self.times_of_prayer: PrayerTimes = pt.calculate_prayer_times(self.observer_dateinfo, self.observer_info, self.sun_info, self.method)
+        self.times_of_prayer = self._prayers_for(self.observer_dateinfo, self.sun_info)
 
         # Prayers have been calculated so the flag is set to False
         self._mark_prayers_dirty(False)
 
+    def sistani_daylight_fadilah(self) -> dict[str, FadilahWindow]:
+        """Return Sayyid Sistani's ordinary Ẓuhr and ʿAṣr preferred windows.
+
+        Returns
+        -------
+        dict[str, FadilahWindow]
+            Available windows for the observer's current date, with local
+            start, earlier recommended limit, and end.
+
+        Raises
+        ------
+        ValueError
+            Raised when astronomy is stale while auto-calculation is off.
+
+        Notes
+        -----
+        These estimates use the observer's actual solar events and are
+        independent of the selected prayer method or mosque profile offsets.
+        """
+        return calculate_sistani_daylight_fadilah(self.observer_info, self.sun())
+
+    def sistani_evening_fadilah(self) -> dict[str, FadilahWindow]:
+        """Return estimated non-traveller Maghrib and ʿIshāʾ preferred windows.
+
+        The selected method supplies the rule for local Maghrib and the next
+        morning's Fajr angle. The selected western-redness model supplies
+        the shared boundary. The returned windows are in the observer's timezone
+        and use local solar events, before any latitude substitutions.
+
+        Windows are omitted when their boundaries are unavailable or out of
+        order. When the next dawn crossing is missing, only Maghrib can be
+        estimated. The estimate covers latitudes through 55° in either
+        hemisphere.
+        """
+        times = self.prayer_times()
+        sun = self.sun()
+        sunset, maghrib = sun.sunset, times.maghrib.when
+        if not isinstance(sunset, datetime):
+            return {}
+
+        context, observer = self.observer_dateinfo, self.observer_info
+        if times.maghrib.fallback_rule:
+            maghrib = pt._local_maghrib_time(context, observer, sun, times.method)
+        if not isinstance(maghrib, datetime):
+            return {}
+        next_dawn = pt._local_next_dawn(context, observer, times.method)
+        return pt._evening_fadilah(context, observer, times.method, sunset, maghrib, next_dawn)
+
+    def prayer_schedule(
+        self, start: date, end: date, *, time_zone: str | tzinfo | None = None, profile: MosqueProfile | None = None,
+    ) -> tuple[PrayerDay, ...]:
+        """Calculate an inclusive civil-date range using this observer and prayer method.
+
+        Parameters
+        ----------
+        start, end : date
+            First and last observer-local civil dates.
+        time_zone : str or tzinfo, optional
+            IANA name or timezone object. Defaults to the observer's timezone.
+        profile : MosqueProfile, optional
+            Calculation settings and minute offsets for the entire schedule.
+            Defaults to the observer's current calculation method.
+
+        Returns
+        -------
+        tuple[PrayerDay, ...]
+            One entry per date in ascending order, with each day's UTC offset.
+
+        Notes
+        -----
+        Each day is evaluated from local noon using solar events only. The
+        observer's current date and cached results are preserved.
+        """
+        for day in (start, end):
+            if not isinstance(day, date) or isinstance(day, datetime):
+                raise TypeError("Schedule endpoints must be civil dates.")
+        if end < start:
+            raise ValueError("'end' must be on or after 'start'.")
+        if isinstance(time_zone, str):
+            time_zone = ZoneInfo(time_zone)
+        elif time_zone is not None and not isinstance(time_zone, tzinfo):
+            raise TypeError("'time_zone' must be an IANA name or timezone object.")
+        zone = time_zone or self.observer_dateinfo.date.tzinfo
+        result: list[PrayerDay] = []
+        for offset in range((end - start).days + 1):
+            day = start + timedelta(days=offset)
+            local_noon = te.localize_or_convert_datetime(datetime.combine(day, time(12)), zone)
+            context = te.observer_datetime_info(local_noon)
+            assert context.hijri is not None
+            _, sun = self._solar_state(context)
+            prayers = self._prayers_for(context, sun, profile)
+            result.append(PrayerDay(day, context.hijri, prayers))
+        return tuple(result)
+
     # Set the method of calculating prayer times among the available default options
     # The default option (from creation) is the Jaʿfarī method.
-    def set_prayer_method(self, method_key: str = 'JAFARI', asr_type: int = 0) -> None:
+    def set_prayer_method(self, method_key: str = 'JAFARI', asr_type: int | None = None) -> None:
         """Select one of the predefined prayer profiles.
 
         Parameters
         ----------
         method_key : str, default='JAFARI'
             Method alias defined in ``prayer_times.DEFAULT_PRAYER_METHODS``.
-        asr_type : int, default=0
-            ʿAṣr selector (``0`` standard, ``1`` Ḥanafī).
+        asr_type : int or None, optional
+            ʿAṣr convention (``0`` standard, ``1`` Ḥanafī, ``2`` Sistani preferred).
+            By default, use the convention of the selected preset.
 
         Raises
         ------
@@ -425,45 +505,54 @@ class ITLocation:
             Raised for unknown method aliases or invalid ``asr_type`` values.
         """
 
-        method_key = method_key.strip().upper()
-        method = _PRAYER_METHOD_ALIAS_MAP.get(method_key)
-        if method is None:
-            valid_options = list(_PRAYER_METHOD_PRIMARY_KEYS)
-            raise ValueError(
-                f"Invalid prayer method '{method_key}'. Valid options are: {', '.join(valid_options)}")
+        method = pt.get_prayer_method(method_key)
 
-        if asr_type not in (0, 1):
-            raise ValueError(f"'asr_type' must be either 0 or 1. Invalid value: {asr_type}")
+        if asr_type is not None and asr_type not in (0, 1, 2):
+            raise ValueError(f"'asr_type' must be 0, 1, or 2. Invalid value: {asr_type}")
 
-        if asr_type == 0:
-            self.method = method
-        else:
-            self.method = replace(method, asr_type=asr_type)
+        self.method = method if asr_type is None or asr_type == method.asr_type else replace(method, asr_type=asr_type)
 
         self._refresh_prayers()
     
-    # Helper function to validate and set angle
-    def __validate_and_set(self, attribute_name: str, value: Optional[float]) -> None:
-        """Validate an optional angle input and update method configuration."""
-        if value is None:
-            return
+    def set_western_redness_model(self, model: Literal["seasonal", "solar_descent", "blend"]) -> None:
+        """Select the seasonal estimate or an experimental model for evening faḍīlah.
 
+        The blend moves 37% from the seasonal estimate toward the 14° crossing.
+        This also updates the scheduled ʿIshāʾ when the method uses the preferred window.
+        A preset change restores that preset's default.
+        """
+        self.method = replace(self.method, western_redness_model=model)
+        self._refresh_prayers()
+
+    def set_fajr_fadilah_end_angle(self, degrees: float | None) -> None:
+        """Set a locally observed depression for the Shia Fajr preferred end.
+
+        Pass None to restore the default estimate. This setting affects
+        the preferred period, independently of the scheduled Fajr time.
+        """
+        self.method = replace(self.method, fajr_fadilah_end_degrees=degrees)
+        self._refresh_prayers()
+
+    @staticmethod
+    def _validated_prayer_angle(attribute_name: str, value: float) -> Angle:
+        """Convert a finite positive degree value to an angle."""
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             raise ValueError(f"{attribute_name} must be a number. Invalid value: {value}")
+        try:
+            degrees = float(value)
+        except OverflowError:
+            raise ValueError(f"{attribute_name} must be finite.") from None
+        if not isfinite(degrees) or degrees <= 0:
+            raise ValueError(f"{attribute_name} must be greater than 0 and finite. Invalid value: {value}")
+        return Angle(degrees)
 
-        if value <= 0:
-            raise ValueError(f"{attribute_name} must be greater than 0. Invalid value: {value}")
-
-        self.method = replace(self.method, **{attribute_name: Angle(float(value))})
-
-    # Alows user to set their own solar hour angles for prayer time calculations.
     def set_custom_prayer_angles(
         self,
         fajr_angle: Optional[float] = None,
         maghrib_angle: Optional[float] = None,
         isha_angle: Optional[float] = None,
     ) -> None:
-        """Override default solar angles used by prayer-time computations.
+        """Override selected twilight angles in one validated update.
 
         Parameters
         ----------
@@ -472,21 +561,27 @@ class ITLocation:
         maghrib_angle : float, optional
             Maghrib angle in degrees below the horizon.
         isha_angle : float, optional
-            ʿIshāʾ angle in degrees below the horizon.
+            ʿIshāʾ angle in degrees below the horizon. Providing an angle
+            replaces the active method's preferred window or fixed interval.
 
         Raises
         ------
         ValueError
-            Raised when a provided value is non-numeric or not strictly positive.
+            If a provided angle is non-numeric, non-finite, or non-positive.
         """
-
-        # Validate and set each angle
-        self.__validate_and_set('fajr_angle', fajr_angle)
-        self.__validate_and_set('maghrib_angle', maghrib_angle)
-        self.__validate_and_set('isha_angle', isha_angle)
-
-        self.method = replace(self.method, name="Custom")
-
+        angles = {
+            name: self._validated_prayer_angle(name, value)
+            for name, value in (
+                ("fajr_angle", fajr_angle), ("maghrib_angle", maghrib_angle), ("isha_angle", isha_angle),
+            )
+            if value is not None
+        }
+        method = self.method
+        if isha_angle is not None:
+            method = replace(
+                method, isha_offset_minutes=None, ramadan_isha_offset_minutes=None, use_isha_fadilah=False,
+            )
+        self.method = replace(method, name="Custom", **angles)
         self._refresh_prayers()
     
     # Separated from angles since it is defined by shadow ratio
@@ -501,17 +596,12 @@ class ITLocation:
         Raises
         ------
         ValueError
-            Raised when ``asr_type`` is not ``0`` or ``1``.
+            Raised when ``asr_type`` is not ``0``, ``1``, or ``2``.
         """
 
-        if asr_type in (0, 1):
-            self.method = replace(self.method, asr_type=asr_type)
-        else:
-            raise ValueError(f"'asr_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {asr_type}")
-
-        # Method is now custom
-        self.method = replace(self.method, name="Custom")
-
+        if asr_type not in (0, 1, 2):
+            raise ValueError(f"'asr_type' must be 0, 1, or 2. Invalid value: {asr_type}")
+        self.method = replace(self.method, name="Custom", asr_type=asr_type)
         self._refresh_prayers()
 
     # Set to either 0 (sunset to sunrise; the majority method) or 1 (sunset to fajr, the 'Jaʿfarī' method)
@@ -530,14 +620,9 @@ class ITLocation:
             Raised when ``midnight_type`` is not ``0`` or ``1``.
         """
 
-        if midnight_type in (0, 1):
-           self.method = replace(self.method, midnight_type=midnight_type)
-        else:
-            raise ValueError(f"'midnight_type' must be either 0 or 1. Check documentation to understand each type. Invalid value: {midnight_type}")
-
-        # Method is now custom
-        self.method = replace(self.method, name="Custom")
-
+        if midnight_type not in (0, 1):
+            raise ValueError(f"'midnight_type' must be either 0 or 1. Invalid value: {midnight_type}")
+        self.method = replace(self.method, name="Custom", midnight_type=midnight_type)
         self._refresh_prayers()
         
     def set_extreme_latitude_rule(self, rule: str = 'ANGLEBASED') -> None:
@@ -556,13 +641,15 @@ class ITLocation:
         ValueError
             Raised when ``rule`` is not a supported option.
         """
-        EXTREME_LATITUDE_RULES: List[str] = ['NONE', 'NEARESTLAT', 'MIDDLENIGHT', 'ONESEVENTH', 'ANGLEBASED']
         
         if not isinstance(rule, str):
             raise TypeError("'rule' must be a string type.")
         normalized_rule = rule.strip().upper()
-        if normalized_rule not in EXTREME_LATITUDE_RULES:
-            raise ValueError(f'The value of {rule} for \'rule\' is not a valid rule. Please select from among the following: {EXTREME_LATITUDE_RULES}')
+        if normalized_rule not in pt.HIGH_LATITUDE_RULES:
+            raise ValueError(
+                f"The value of {rule} for 'rule' is not a valid rule. "
+                f"Please select from among the following: {list(pt.HIGH_LATITUDE_RULES)}"
+            )
         
         self.method = replace(self.method, extreme_lats=normalized_rule)
 
@@ -593,14 +680,25 @@ class ITLocation:
         return self.observer_dateinfo
 
     # Return prayer times
-    def prayer_times(self) -> PrayerTimes:
-        """Return cached prayer-time output dataclass.
+    def prayer_times(self, *, profile: MosqueProfile | None = None) -> PrayerTimes:
+        """Return prayer times for this observer's current date.
+
+        Parameters
+        ----------
+        profile : MosqueProfile, optional
+            Calculate with this method and local offsets using the current
+            solar state. A profile leaves the observer's settings and cached
+            prayer times intact. Without a profile, return the cached times.
 
         Raises
         ------
         ValueError
-            Raised when prayer results are stale and ``auto_calculate`` is off.
+            If the requested calculation state is stale in manual mode.
         """
+        if profile is not None:
+            self._ensure_state_ready("astro", "Call calculate_astro() before calculating a profile in manual mode.")
+            return self._prayers_for(self.observer_dateinfo, self.sun_info, profile)
+
 
         self._ensure_state_ready(
             "prayers",
@@ -658,13 +756,51 @@ class ITLocation:
         return self.moon_info
     
     def moonphases(self) -> List[Tuple[str, datetime]]:
-        """Return upcoming lunar phases as ``(name, datetime)`` tuples."""
+        """Return legacy nearest-phase estimates as naive observer-local datetimes."""
 
-        # Find Next New Moon (and the rest of the phases)
         phases: Tuple[datetime, datetime, datetime, datetime] = me.next_phases_of_moon_utc(self.observer_dateinfo.date)
-        phase_names = ["New Moon", "First Quarter", "Full Moon", "Last Quarter"]
+        return [(name, phase + timedelta(hours=self.utc_offset)) for name, phase in zip(_PHASE_NAMES, phases)]
 
-        return [(phase_names[i], phase + timedelta(hours=self.utc_offset)) for i, phase in enumerate(phases)]
+    def upcoming_moon_phases(
+        self, count: int = 4, *, after: datetime | None = None,
+    ) -> tuple[tuple[str, datetime], ...]:
+        """Return chronological lunar phases strictly after an aware instant.
+
+        Parameters
+        ----------
+        count : int, default=4
+            Positive number of principal phase events to return.
+        after : datetime, optional
+            Timezone-aware exclusive boundary. Defaults to the observer datetime.
+
+        Returns
+        -------
+        tuple[tuple[str, datetime], ...]
+            Phase names and timestamps. Each timestamp uses the observer
+            timezone's offset at the event.
+        """
+        if type(count) is not int:
+            raise TypeError("'count' must be an integer.")
+        if count < 1:
+            raise ValueError("'count' must be positive.")
+        reference = self.observer_dateinfo.date if after is None else after
+        if not isinstance(reference, datetime) or reference.utcoffset() is None:
+            raise ValueError("'after' must be a timezone-aware datetime.")
+
+        boundary_utc = reference.astimezone(timezone.utc)
+        zone = self.observer_dateinfo.date.tzinfo
+        result: list[tuple[str, datetime]] = []
+        # Start one lunation early because the mean new moon can precede the
+        # corrected phase by several hours.
+        for month_offset in range(-1, count // 4 + 3):
+            phases = fast_astro.moon_phases_for_lunation(boundary_utc, month_offset)
+            for name, value in zip(_PHASE_NAMES, phases):
+                instant = value.replace(tzinfo=timezone.utc)
+                if instant > boundary_utc:
+                    result.append((name, instant.astimezone(zone)))
+                    if len(result) == count:
+                        return tuple(result)
+        raise ArithmeticError("Could not resolve the requested sequence of lunar phases.")
 
     # Calculate Next New Moon Visibilities
     def visibilities(self, days: int = 3, criterion: int = 1) -> Visibilities:
@@ -704,6 +840,65 @@ class ITLocation:
                                               days, criterion)
 
         return visibilities
+
+    def crescent_forecast(
+        self, conjunction: datetime, *, days: int = 3, criterion: int = 1,
+    ) -> CrescentForecast:
+        """Evaluate evenings from an explicit timezone-aware new-moon conjunction.
+
+        Parameters
+        ----------
+        conjunction : datetime
+            Timezone-aware new-moon instant. The first evening is its local
+            civil date at the observer.
+        days : int, default=3
+            Number of consecutive evenings in the range 1 through 366.
+        criterion : int, default=1
+            Visibility criterion: 0 (Odeh), 1 (Yallop), or 2 (Shaukat).
+
+        Returns
+        -------
+        CrescentForecast
+            UTC conjunction and observer-local event times. Evenings without
+            an observation window have a status and a null score.
+        """
+        if not isinstance(conjunction, datetime) or conjunction.utcoffset() is None:
+            raise ValueError("'conjunction' must be a timezone-aware datetime.")
+        if type(days) is not int:
+            raise TypeError("'days' must be an integer.")
+        if not 1 <= days <= 366:
+            raise ValueError("'days' must be in the range [1, 366].")
+        if type(criterion) is not int:
+            raise TypeError("'criterion' must be an integer.")
+        if criterion not in (0, 1, 2):
+            raise ValueError("'criterion' must be 0, 1, or 2.")
+
+        instant = conjunction.astimezone(timezone.utc)
+        zone = self.observer_dateinfo.date.tzinfo
+        start = instant.astimezone(zone).date()
+        observer = self.observer_info
+        evenings: list[CrescentEvening] = []
+        for index in range(days):
+            day = start + timedelta(days=index)
+            local_noon = te.localize_or_convert_datetime(datetime.combine(day, time(12)), zone)
+            context = te.observer_datetime_info(local_noon)
+            sunset, moonset, best, score, classification = fast_astro.compute_crescent_evening(
+                instant, local_noon, context.utc_offset,
+                observer.latitude.decimal, observer.longitude.decimal,
+                observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure,
+                criterion, index == 0, te.civil_day_offsets(local_noon),
+            )
+            status = _CRESCENT_STATUS.get(score, "evaluated")
+            evenings.append(CrescentEvening(
+                date=day,
+                status=status,
+                sunset=te.local_event_datetime(sunset, context) if sunset is not None else None,
+                moonset=te.local_event_datetime(moonset, context) if moonset is not None else None,
+                best_time=te.local_event_datetime(best, context) if best is not None else None,
+                score=score if status == "evaluated" else None,
+                classification=classification,
+            ))
+        return CrescentForecast(instant, ("Odeh", "Yallop", "Shaukat")[criterion], tuple(evenings))
 
     @staticmethod
     def _normalize_batch_coordinates(name: str, values: Sequence[float]) -> tuple[float, ...]:

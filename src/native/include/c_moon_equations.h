@@ -72,5 +72,6 @@ PyObject* py_compute_moon(PyObject* self, PyObject* const* args, Py_ssize_t narg
 PyObject* py_find_moon_transit(PyObject* self, PyObject* args);
 PyObject* py_find_proper_moontime(PyObject* self, PyObject* args); 
 PyObject* py_next_phases_of_moon_utc(PyObject* self, PyObject* args);
+PyObject* py_moon_phases_for_lunation(PyObject* self, PyObject* args);
 
 #endif  // ISLAMIC_TIMES_NATIVE_MOON_EQUATIONS_H

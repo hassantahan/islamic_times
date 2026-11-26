@@ -9,6 +9,9 @@ It provides prayer times, Hijri date conversion, Qibla direction, and new moon c
 - `ITLocation` public API for observer-centric calculations.
 - Built-in prayer method presets plus custom angle support.
 - Crescent visibility computation with Odeh (2006), Yallop (1997), and Shaukat (n.d.) criteria.
+- Solar-only prayer schedules, chronological lunar phases, and detailed crescent forecasts.
+- Reusable mosque profiles with per-prayer offsets and CSV or iCalendar schedule export.
+- Two-way tabular Hijri civil-date conversion.
 - Optional map-generation pipeline (`islamic_times.mapper`) for visibility maps.
 
 ## Installation
@@ -49,32 +52,38 @@ print(loc.mecca())
 print(loc.visibilities(days=3, criterion=1))
 ```
 
-Output:
+### Example output
 
-```bash
+```text
 Prayer Times at Observer Timezone
         Method:                 Islamic Society of North America (ISNA)
-        Fajr:                   03:52:33 01-06-2025
-        Sunrise:                05:38:36 01-06-2025
-        Ẓuhr:                   13:15:10 01-06-2025
-        ʿAṣr:                   17:20:03 01-06-2025
-        Sunset:                 20:52:27 01-06-2025
-        Maghrib:                20:53:27 01-06-2025
-        ʿIshāʾ:                 22:38:55 01-06-2025
-        Midnight:               01:15:17 02-06-2025
+        Fajr:                   05:37:25 01-04-2025
+        Sunrise:                06:58:25 01-04-2025
+        Ẓuhr:                   13:22:00 01-04-2025
+        ʿAṣr:                   16:56:52 01-04-2025
+        Sunset:                 19:44:35 01-04-2025
+        Maghrib:                19:45:35 01-04-2025
+        ʿIshāʾ:                 21:05:53 01-04-2025
+        Midnight:               01:20:36 02-04-2025
 Mecca
         Distance:               10,505 km               (6,528 mi)
         Direction:              NE                      (+054.611°              (+054° 36′ 40.23″))
 Visibility of New Moon Crescent:
         Criterion:              Yallop
-        20:53:45 26-05-2025:    -999.0  Moonset before the new moon.
-        21:25:40 27-05-2025:    +0.414  A: Easily visible.
-        21:55:34 28-05-2025:    +2.036  A: Easily visible.
+        19:58:24 29-03-2025:    -0.308  F: Not visible; below the Danjon limit.
+        20:36:14 30-03-2025:    +1.683  A: Easily visible.
+        21:14:37 31-03-2025:    +3.966  A: Easily visible.
 ```
+
+See the [calculation API guide](docs/calculations.md) for date ranges, event statuses,
+civil Hijri dates, lunar phases, and explicit conjunction forecasts.
 
 ## Mapper CLI (Optional)
 
-Install mapper dependencies first (`pip install "islamic_times[map]"`), then run:
+Install the mapper dependencies with `pip install "islamic_times[map]"`.
+Rendering uses the shapefiles in the repository. Run the render commands from
+the repository root or a directory containing the
+[`map_shp_files/` folder](https://github.com/hassantahan/islamic_times/tree/master/map_shp_files).
 
 ```bash
 python -m islamic_times.mapper generate \
@@ -86,6 +95,13 @@ python -m islamic_times.mapper generate \
   --criterion 1 \
   --total_months 1
 ```
+
+`islamic-times-map` and `python -m islamic_times.mapper` accept the same commands.
+Use `--conjunction 2025-04-27T19:31:04+00:00` to anchor a map to the same UTC
+conjunction as a local forecast. Category maps use adaptive sampling by default.
+Pass `--category-compute dense` to evaluate every cell.
+The `benchmark` command writes a timing report to `benchmark.json` under the
+map output directory. `--perf-report` overrides that path.
 
 To view a CSV export directory directly:
 

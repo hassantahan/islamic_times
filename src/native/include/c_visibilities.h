@@ -1,20 +1,16 @@
 #ifndef ISLAMIC_TIMES_NATIVE_VISIBILITIES_H
 #define ISLAMIC_TIMES_NATIVE_VISIBILITIES_H
 
-// Includes
-#include "c_moon_equations.h"
+#include "astro_core.h"
 
-typedef struct {
-    /* Criterion score (or sentinel for no-event conditions). */
-    double q_value;
-    /* Best-evaluation datetime in observer-local context. */
-    datetime best_dt;
-    /* Human-readable category label corresponding to q_value. */
-    const char* classification;
-} VisibilityResult;
-
-/* Python wrappers exposed by astro_core. */
+/* Legacy reference-date forecast, anchored to the nearest new moon. */
 PyObject* py_compute_visibilities(PyObject* self, PyObject* args);
+/* Explicit UTC conjunction and local reference day. Returns sunset, moonset,
+ * and best time in the solver's fixed local offset, using None for missing times.
+ * The final pair contains the criterion score or no-event code and its label. */
+PyObject* py_compute_crescent_evening(PyObject* self, PyObject* args);
+/* Batch results are flat and location-major, with consecutive days per point.
+ * Longitudes and latitudes are in degrees and UTC offset is in hours. */
 PyObject* compute_visibilities_batch_py(PyObject* self, PyObject* args);
 PyObject* compute_visibilities_batch_codes_py(PyObject* self, PyObject* args);
 
