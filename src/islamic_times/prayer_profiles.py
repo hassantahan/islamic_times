@@ -134,16 +134,23 @@ def _method_from_dict(payload: object) -> PrayerMethod:
     if extreme_lats not in HIGH_LATITUDE_RULES:
         raise ValueError("Unknown high-latitude rule in the prayer method.")
 
+    use_isha_fadilah = payload.get("use_isha_fadilah", False)
+    if not isinstance(use_isha_fadilah, bool):
+        raise ValueError("Prayer method use_isha_fadilah must be a boolean.")
+
     isha_minutes = payload.get("isha_offset_minutes")
     ramadan_minutes = payload.get("ramadan_isha_offset_minutes")
-    for offset in (isha_minutes, ramadan_minutes):
+    maghrib_minutes = payload.get("maghrib_offset_minutes")
+    for prayer, offset in (
+        ("ʿIshāʾ", isha_minutes), ("ʿIshāʾ", ramadan_minutes), ("Maghrib", maghrib_minutes),
+    ):
         if offset is not None and (type(offset) is not int or offset < 0):
-            raise ValueError("Fixed ʿIshāʾ intervals must be non-negative whole minutes or null.")
+            raise ValueError(f"Fixed {prayer} intervals must be non-negative whole minutes or null.")
         if offset is not None:
             try:
                 timedelta(minutes=offset)
             except OverflowError:
-                raise ValueError("The fixed ʿIshāʾ interval is too large.") from None
+                raise ValueError(f"The fixed {prayer} interval is too large.") from None
 
     return PrayerMethod(
         name=name,
@@ -153,5 +160,9 @@ def _method_from_dict(payload: object) -> PrayerMethod:
         extreme_lats=extreme_lats,
         isha_offset_minutes=isha_minutes,
         ramadan_isha_offset_minutes=ramadan_minutes,
+        maghrib_offset_minutes=maghrib_minutes,
+        use_isha_fadilah=use_isha_fadilah,
+        western_redness_model=payload.get("western_redness_model", "seasonal"),
+        fajr_fadilah_end_degrees=payload.get("fajr_fadilah_end_degrees"),
         **angles,
     )

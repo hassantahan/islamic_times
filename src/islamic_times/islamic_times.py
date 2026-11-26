@@ -28,6 +28,7 @@ from islamic_times.it_dataclasses import (
     DateTimeInfo,
     Distance,
     DistanceUnits,
+    FadilahWindow,
     MeccaInfo,
     MoonInfo,
     ObserverInfo,
@@ -42,7 +43,7 @@ from islamic_times import moon_equations as me
 from islamic_times import prayer_times as pt
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
-from islamic_times.prayer_fadilah import FadilahWindow, calculate_sistani_daylight_fadilah
+from islamic_times.prayer_fadilah import calculate_sistani_daylight_fadilah
 from islamic_times.prayer_profiles import MosqueProfile
 
 
@@ -412,6 +413,33 @@ class ITLocation:
         """
         return calculate_sistani_daylight_fadilah(self.observer_info, self.sun())
 
+    def sistani_evening_fadilah(self) -> dict[str, FadilahWindow]:
+        """Return estimated non-traveller Maghrib and ʿIshāʾ preferred windows.
+
+        The selected method supplies the rule for local Maghrib and the next
+        morning's Fajr angle. The selected western-redness model supplies
+        the shared boundary. The returned windows are in the observer's timezone
+        and use local solar events, before any latitude substitutions.
+
+        Windows are omitted when their boundaries are unavailable or out of
+        order. When the next dawn crossing is missing, only Maghrib can be
+        estimated. The estimate covers latitudes through 55° in either
+        hemisphere.
+        """
+        times = self.prayer_times()
+        sun = self.sun()
+        sunset, maghrib = sun.sunset, times.maghrib.when
+        if not isinstance(sunset, datetime):
+            return {}
+
+        context, observer = self.observer_dateinfo, self.observer_info
+        if times.maghrib.fallback_rule:
+            maghrib = pt._local_maghrib_time(context, observer, sun, times.method)
+        if not isinstance(maghrib, datetime):
+            return {}
+        next_dawn = pt._local_next_dawn(context, observer, times.method)
+        return pt._evening_fadilah(context, observer, times.method, sunset, maghrib, next_dawn)
+
     def prayer_schedule(
         self, start: date, end: date, *, time_zone: str | tzinfo | None = None, profile: MosqueProfile | None = None,
     ) -> tuple[PrayerDay, ...]:
@@ -486,6 +514,25 @@ class ITLocation:
 
         self._refresh_prayers()
     
+    def set_western_redness_model(self, model: Literal["seasonal", "solar_descent", "blend"]) -> None:
+        """Select the seasonal estimate or an experimental model for evening faḍīlah.
+
+        The blend moves 37% from the seasonal estimate toward the 14° crossing.
+        This also updates the scheduled ʿIshāʾ when the method uses the preferred window.
+        A preset change restores that preset's default.
+        """
+        self.method = replace(self.method, western_redness_model=model)
+        self._refresh_prayers()
+
+    def set_fajr_fadilah_end_angle(self, degrees: float | None) -> None:
+        """Set a locally observed depression for the Shia Fajr preferred end.
+
+        Pass None to restore the default estimate. This setting affects
+        the preferred period, independently of the scheduled Fajr time.
+        """
+        self.method = replace(self.method, fajr_fadilah_end_degrees=degrees)
+        self._refresh_prayers()
+
     @staticmethod
     def _validated_prayer_angle(attribute_name: str, value: float) -> Angle:
         """Convert a finite positive degree value to an angle."""
@@ -515,7 +562,7 @@ class ITLocation:
             Maghrib angle in degrees below the horizon.
         isha_angle : float, optional
             ʿIshāʾ angle in degrees below the horizon. Providing an angle
-            replaces any fixed ʿIshāʾ interval in the active method.
+            replaces the active method's preferred window or fixed interval.
 
         Raises
         ------
@@ -531,7 +578,9 @@ class ITLocation:
         }
         method = self.method
         if isha_angle is not None:
-            method = replace(method, isha_offset_minutes=None, ramadan_isha_offset_minutes=None)
+            method = replace(
+                method, isha_offset_minutes=None, ramadan_isha_offset_minutes=None, use_isha_fadilah=False,
+            )
         self.method = replace(method, name="Custom", **angles)
         self._refresh_prayers()
     
@@ -837,7 +886,7 @@ class ITLocation:
                 instant, local_noon, context.utc_offset,
                 observer.latitude.decimal, observer.longitude.decimal,
                 observer.elevation.in_unit(DistanceUnits.METRE), observer.temperature, observer.pressure,
-                criterion, index == 0,
+                criterion, index == 0, te.civil_day_offsets(local_noon),
             )
             status = _CRESCENT_STATUS.get(score, "evaluated")
             evenings.append(CrescentEvening(

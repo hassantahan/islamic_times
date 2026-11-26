@@ -12,6 +12,7 @@ calculation layers, including:
 """
 
 import atexit
+from math import floor
 from typing import Tuple, Dict, Optional, Any
 from warnings import warn
 from datetime import date, datetime, time, timedelta, timezone
@@ -200,6 +201,39 @@ def observer_datetime_info(value: datetime) -> DateTimeInfo:
     )
 
 
+def _civil_midnight_offset(midnight: datetime, context: datetime) -> float:
+    """Effective UTC offset at the first instant of a civil date, including clock changes."""
+    offset = context.utcoffset()
+    if offset is None:
+        return 0.0
+    nominal = midnight.replace(tzinfo=timezone.utc)
+    guess = nominal - offset
+    zone = context.tzinfo
+    if (guess.astimezone(zone).replace(tzinfo=None) == midnight
+            and (guess - timedelta(seconds=1)).astimezone(zone).date() < midnight.date()):
+        return offset.total_seconds() / 3600
+
+    # Searching in UTC also handles zones that skip midnight or repeat it.
+    # ZoneInfo and pytz both convert unambiguously in this direction.
+    lo, hi = -86400, 86400
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if (nominal + timedelta(seconds=mid)).astimezone(zone).date() < midnight.date():
+            lo = mid
+        else:
+            hi = mid
+    return -hi / 3600
+
+
+def civil_day_offsets(context: datetime) -> tuple[float, float]:
+    """Return the UTC offsets delimiting the observer's local calendar day."""
+    if context.tzinfo is None or isinstance(context.tzinfo, timezone):
+        offset = context.utcoffset() or timedelta(0)
+        return (offset.total_seconds() / 3600,) * 2
+    midnight = datetime.combine(context.date(), datetime.min.time())
+    return _civil_midnight_offset(midnight, context), _civil_midnight_offset(midnight + timedelta(days=1), context)
+
+
 def local_event_datetime(value: datetime, context: DateTimeInfo) -> datetime:
     """Convert a native wall time from its solver offset to the observer timezone."""
     offset = context.date.utcoffset()
@@ -343,9 +377,6 @@ def jd_to_gregorian(jd: float, adjust_for_tz_diff: float = 0) -> datetime:
     from islamic_times._legacy_py_impl import time_equations as legacy_te
     return legacy_te.jd_to_gregorian(jd, adjust_for_tz_diff)
 
-# Look to Jean Meeus' "Astronomical Algorithms".
-# Limitation: this civil-date conversion assumes midnight day boundaries.
-# Religious sunset-based day boundaries are handled at higher application layers.
 def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tuple[int, int, int]:
     """Convert Gregorian civil date to Hijri civil date tuple.
 
@@ -356,7 +387,7 @@ def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tupl
     month : int
         Gregorian month.
     day : float
-        Gregorian day value.
+        Gregorian day value. The fractional part is ignored for civil dates.
     zone : int, default 0
         Retained for compatibility. Currently unused.
 
@@ -365,6 +396,15 @@ def gregorian_to_hijri(year: int, month: int, day: float, zone: int = 0) -> Tupl
     tuple[int, int, int]
         Hijri year, month, and day.
     """
+    try:
+        civil_date = date(year, month, 1) + timedelta(days=floor(day) - 1)
+    except (TypeError, ValueError, OverflowError):
+        civil_date = None
+    if civil_date is not None and civil_date >= _CIVIL_HIJRI_EPOCH:
+        hijri = gregorian_to_civil_hijri(civil_date)
+        return hijri.hijri_year, hijri.hijri_month, hijri.hijri_day
+
+    # Retain the legacy Meeus arithmetic for inputs outside the civil calendar.
     x = year
     m = month
 

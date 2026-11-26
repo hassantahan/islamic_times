@@ -63,15 +63,15 @@ Prayer Times at Observer Timezone
         ʿAṣr:                   16:56:52 01-04-2025
         Sunset:                 19:44:35 01-04-2025
         Maghrib:                19:45:35 01-04-2025
-        ʿIshāʾ:                 21:05:54 01-04-2025
-        Midnight:               01:20:37 02-04-2025
+        ʿIshāʾ:                 21:05:53 01-04-2025
+        Midnight:               01:20:36 02-04-2025
 Mecca
         Distance:               10,505 km               (6,528 mi)
         Direction:              NE                      (+054.611°              (+054° 36′ 40.23″))
 Visibility of New Moon Crescent:
         Criterion:              Yallop
         19:58:24 29-03-2025:    -0.308  F: Not visible; below the Danjon limit.
-        20:36:15 30-03-2025:    +1.683  A: Easily visible.
+        20:36:14 30-03-2025:    +1.683  A: Easily visible.
         21:14:37 31-03-2025:    +3.966  A: Easily visible.
 ```
 
@@ -80,7 +80,10 @@ civil Hijri dates, lunar phases, and explicit conjunction forecasts.
 
 ## Mapper CLI (Optional)
 
-Install mapper dependencies first (`pip install "islamic_times[map]"`), then run:
+Install the mapper dependencies with `pip install "islamic_times[map]"`.
+Rendering uses the shapefiles in the repository. Run the render commands from
+the repository root or a directory containing the
+[`map_shp_files/` folder](https://github.com/hassantahan/islamic_times/tree/master/map_shp_files).
 
 ```bash
 python -m islamic_times.mapper generate \

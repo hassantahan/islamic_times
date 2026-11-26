@@ -49,8 +49,8 @@ void compute_sun_result(double jde, double jd_ut1, double local_latitude, double
 /* Solve local sunrise/sunset for JD reference day and target altitude. */
 datetime find_proper_suntime(double jd, double utc_offset, double latitude, double longitude, double elevation, 
         double temperature, double pressure, double angle_deg, char event);
-/* Variant that reuses/returns nutation arrays for performance. */
-datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double latitude, double longitude, double elevation, 
+/* The midnight offsets bound the civil day. utc_offset sets the output clock. */
+datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double start_offset, double end_offset, double latitude, double longitude, double elevation,
         double temperature, double pressure, double angle_deg, char event, double* deltaPsi, double* true_obliquity);
 
 /* Python wrappers exposed by astro_core. */

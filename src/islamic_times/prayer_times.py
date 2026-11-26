@@ -10,19 +10,22 @@ sun-angle events may be unavailable.
 import math
 import warnings
 from dataclasses import dataclass, replace
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from typing import List
 
 from islamic_times import astro_core
 from islamic_times import sun_equations as se
 from islamic_times import time_equations as te
 from islamic_times.it_dataclasses import (
-    Angle, AsrConvention, DateTimeInfo, ObserverInfo, Prayer, PrayerMethod, PrayerTimes, SunInfo,
+    Angle, AsrConvention, DateTimeInfo, FadilahWindow, ObserverInfo, Prayer, PrayerMethod, PrayerTimes, SunInfo,
 )
-from islamic_times.prayer_fadilah import calculate_sistani_daylight_fadilah
+from islamic_times.prayer_fadilah import (
+    _TwilightGeometry, calculate_sistani_daylight_fadilah, calculate_sistani_evening_fadilah,
+    calculate_sistani_fajr_fadilah,
+)
 
-# Prayer method profiles based on:
-# https://praytimes.org/docs/calculation
+# See docs/calculations.md for the published parameters of additional presets.
+# The original profiles use https://praytimes.org/docs/calculation.
 DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
     PrayerMethod(
         name="Muslim World League (MWL)",
@@ -54,12 +57,12 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
         name="Institute of Geophysics, University of Tehran (Tehran)", 
         keys=('TEHRAN', 'UNIVERSITY OF TEHRAN', 'INSTITUTE OF GEOPHYSICS', 'UOT', 'IOG', 'IOGUOT', 'UOTIOG', 'IGUT', 'UTIG'), 
         fajr_angle=Angle(17.7), isha_angle=Angle(14), maghrib_angle=Angle(4.5), midnight_type=1,
-        asr_type=AsrConvention.SISTANI_PREFERRED,
+        asr_type=AsrConvention.SISTANI_PREFERRED, use_isha_fadilah=True,
     ),
     PrayerMethod(name="Shia Ithna Ashari, Leva Research Institute, Qom (Jafari)",
         keys=('JAFARI', 'JAAFARI', 'SHIA', 'SHIA ITHNA ASHARI', 'LEVA', 'LEVA RESEARCH INSTITUTE', 'QOM', 'QUM', 'LRI', 'SIA', 'SIALRI'), 
         fajr_angle=Angle(16), isha_angle=Angle(14), maghrib_angle=Angle(4), midnight_type=1,
-        asr_type=AsrConvention.SISTANI_PREFERRED,
+        asr_type=AsrConvention.SISTANI_PREFERRED, use_isha_fadilah=True,
     ),
     PrayerMethod(
         name="Muslims of France", 
@@ -75,6 +78,23 @@ DEFAULT_PRAYER_METHODS: List[PrayerMethod] = [
         name="Islamic Religious Council of Singapore", 
         keys=('SINGAPORE',), 
         fajr_angle=Angle(20), isha_angle=Angle(18)
+    ),
+    PrayerMethod(
+        name="Fiqh Council of North America (Canada)",
+        keys=("FCNA_CANADA", "FCNA CANADA"),
+        fajr_angle=Angle(13), isha_angle=Angle(13), maghrib_offset_minutes=0,
+    ),
+    PrayerMethod(
+        name="Kuwait (Adhan)",
+        keys=("KUWAIT",),
+        fajr_angle=Angle(18), isha_angle=Angle(17.5),
+        maghrib_offset_minutes=0, extreme_lats="MIDDLENIGHT",
+    ),
+    PrayerMethod(
+        name="Qatar (Adhan)",
+        keys=("QATAR",),
+        fajr_angle=Angle(18), isha_angle=Angle(0), isha_offset_minutes=90,
+        maghrib_offset_minutes=0, extreme_lats="MIDDLENIGHT",
     ),
 ]
 
@@ -277,17 +297,18 @@ def _strategy_nearest_lat(ctx: ExtremeLatitudeContext, out: List[Prayer]) -> Lis
         fajr = find_tomorrow_time(date, reference, method.fajr_angle, num_days=-1)
     out[0] = replace(out[0], time=fajr)
 
-    maghrib = safe_sun_time(date, reference, 'set', method.maghrib_angle)
-    out[ctx.idx_maghrib] = replace(out[ctx.idx_maghrib], time=maghrib)
     if sunrise < fajr:
         sunrise = safe_sun_time(date, reference, 'rise', ctx.standard_sun_angle)
         out[ctx.idx_sunrise] = replace(out[ctx.idx_sunrise], time=sunrise)
-    if sunset > maghrib:
-        sunset = safe_sun_time(date, reference, 'set', ctx.standard_sun_angle)
-        out[ctx.idx_sunset] = replace(out[ctx.idx_sunset], time=sunset)
+    if method.maghrib_offset_minutes is None or method.maghrib_angle.decimal > 0:
+        maghrib = safe_sun_time(date, reference, 'set', method.maghrib_angle)
+        out[ctx.idx_maghrib] = replace(out[ctx.idx_maghrib], time=maghrib)
+        if sunset > maghrib:
+            sunset = safe_sun_time(date, reference, 'set', ctx.standard_sun_angle)
+            out[ctx.idx_sunset] = replace(out[ctx.idx_sunset], time=sunset)
 
     isha_index = ctx.idx_maghrib + 1
-    if method.isha_offset_minutes is None:
+    if not method.use_isha_fadilah and method.isha_offset_minutes is None:
         isha = safe_sun_time(date, reference, 'set', method.isha_angle)
         out[isha_index] = replace(out[isha_index], time=isha)
 
@@ -316,7 +337,7 @@ def _strategy_portion_of_night(ctx: ExtremeLatitudeContext, out: List[Prayer]) -
     for i, prayer in enumerate(out):
         if prayer.name not in ('Fajr', 'Maghrib', 'ʿIshāʾ'):
             continue
-        if prayer.name == 'ʿIshāʾ' and method.isha_offset_minutes is not None:
+        if prayer.name == 'ʿIshāʾ' and (method.use_isha_fadilah or method.isha_offset_minutes is not None):
             continue
 
         base, direction = (sunrise, -1) if prayer.name == 'Fajr' else (sunset, 1)
@@ -415,7 +436,7 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
             sunset = safe_sun_time(observer_date, polar_obs_ex, 'set', STANDARD_SUN_ANGLE)
             out[IDX_SUNSET] = replace(out[IDX_SUNSET], time=sunset)
             out[IDX_MAGHRIB] = replace(out[IDX_MAGHRIB], time=safe_sun_time(observer_date, polar_obs_ex, 'set', method.maghrib_angle))
-            if method.isha_offset_minutes is None:
+            if not method.use_isha_fadilah and method.isha_offset_minutes is None:
                 out[IDX_MAGHRIB+1] = replace(out[IDX_MAGHRIB+1], time=safe_sun_time(observer_date, polar_obs_ex, 'set', method.isha_angle))
 
             midnight_angle = method.fajr_angle if method.midnight_type else STANDARD_SUN_ANGLE
@@ -503,6 +524,52 @@ def extreme_latitudes(observer_date: DateTimeInfo, observer: ObserverInfo, praye
 
     return out
 
+def _local_maghrib_time(
+    observer_date: DateTimeInfo, observer: ObserverInfo, sun_info: SunInfo, method: PrayerMethod,
+) -> datetime | float:
+    """Calculate Maghrib from local solar events, before any latitude fallback."""
+    try:
+        if method.maghrib_angle.decimal > 0:
+            return safe_sun_time(observer_date, observer, 'set', method.maghrib_angle)
+        minutes = 1 if method.maghrib_offset_minutes is None else method.maghrib_offset_minutes
+        return sun_info.sunset + timedelta(minutes=minutes)
+    except (ArithmeticError, TypeError, ValueError):
+        return math.inf
+
+
+def _local_next_dawn(observer_date: DateTimeInfo, observer: ObserverInfo, method: PrayerMethod) -> datetime | None:
+    """Resolve the next local Fajr crossing before any latitude substitution."""
+    try:
+        return find_tomorrow_time(observer_date, observer, method.fajr_angle)
+    except (ArithmeticError, TypeError, ValueError):
+        return None
+
+
+def _evening_fadilah(
+    context: DateTimeInfo, observer: ObserverInfo, method: PrayerMethod,
+    sunset: datetime, maghrib: datetime, dawn: datetime | None,
+) -> dict[str, FadilahWindow]:
+    geometry = None
+    crossing = None
+    if method.western_redness_model == "solar_descent":
+        geometry = _TwilightGeometry.at_sunset(sunset, observer)
+    elif method.western_redness_model == "blend":
+        # A shallow descending crossing can fall on the next civil date.
+        for days in (0, 1):
+            try:
+                event = find_tomorrow_time(context, observer, Angle(14), "set", days)
+            except ArithmeticError:
+                continue
+            delay = event.astimezone(timezone.utc) - sunset.astimezone(timezone.utc)
+            if timedelta(0) < delay < timedelta(hours=12):
+                crossing = event
+                break
+    return calculate_sistani_evening_fadilah(
+        context.date.date(), observer.latitude.decimal, sunset, maghrib, dawn,
+        geometry=geometry, blend_crossing=crossing,
+    )
+
+
 def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, sun_info: SunInfo, method: PrayerMethod) -> PrayerTimes:
     """Compute daily prayer times for a configured observer and method profile.
 
@@ -537,8 +604,8 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
         fajr_dt = math.inf
     
     asr_fadilah = None
-    uses_fadilah = method.asr_type == AsrConvention.SISTANI_PREFERRED
-    if uses_fadilah:
+    asr_uses_fadilah = method.asr_type == AsrConvention.SISTANI_PREFERRED
+    if asr_uses_fadilah:
         asr_fadilah = calculate_sistani_daylight_fadilah(observer, sun_info).get("asr")
         asr_dt = asr_fadilah.start if asr_fadilah else "Preferred ʿAṣr window unavailable."
     else:
@@ -546,40 +613,42 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
             asr_dt = asr_time(sun_info.sun_transit, observer.latitude, sun_info.apparent_declination, method.asr_type)
         except ArithmeticError as e:
             asr_dt = str(e)
-    
-    # Calculate Maghrib time
-    # Only if maghrib is not at sunset
-    if method.maghrib_angle.decimal > 0:
-        try:
-            maghrib_dt = safe_sun_time(observer_date, observer, 'set', method.maghrib_angle)
-        except (ArithmeticError, TypeError, ValueError):
-            maghrib_dt = math.inf
-    else:
-        # Otherwise Maghrib is sunset
-        try:
-            maghrib_dt = sun_info.sunset + timedelta(minutes=1)
-        except (TypeError, ValueError):
-            maghrib_dt = math.inf
 
-    # Fixed-interval methods derive ʿIshāʾ from Maghrib after latitude adjustment.
-    isha_minutes = method.isha_offset_minutes
-    if observer_date.hijri is not None and observer_date.hijri.hijri_month == 9:
-        if method.ramadan_isha_offset_minutes is not None:
-            isha_minutes = method.ramadan_isha_offset_minutes
-    if isha_minutes is None:
-        try:
-            isha_dt = safe_sun_time(observer_date, observer,  'set', method.isha_angle)
-            if isha_dt.time() < sun_info.sun_transit.time() and isha_dt.day == sun_info.sun_transit.day:
-                isha_dt = find_tomorrow_time(observer_date, observer, method.isha_angle, 'set')
-        except ArithmeticError:
-            isha_dt = math.inf
+    # A missing offset keeps the historical one-minute sunset adjustment.
+    maghrib_minutes = 1 if method.maghrib_offset_minutes is None else method.maghrib_offset_minutes
+    maghrib_dt = _local_maghrib_time(observer_date, observer, sun_info, method)
+    next_dawn = (
+        _local_next_dawn(observer_date, observer, method) if method.midnight_type or method.use_isha_fadilah else None
+    )
+
+    isha_fadilah = None
+    isha_minutes = None
+    if method.use_isha_fadilah:
+        if isinstance(sun_info.sunset, datetime) and isinstance(maghrib_dt, datetime) and next_dawn is not None:
+            isha_fadilah = _evening_fadilah(
+                observer_date, observer, method, sun_info.sunset, maghrib_dt, next_dawn,
+            ).get("isha")
+        isha_dt = isha_fadilah.start if isha_fadilah else "Preferred ʿIshāʾ window unavailable."
     else:
-        isha_dt = _isha_after_maghrib(maghrib_dt, isha_minutes)
+        # Fixed intervals are reapplied after any latitude adjustment to Maghrib.
+        isha_minutes = method.isha_offset_minutes
+        if observer_date.hijri is not None and observer_date.hijri.hijri_month == 9:
+            if method.ramadan_isha_offset_minutes is not None:
+                isha_minutes = method.ramadan_isha_offset_minutes
+        if isha_minutes is not None:
+            isha_dt = _isha_after_maghrib(maghrib_dt, isha_minutes)
+        else:
+            try:
+                isha_dt = safe_sun_time(observer_date, observer, 'set', method.isha_angle)
+                if isha_dt.time() < sun_info.sun_transit.time() and isha_dt.day == sun_info.sun_transit.day:
+                    isha_dt = find_tomorrow_time(observer_date, observer, method.isha_angle, 'set')
+            except ArithmeticError:
+                isha_dt = math.inf
     
     # Calculate Midnight time
     try:
         if method.midnight_type:
-            midnight_dt = te.time_midpoint(sun_info.sunset, find_tomorrow_time(observer_date, observer, method.fajr_angle))
+            midnight_dt = te.time_midpoint(sun_info.sunset, next_dawn) if next_dawn is not None else math.inf
         else:
             midnight_dt = te.time_midpoint(sun_info.sunset, find_tomorrow_time(observer_date, observer))
     except (ArithmeticError, TypeError, ValueError):
@@ -593,15 +662,19 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
         Prayer("ʿAṣr", asr_dt, method, fadilah=asr_fadilah),
         Prayer("Sunset", sun_info.sunset, method),
         Prayer("Maghrib", maghrib_dt, method),
-        Prayer("ʿIshāʾ", isha_dt, method),
+        Prayer("ʿIshāʾ", isha_dt, method, fadilah=isha_fadilah),
         Prayer("Midnight", midnight_dt, method),
     ]
     extreme_latitude_rule: str | None = None
     extreme_latitude_reason: str | None = None
 
     # Deal with locations at extreme latitudes
-    fallback_prayers = prayer_list[:3] + prayer_list[4:] if uses_fadilah else prayer_list
-    if abs(observer.latitude.decimal) > 46.5 and any(prayer.when is None for prayer in fallback_prayers):
+    missing = {prayer.name for prayer in prayer_list if prayer.when is None}
+    if asr_uses_fadilah:
+        missing.discard("ʿAṣr")
+    if method.use_isha_fadilah:
+        missing.discard("ʿIshāʾ")
+    if abs(observer.latitude.decimal) > 46.5 and missing:
         warnings.warn("Extreme latitude warning. Prayer times at this latitude are not well established.", stacklevel=2)
         try:
             adjusted = extreme_latitudes(observer_date, observer, prayer_list, sun_info.apparent_declination)
@@ -615,19 +688,34 @@ def calculate_prayer_times(observer_date: DateTimeInfo, observer: ObserverInfo, 
                 for prayer, before in zip(adjusted, prayer_list)
             ]
 
+    # Sunset-based presets with an explicit offset must use the resolved
+    # sunset, including any high-latitude substitution.
+    sunset, maghrib = prayer_list[4:6]
+    if (
+        sunset.when is not None and method.maghrib_angle.decimal == 0
+        and (method.maghrib_offset_minutes is not None or isha_minutes is not None)
+    ):
+        maghrib = replace(
+            maghrib, time=te.add_elapsed_time(sunset.when, timedelta(minutes=maghrib_minutes)),
+            fallback_rule=sunset.fallback_rule,
+        )
+        prayer_list[5] = maghrib
     if isha_minutes is not None:
-        sunset = prayer_list[4]
-        maghrib = prayer_list[5]
-        if method.maghrib_angle.decimal == 0 and sunset.when is not None:
-            maghrib = replace(
-                maghrib, time=te.add_elapsed_time(sunset.when, timedelta(minutes=1)), fallback_rule=sunset.fallback_rule
-            )
-            prayer_list[5] = maghrib
         prayer_list[6] = replace(
             prayer_list[6],
             time=_isha_after_maghrib(maghrib.time, isha_minutes),
             fallback_rule=maghrib.fallback_rule,
         )
+
+    # A substituted polar Fajr cannot establish the opening of the preferred period.
+    fajr = prayer_list[0]
+    if (method.keys and method.keys[0] in ("JAFARI", "TEHRAN")
+            and isinstance(fajr_dt, datetime) and fajr.when == fajr_dt
+            and isinstance(sun_info.sunrise, datetime)):
+        window = calculate_sistani_fajr_fadilah(
+            observer_date, observer, fajr_dt, sun_info.sunrise, method.fajr_fadilah_end_degrees,
+        )
+        prayer_list[0] = replace(fajr, fadilah=window)
 
     extreme_latitude_applied = any(prayer.fallback_rule is not None for prayer in prayer_list)
     if extreme_latitude_applied:

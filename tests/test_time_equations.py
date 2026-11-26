@@ -49,6 +49,12 @@ def test_gregorian_to_hijri_output_shape() -> None:
     assert 1 <= day <= 30
 
 
+def test_gregorian_to_hijri_rolls_over_after_the_leap_day() -> None:
+    assert te.gregorian_to_hijri(2026, 6, 15) == (1447, 12, 29)
+    assert te.gregorian_to_hijri(2026, 6, 16) == (1447, 12, 30)
+    assert te.gregorian_to_hijri(2026, 6, 17) == (1448, 1, 1)
+
+
 def test_get_islamic_month_and_day_valid_and_invalid() -> None:
     assert te.get_islamic_month(9) == "Ramaḍān"
     assert te.get_islamic_month(13) == "Invalid month number"

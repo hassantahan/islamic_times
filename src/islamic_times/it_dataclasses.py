@@ -524,19 +524,29 @@ class AsrConvention(IntEnum):
 
 @dataclass(frozen=True, slots=True)
 class FadilahWindow:
-    """A preferred period and its earlier recommended limit, in local time."""
+    """A preferred period in local time, with an earlier target when applicable.
+
+    ``estimated`` flags a modelled sky sign. When only the opening can be
+    timed, ``end`` is None and ``end_sign`` identifies what to observe.
+    """
 
     start: datetime
-    preferred_by: datetime
-    end: datetime
+    preferred_by: datetime | None
+    end: datetime | None
+    estimated: bool = False
+    end_sign: str | None = None
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self, *, timespec: str = "auto") -> dict[str, str | bool | None]:
         """Serialize the window with local UTC offsets."""
-        return {
-            "start": self.start.isoformat(),
-            "preferred_by": self.preferred_by.isoformat(),
-            "end": self.end.isoformat(),
-        }
+        window: dict[str, str | bool | None] = {"start": self.start.isoformat(timespec=timespec)}
+        if self.preferred_by is not None:
+            window["preferred_by"] = self.preferred_by.isoformat(timespec=timespec)
+        window["end"] = self.end.isoformat(timespec=timespec) if self.end is not None else None
+        if self.end_sign is not None:
+            window["end_sign"] = self.end_sign
+        if self.estimated:
+            window["estimated"] = True
+        return window
 
 
 @dataclass(frozen=True, slots=True)
@@ -547,7 +557,7 @@ class PrayerMethod:
     Attributes:
         name (str): Method name.
         fajr_angle (Angle): Fajr twilight angle.
-        isha_angle (Angle): Isha twilight angle.
+        isha_angle (Angle): Twilight angle for angle-based ʿIshāʾ.
         keys (Tuple [str, ...] | None): Optional method identifiers.
         maghrib_angle (Angle): Maghrib angle (if applicable).
         asr_type (int): ʿAṣr convention, as defined by :class:`AsrConvention`.
@@ -555,6 +565,13 @@ class PrayerMethod:
         extreme_lats (str): High-latitude fallback rule. Defaults to ``ANGLEBASED``.
         isha_offset_minutes (int | None): Fixed minutes after Maghrib, if used.
         ramadan_isha_offset_minutes (int | None): Ramadan override for the fixed interval.
+        maghrib_offset_minutes (int | None): Minutes after sunset for a sunset-based
+            Maghrib. None retains the historical one-minute convention.
+        use_isha_fadilah (bool): Use the start of Sistani's estimated preferred
+            ʿIshāʾ window in place of a twilight angle or fixed interval.
+        western_redness_model (str): Estimator for the shared evening faḍīlah boundary.
+        fajr_fadilah_end_degrees (float | None): Optional local solar depression
+            for the end of Fajr faḍīlah. None uses civil dawn.
     """
     name: str
     fajr_angle: Angle
@@ -566,6 +583,17 @@ class PrayerMethod:
     extreme_lats: str = 'ANGLEBASED'
     isha_offset_minutes: int | None = None
     ramadan_isha_offset_minutes: int | None = None
+    maghrib_offset_minutes: int | None = None
+    use_isha_fadilah: bool = False
+    western_redness_model: Literal["seasonal", "solar_descent", "blend"] = "seasonal"
+    fajr_fadilah_end_degrees: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.western_redness_model not in ("seasonal", "solar_descent", "blend"):
+            raise ValueError("western_redness_model must be 'seasonal', 'solar_descent' or 'blend'.")
+        end = self.fajr_fadilah_end_degrees
+        if end is not None and (type(end) not in (int, float) or not 0 < end < self.fajr_angle.decimal):
+            raise ValueError("Fajr faḍīlah end angle must be above 0° and smaller than the Fajr angle.")
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize prayer-method configuration with explicit units."""
@@ -582,6 +610,10 @@ class PrayerMethod:
             "extreme_lats": self.extreme_lats,
             "isha_offset_minutes": self.isha_offset_minutes,
             "ramadan_isha_offset_minutes": self.ramadan_isha_offset_minutes,
+            "maghrib_offset_minutes": self.maghrib_offset_minutes,
+            "use_isha_fadilah": self.use_isha_fadilah,
+            "western_redness_model": self.western_redness_model,
+            "fajr_fadilah_end_degrees": self.fajr_fadilah_end_degrees,
         }
 
 @dataclass(frozen=True, slots=True)
@@ -615,7 +647,10 @@ class Prayer:
         """Describe the provenance or availability of this event."""
         if self.when is None:
             return "unavailable"
-        return "calculated" if self.fallback_rule is None else "estimated"
+        # Fajr is timed by dawn even when its preferred *end* uses a local estimate.
+        if self.fallback_rule is not None or (self.name != "Fajr" and self.fadilah is not None and self.fadilah.estimated):
+            return "estimated"
+        return "calculated"
 
     @property
     def time_str(self) -> str:

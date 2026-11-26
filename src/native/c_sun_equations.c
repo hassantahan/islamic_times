@@ -9,7 +9,6 @@
 #define OBLIQUITY_TERMS_SIZE 10
 #define SUN_NUTATION_COEFFICIENTS_LOOP 63
 #define SUN_NUTATION_ARGUMENTS_LOOP 5
-#define MAX_EVENT_SEARCH_DAYS 370
 /* Keep loop constants aligned with the tabulated term dimensions above. */
 
 
@@ -606,294 +605,124 @@ PyObject* py_find_sun_transit(PyObject* self, PyObject* args) {
    Sunrise and sunset solver
    ================================ */
 
-/*
- * Solve sunrise/sunset time for a reference civil date.
- * Return codes:
- *   0  -> success
- *  -1  -> event does not occur on this date/location
- *  -2  -> invalid event type
- */
-int sunrise_or_sunset(datetime date, double utc_offset, double local_latitude, double local_longitude,
-                        double elevation, double temperature, double pressure, char event_type, double angle_deg, datetime* sun_event) {
-    
-    double lat_rad = RADIANS(local_latitude);
-    double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
-    double new_tt_utc;
-    double new_ut1_utc;
-    double new_deltaT;
-    resolve_time_scales_for_jd(new_jd, &new_tt_utc, &new_ut1_utc, &new_deltaT);
-
-    SunResult sun_params[3];
-    for (int i = 0; i < 3; i++) {
-        double day_jd_utc = new_jd + i - 1;
-        double t_tt_utc;
-        double t_ut1_utc;
-        double t_deltaT;
-        resolve_time_scales_for_jd(day_jd_utc, &t_tt_utc, &t_ut1_utc, &t_deltaT);
-        double t_jde = day_jd_utc + t_tt_utc / SECONDS_IN_DAY;
-        double t_jd_ut1 = day_jd_utc + t_ut1_utc / SECONDS_IN_DAY;
-        compute_sun_result(t_jde, t_jd_ut1,
-            local_latitude, local_longitude, elevation, temperature, pressure, 
-            &sun_params[i]
-        );
-    }
-
-    double declination_deg[3] = {
-        sun_params[0].apparent_declination,
-        sun_params[1].apparent_declination,
-        sun_params[2].apparent_declination
-    };
-    double right_ascension_deg[3] = {
-        sun_params[0].apparent_right_ascension,
-        sun_params[1].apparent_right_ascension,
-        sun_params[2].apparent_right_ascension
-    };
-
-    double horizon_altitude_deg = -angle_deg;
-    double H_zero_deg;
-    if (compute_event_hour_angle(lat_rad, declination_deg[1], horizon_altitude_deg, &H_zero_deg) != 0) {
-        return -1;
-    }
-    
-    double sidereal_time = greenwich_mean_sidereal_time(new_jd + new_ut1_utc / SECONDS_IN_DAY);
-    double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
-
-    double m_event;
-    if (event_type == 'r')
-        m_event = m0 - H_zero_deg / 360;
-    else if (event_type == 's')
-        m_event = m0 + H_zero_deg / 360;
-    else
-        return -2;
-    
-    m_event = refine_altitude_event_fraction(
-        m_event,
-        sidereal_time,
-        local_longitude,
-        new_deltaT,
-        lat_rad,
-        horizon_altitude_deg,
-        declination_deg,
-        right_ascension_deg
-    );
-
-    sun_event->year = date.year;
-    sun_event->month = date.month;
-    sun_event->day = date.day;
-    sun_event->hour = 0; sun_event->minute = 0; sun_event->second = 0; sun_event->microsecond = 0; 
-    *sun_event = add_days(*sun_event, m_event);
-
-    return 0;
-}
-
 typedef struct {
-    double latitude;
-    double longitude;
-    double elevation;
-    double temperature;
-    double pressure;
-    double angle_deg;
-    char event;
-} SunEventSearchContext;
+    double right_ascension[3], declination[3];
+    double sidereal_longitude, sin_latitude, cos_latitude;
+} SolarDay;
 
-static int solve_sun_event_for_day(datetime date, double utc_offset, void* ctx, datetime* out_event) {
-    SunEventSearchContext* context = (SunEventSearchContext*)ctx;
-    return sunrise_or_sunset(
-        date,
-        utc_offset,
-        context->latitude,
-        context->longitude,
-        context->elevation,
-        context->temperature,
-        context->pressure,
-        context->event,
-        context->angle_deg,
-        out_event
-    );
+/* The ephemerides are sampled at UTC midnights, with TT and UT1 already
+ * applied at each sample. The interpolation argument is elapsed UTC days. */
+static double solar_altitude_sine(const SolarDay* sky, double t) {
+    const double* ra = sky->right_ascension;
+    const double* dec = sky->declination;
+    double hour_angle = sky->sidereal_longitude + 360.985647 * t - angle_interpolation(t, ra[0], ra[1], ra[2]);
+    double declination = RADIANS(angle_interpolation(t, dec[0], dec[1], dec[2]));
+    return sky->sin_latitude * sin(declination) + sky->cos_latitude * cos(declination) * cos(RADIANS(hour_angle));
 }
 
-/*
- * Find the first sunrise/sunset event that belongs to the reference civil day.
- * Returns INVALID_DATETIME when no valid event is found.
- */
+/* Near a polar transition the crossing can be very close to an extremum.
+ * Refine the meridian estimate to allow for changing solar declination. */
+static double solar_turning_point(const SolarDay* sky, double guess) {
+    const double step = 1.0 / 1440;
+    double before = solar_altitude_sine(sky, guess - step);
+    double centre = solar_altitude_sine(sky, guess);
+    double after = solar_altitude_sine(sky, guess + step);
+    double curvature = before + after - 2 * centre;
+    if (curvature != 0) {
+        double correction = 0.5 * step * (before - after) / curvature;
+        if (fabs(correction) < 0.24) return guess + correction;
+    }
+    return guess;
+}
+
+/* Search only the requested half-open civil day. In particular, a wrap of
+ * Greenwich sidereal time must never move an event onto tomorrow's date. */
+static double solar_crossing(const SolarDay* sky, double start, double end, double target, char event) {
+    double noon = start + normalize_event_fraction(
+        (sky->right_ascension[1] - sky->sidereal_longitude) / 360.0 - start);
+    double left = start;
+    double direction = event == 'r' ? 1.0 : -1.0;
+    double left_value = direction * (solar_altitude_sine(sky, start) - target);
+    int final_step = (int)ceil(2 * (end - noon + 0.24)) + 1;
+    for (int half_days = -2; half_days <= final_step; ++half_days) {
+        double right = end;
+        if (half_days < final_step) {
+            double guess = noon + 0.5 * half_days;
+            if (guess < start - 0.24 || guess > right + 0.24) continue;
+            right = solar_turning_point(sky, guess);
+            if (right <= left || right >= end) continue;
+        }
+        double right_value = direction * (solar_altitude_sine(sky, right) - target);
+        if (left_value <= 0 && right_value > 0) {
+            if (left_value == 0) return left;
+            while ((right - left) * SECONDS_IN_DAY > 0.02) {
+                double middle = (left + right) / 2;
+                if (direction * (solar_altitude_sine(sky, middle) - target) > 0)
+                    right = middle;
+                else
+                    left = middle;
+            }
+            return (left + right) / 2;
+        }
+        left = right;
+        left_value = right_value;
+    }
+    return NAN;
+}
+
+datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double start_offset, double end_offset, double latitude,
+    double longitude, double elevation, double temperature, double pressure, double angle_deg, char event,
+    double* deltaPsi, double* true_obliquity) {
+    if ((event != 'r' && event != 's') || !isfinite(latitude) || !isfinite(longitude)
+            || !isfinite(start_offset) || !isfinite(end_offset) || fabs(start_offset) > 24
+            || fabs(end_offset) > 24) return INVALID_DATETIME;
+    datetime midnight;
+    jd_to_gregorian(jd, utc_offset, &midnight);
+    midnight.hour = midnight.minute = midnight.second = midnight.microsecond = 0;
+    double jd_zero = gregorian_to_jd(midnight, 0);
+    SolarDay sky = {.sin_latitude = sin(RADIANS(latitude)), .cos_latitude = cos(RADIANS(latitude))};
+    for (int i = 0; i < 3; ++i) {
+        double day_jd = jd_zero + i - 1;
+        double tt_utc, ut1_utc;
+        resolve_time_scales_for_jd(day_jd, &tt_utc, &ut1_utc, NULL);
+        double jd_ut1 = day_jd + ut1_utc / SECONDS_IN_DAY;
+        SunResult sun;
+        compute_sun_result(day_jd + tt_utc / SECONDS_IN_DAY, jd_ut1, latitude, longitude,
+            elevation, temperature, pressure, &sun);
+        sky.declination[i] = sun.apparent_declination;
+        sky.right_ascension[i] = sun.apparent_right_ascension;
+        if (i == 1) sky.sidereal_longitude = greenwich_mean_sidereal_time(jd_ut1) + longitude;
+        if (deltaPsi) deltaPsi[i] = sun.nutation_longitude;
+        if (true_obliquity) true_obliquity[i] = sun.true_obliquity;
+    }
+    double t = solar_crossing(&sky, -start_offset / 24.0, 1.0 - end_offset / 24.0, sin(RADIANS(-angle_deg)), event);
+    if (!isfinite(t)) return INVALID_DATETIME;
+    return add_days(midnight, t + utc_offset / 24.0);
+}
+
 datetime find_proper_suntime(double jd, double utc_offset, double latitude, double longitude, double elevation,
     double temperature, double pressure, double angle_deg, char event) {
-    datetime reference_dt;
-    jd_to_gregorian(jd, utc_offset, &reference_dt);
-
-    SunEventSearchContext context = {
-        .latitude = latitude,
-        .longitude = longitude,
-        .elevation = elevation,
-        .temperature = temperature,
-        .pressure = pressure,
-        .angle_deg = angle_deg,
-        .event = event
-    };
-
-    return find_event_on_reference_day(
-        reference_dt,
-        utc_offset,
-        longitude,
-        MAX_EVENT_SEARCH_DAYS,
-        solve_sun_event_for_day,
-        &context
-    );
+    return find_proper_suntime_w_nutation(jd, utc_offset, utc_offset, utc_offset, latitude, longitude,
+        elevation, temperature, pressure, angle_deg, event, NULL, NULL);
 }
 
 /* Python wrapper for find_proper_suntime. */
 PyObject* py_find_proper_suntime(PyObject* self, PyObject* args) {
     double jd, latitude, longitude, elevation, temperature, pressure, utc_offset, angle_deg;
+    double start_offset, end_offset;
     int event_code;
     char event;
-    if (!PyArg_ParseTuple(args, "ddddddddC", &jd, &latitude, &longitude, 
+    if (!PyArg_ParseTuple(args, "ddddddddC|(dd)", &jd, &latitude, &longitude,
                                               &elevation, &temperature, &pressure, 
-                                              &utc_offset, &angle_deg, &event_code))
+                                              &utc_offset, &angle_deg, &event_code, &start_offset, &end_offset))
         return NULL;
 
     event = (char)event_code;
+    if (PyTuple_GET_SIZE(args) == 10) {
+        return datetime_to_pydatetime(find_proper_suntime_w_nutation(jd, utc_offset, start_offset, end_offset,
+            latitude, longitude, elevation, temperature, pressure, angle_deg, event, NULL, NULL));
+    }
     
     return datetime_to_pydatetime(
         find_proper_suntime(jd, utc_offset, latitude, longitude, elevation, temperature, pressure, angle_deg, event));
-}
-
-/* Specialized rise/set solver used by visibility calculations.
- * Also returns per-day deltaPsi and obliquity values.
- */
-
-int sunrise_or_sunset_w_nutation(datetime date, double utc_offset, double local_latitude, double local_longitude,
-    double elevation, double temperature, double pressure, char event_type, double angle_deg, 
-    double* deltaPsi, double* true_obliquity, datetime* sun_event) {
-
-    double lat_rad = RADIANS(local_latitude);
-    double new_jd = gregorian_to_jd(date, 0) - fraction_of_day_datetime(date);
-    double new_tt_utc;
-    double new_ut1_utc;
-    double new_deltaT;
-    resolve_time_scales_for_jd(new_jd, &new_tt_utc, &new_ut1_utc, &new_deltaT);
-
-    SunResult sun_params[3];
-    for (int i = 0; i < 3; i++) {
-        double day_jd_utc = new_jd + i - 1;
-        double t_tt_utc;
-        double t_ut1_utc;
-        double t_deltaT;
-        resolve_time_scales_for_jd(day_jd_utc, &t_tt_utc, &t_ut1_utc, &t_deltaT);
-        double t_jde = day_jd_utc + t_tt_utc / SECONDS_IN_DAY;
-        double t_jd_ut1 = day_jd_utc + t_ut1_utc / SECONDS_IN_DAY;
-        compute_sun_result(t_jde, t_jd_ut1,
-            local_latitude, local_longitude, elevation, temperature, pressure, 
-            &sun_params[i]
-        );
-        deltaPsi[i] = sun_params[i].nutation_longitude;
-        true_obliquity[i] = sun_params[i].true_obliquity;
-    }
-
-    double declination_deg[3] = {
-        sun_params[0].apparent_declination,
-        sun_params[1].apparent_declination,
-        sun_params[2].apparent_declination
-    };
-    double right_ascension_deg[3] = {
-        sun_params[0].apparent_right_ascension,
-        sun_params[1].apparent_right_ascension,
-        sun_params[2].apparent_right_ascension
-    };
-
-    double horizon_altitude_deg = -angle_deg;
-    double H_zero_deg;
-    if (compute_event_hour_angle(lat_rad, declination_deg[1], horizon_altitude_deg, &H_zero_deg) != 0) {
-        return -1;
-    }
-    
-    double sidereal_time = greenwich_mean_sidereal_time(new_jd + new_ut1_utc / SECONDS_IN_DAY);
-    double m0 = (sun_params[1].apparent_right_ascension - local_longitude - sidereal_time) / 360.0;
-
-    double m_event;
-    if (event_type == 'r')
-        m_event = m0 - H_zero_deg / 360;
-    else if (event_type == 's')
-        m_event = m0 + H_zero_deg / 360;
-    else
-        return -2;
-    
-    m_event = refine_altitude_event_fraction(
-        m_event,
-        sidereal_time,
-        local_longitude,
-        new_deltaT,
-        lat_rad,
-        horizon_altitude_deg,
-        declination_deg,
-        right_ascension_deg
-    );
-
-    sun_event->year = date.year;
-    sun_event->month = date.month;
-    sun_event->day = date.day;
-    sun_event->hour = 0; sun_event->minute = 0; sun_event->second = 0; sun_event->microsecond = 0; 
-    *sun_event = add_days(*sun_event, m_event);
-
-    return 0;
-}
-
-typedef struct {
-    double latitude;
-    double longitude;
-    double elevation;
-    double temperature;
-    double pressure;
-    double angle_deg;
-    char event;
-    double* deltaPsi;
-    double* true_obliquity;
-} SunEventSearchWithNutationContext;
-
-static int solve_sun_event_for_day_w_nutation(datetime date, double utc_offset, void* ctx, datetime* out_event) {
-    SunEventSearchWithNutationContext* context = (SunEventSearchWithNutationContext*)ctx;
-    return sunrise_or_sunset_w_nutation(
-        date,
-        utc_offset,
-        context->latitude,
-        context->longitude,
-        context->elevation,
-        context->temperature,
-        context->pressure,
-        context->event,
-        context->angle_deg,
-        context->deltaPsi,
-        context->true_obliquity,
-        out_event
-    );
-}
-
-/*
- * Companion helper for visibility workflows that also exposes nutation terms.
- * Returns INVALID_DATETIME when no valid event is found.
- */
-datetime find_proper_suntime_w_nutation(double jd, double utc_offset, double latitude, double longitude, double elevation,
-    double temperature, double pressure, double angle_deg, char event, double* deltaPsi, double* true_obliquity) {
-    datetime reference_dt;
-    jd_to_gregorian(jd, utc_offset, &reference_dt);
-
-    SunEventSearchWithNutationContext context = {
-        .latitude = latitude,
-        .longitude = longitude,
-        .elevation = elevation,
-        .temperature = temperature,
-        .pressure = pressure,
-        .angle_deg = angle_deg,
-        .event = event,
-        .deltaPsi = deltaPsi,
-        .true_obliquity = true_obliquity
-    };
-
-    return find_event_on_reference_day(
-        reference_dt,
-        utc_offset,
-        longitude,
-        MAX_EVENT_SEARCH_DAYS,
-        solve_sun_event_for_day_w_nutation,
-        &context
-    );
 }

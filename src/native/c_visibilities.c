@@ -94,7 +94,7 @@ const char* classify_visibility(double q, int criterion) {
  * moonset checks precedence; the detailed API also records the solar event. */
 static void evaluate_visibility(
     datetime conjunction, double jd, double offset, double lat, double lon, double elev, double temp, double press,
-    int criterion, int conjunction_day, int detailed, VisibilityResult* result
+    int criterion, int conjunction_day, int detailed, double start_offset, double end_offset, VisibilityResult* result
 ) {
     *result = (VisibilityResult){
         .best_dt = conjunction, .sunset = INVALID_DATETIME, .moonset = INVALID_DATETIME
@@ -114,7 +114,7 @@ static void evaluate_visibility(
 
     double nutation[3], obliquity[3];
     result->sunset = find_proper_suntime_w_nutation(
-        jd, offset, lat, lon, elev, temp, press, STANDARD_SET_AND_RISE, 's', nutation, obliquity
+        jd, offset, start_offset, end_offset, lat, lon, elev, temp, press, STANDARD_SET_AND_RISE, 's', nutation, obliquity
     );
     int has_sunset = result->sunset.year != INVALID_DATETIME.year;
     if (!conjunction_day) {
@@ -187,7 +187,10 @@ static void compute_visibilities(
     VisibilityResult* results, int days, int criterion
 ) {
     for (int i = 0; i < days; i++) {
-        evaluate_visibility(conjunction, jd + i, offset, lat, lon, elev, temp, press, criterion, i == 0, 0, &results[i]);
+        /* In UTC the global map selects the evening using the longitude. */
+        double day_offset = offset == 0 ? floor(lon / 15.0) - 1.0 : offset;
+        evaluate_visibility(conjunction, jd + i, offset, lat, lon, elev, temp, press,
+            criterion, i == 0, 0, day_offset, day_offset, &results[i]);
     }
 }
 
@@ -357,11 +360,12 @@ PyObject* py_compute_crescent_evening(PyObject* self, PyObject* args) {
     PyObject* conjunction_obj;
     PyObject* reference_obj;
     double offset, lat, lon, elev, temp, press;
+    double start_offset, end_offset;
     int criterion, conjunction_day;
     if (!PyArg_ParseTuple(
-        args, "O!O!ddddddip", PyDateTimeAPI->DateTimeType, &conjunction_obj,
+        args, "O!O!ddddddip|(dd)", PyDateTimeAPI->DateTimeType, &conjunction_obj,
         PyDateTimeAPI->DateTimeType, &reference_obj, &offset, &lat, &lon, &elev, &temp, &press,
-        &criterion, &conjunction_day
+        &criterion, &conjunction_day, &start_offset, &end_offset
     )) {
         return NULL;
     }
@@ -371,13 +375,14 @@ PyObject* py_compute_crescent_evening(PyObject* self, PyObject* args) {
     }
 
     datetime conjunction_utc, reference;
+    if (PyTuple_GET_SIZE(args) == 10) start_offset = end_offset = offset;
     fill_in_datetime_values(&conjunction_utc, conjunction_obj);
     fill_in_datetime_values(&reference, reference_obj);
     datetime conjunction = add_days(conjunction_utc, offset / 24.0);
     double jd = gregorian_to_jd(reference, offset);
     VisibilityResult result;
     evaluate_visibility(
-        conjunction, jd, offset, lat, lon, elev, temp, press, criterion, conjunction_day, 1, &result
+        conjunction, jd, offset, lat, lon, elev, temp, press, criterion, conjunction_day, 1, start_offset, end_offset, &result
     );
 
     PyObject* sunset = visibility_time_or_none(result.sunset);
