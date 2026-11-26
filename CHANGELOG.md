@@ -34,3 +34,5 @@
 - Added the `islamic-times-map` command, an explicit conjunction option, and a
   choice of dense or adaptive category computation.
 - Updated the wheel builder and added checks for Python 3.10 through 3.13 wheel coverage.
+- Linux wheels target x86-64. The source distribution remains available for
+  32-bit Linux.
